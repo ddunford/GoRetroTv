@@ -1,0 +1,104 @@
+name: CI
+
+# Every push and every pull request. The boot gate and the oracle comparison are the checks that
+# will eventually say whether the emulator is right; this workflow only says whether the tree is
+# buildable, formatted, vetted and race-free, which is the floor everything else stands on.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The host this project is developed on cannot fetch a newer toolchain, so a `go` directive above
+  # 1.22 must fail loudly here too rather than succeed in CI and fail on every developer machine.
+  # See docs/decisions/0001-scaffold.md.
+  GOTOOLCHAIN: local
+
+jobs:
+  check:
+    name: vet, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          # Nothing to cache. The module has no external dependencies (ADR 0001), so there is no
+          # go.sum, `go mod download` has nothing to fetch, and pointing setup-go at a lockfile
+          # that does not exist only produces a warning nobody reads.
+          cache: false
+
+      - name: Report the toolchain
+        run: |
+          go version
+          go env GOTOOLCHAIN GOFLAGS
+
+      - name: The module still has no external dependencies
+        # ADR 0001 records this as a floor rather than a vow: a later phase that genuinely needs a
+        # dependency should take one. What it rules out is acquiring dependencies by default,
+        # before a requirement names them - and the way that happens is somebody running `go get`
+        # and nobody noticing. Adding one deliberately means editing this step, which is the point.
+        run: |
+          set -euo pipefail
+          modules="$(go list -m all)"
+          count="$(printf '%s\n' "$modules" | grep -c . || true)"
+          if [ "$count" -ne 1 ]; then
+            echo "::error::the module graph gained a dependency; ADR 0001 records this tree as standard-library only"
+            printf '%s\n' "$modules"
+            exit 1
+          fi
+          printf 'module graph: %s\n' "$modules"
+
+      - name: gofmt
+        run: |
+          set -euo pipefail
+          # Captured to a variable rather than piped into a test: reading an exit status through a
+          # pipe reads the pipe's last command, and gofmt -l exits 0 whether or not it found
+          # anything. The output is the signal here, not the status.
+          unformatted="$(gofmt -l ./cmd ./internal)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::these files are not gofmt'd; run make fmt"
+            printf '%s\n' "$unformatted"
+            exit 1
+          fi
+          echo "all Go files are formatted"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        # staticcheck runs inside this: .golangci.yml is v2 format and enables it there, so a
+        # separate staticcheck step would be a second copy of the same configuration to keep in
+        # step with this one. The action major and the linter version are pinned together because
+        # v8 was the first that supports golangci-lint v2 (>= v2.1.0), and the linter version is
+        # pinned to the one developers run locally - a gate that finds different things in CI than
+        # on the machine that wrote the code is a gate people learn to ignore. v9 is v8 plus the
+        # node24 runtime, which the runners now require; it keeps v8's `>= v2.1.0` constraint.
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.1.6
+
+      - name: go test -race
+        # The race detector is the arbiter. Nothing in the instruction loop is concurrent by
+        # design, which is exactly why a race appearing there needs to be loud.
+        #
+        # No firmware here: the flash images are Pace's and are not redistributable (see
+        # firmware/MANIFEST.md), so anything that needs them must skip when they are absent rather
+        # than fail. A test that cannot run without them is a test that cannot run in CI.
+        run: go test -race ./...
+
+      - name: build
+        run: |
+          set -euo pipefail
+          CGO_ENABLED=0 go build -trimpath -o /tmp/ci-bin/ ./cmd/...
+          ls -l /tmp/ci-bin/

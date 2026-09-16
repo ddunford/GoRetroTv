@@ -22,7 +22,7 @@ writing the decoder**; they record the traps, each of which cost the predecessor
 - [x] `TASK-2.9` Run the oracle comparison from reset and drive the first divergence to zero, iterating until the two agree as far as missing peripherals permit → `/go-engineer` [TC-2.9]
 - [x] `TASK-2.10` ⫘ Write the CPU test suite, table-driven per instruction family → `/go-engineer` [TC-2.1, TC-2.2, TC-2.3, TC-2.4, TC-2.5, TC-2.6, TC-2.7, TC-2.8]
 - [ ] `TASK-2.11` ⫘ Write and run the phase's integration check: boot to the documented handoff point → `/qa-test-engineer` [TC-2.9, TC-2.10]
-- [ ] `TASK-2.12` ⫘ OWASP security audit of phase 2 → `/security-reviewer` [no-test: audit produces its own report]
+- [x] `TASK-2.12` ⫘ OWASP security audit of phase 2 → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns (from the measured record — do not re-derive)
 - **MAME cannot decode MIPS16 and QEMU has no board.** There is no prior art to borrow; the

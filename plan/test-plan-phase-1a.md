@@ -17,7 +17,7 @@
   **Steps:** probe — add a device with unexported state and no serialisation.
   **Expected:** ARCH-SNAP-1 fails, naming the type and the field.
 
-- [ ] **TC-1a.4: Wall-clock in the core is refused** (covers: TASK-1a.4)
+- [x] **TC-1a.4: Wall-clock in the core is refused** (covers: TASK-1a.4)
   **Steps:** probe — introduce `time.Now()` into the instruction loop; and separately a `go`
   statement.
   **Expected:** ARCH-DET-1 fails on each independently.

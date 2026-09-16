@@ -64,9 +64,21 @@ invariant = "CPU and devices use instruction time, with no wall clock or gorouti
 source = "plan/module-decisions.md § The core patterns"
 classification = "STATIC"
 arming = "SELF-ARMING"
-state = "pending"
-owner_task = "gort-87m.4"
-reason = "The source boundary can be checked now, but its detector and probes have not been added."
+state = "enforced"
+command = ["conformance/checkers/determinism.py"]
+tooling = "Go's AST parser finds call and go statements without mistaking comments for code; the tracked-file census automatically enrols future CPU and device packages."
+subjects = ["internal/platform/clock", "conformance/checkers/determinismcensus/main.go"]
+coverage_detector = "instruction-subject-missing"
+probes = [
+  { name = "wall-clock-in-cpu", detectors = ["wall-clock-source"] },
+  { name = "goroutine-in-device", detectors = ["goroutine-in-core"] },
+  { name = "clock-subject-removed", detectors = ["instruction-subject-missing"] },
+]
+halves = [
+  { half = "instruction-time source exists and is scanned", held_by = "probe", probe = "clock-subject-removed", detectors = ["instruction-subject-missing"] },
+  { half = "no wall-clock source runs in CPU, devices or the instruction clock", held_by = "probe", probe = "wall-clock-in-cpu", detectors = ["wall-clock-source"] },
+  { half = "no goroutine starts in CPU, devices or the instruction clock", held_by = "probe", probe = "goroutine-in-device", detectors = ["goroutine-in-core"] },
+]
 
 [[rule]]
 id = "ARCH-LAYER-1"

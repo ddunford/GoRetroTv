@@ -14,7 +14,7 @@ decision bound either to a rule or to an explicit "none, because…", and prove 
 - [x] `TASK-1a.1` Install the conformance harness (registry, corpus, probe runner) and wire `ctl.sh conformance` → `/go-engineer` [TC-1a.1]
 - [x] `TASK-1a.2` `ARCH-DEV-1`: developer surfaces bind to localhost only — the gdb stub and instrument endpoints must never listen on a public interface. **The one real security control on a public demo host** → `/go-engineer` [TC-1a.2]
 - [x] `TASK-1a.3` `ARCH-SNAP-1`: every type implementing `Device` also implements `Snapshot`/`Restore`, and every exported field is covered. A device added later that forgets is caught here, not by a plausible machine six phases on → `/go-engineer` [TC-1a.3]
-- [ ] `TASK-1a.4` `ARCH-DET-1`: no wall-clock source and no goroutine inside the instruction loop — `time.Now`, `time.Since` and `go` statements are refused in `internal/cpu` and `internal/device` → `/go-engineer` [TC-1a.4]
+- [x] `TASK-1a.4` `ARCH-DET-1`: no wall-clock source and no goroutine inside the instruction loop — `time.Now`, `time.Since` and `go` statements are refused in `internal/cpu` and `internal/device` → `/go-engineer` [TC-1a.4]
 - [ ] `TASK-1a.5` `ARCH-LAYER-1`: dependencies point inward — `internal/device` may not import `internal/web`; the core may not import the transport → `/go-engineer` [TC-1a.5]
 - [ ] `TASK-1a.6` `ARCH-FW-1`: no firmware bytes in the repository or in any built image → `/go-engineer` [TC-1a.6]
 - [x] `TASK-1a.9` `ARCH-PLATFORM-1`: the shared layer stays shared — `internal/platform` may import nothing from `internal/cpu`, `internal/device`, `internal/broadcast` or `internal/web`. This is what stops domain logic drifting into it, which is the failure mode a shared kernel has → `/go-engineer` [TC-1a.8]

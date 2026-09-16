@@ -71,20 +71,34 @@ a file, not read through a pipe). The real firmware is on this machine, so
   error to `os.Exit(1)` — verified by reading, not by a test; the running-stack proof is gate
   `gort-6ar.17`.)
 
-- [?] **TC-1.5: Checkpoints are deterministic and cover the ISA bit** (covers: TASK-1.8, TASK-1.9, TASK-1.12)
+- [x] **TC-1.5: Checkpoints are deterministic and cover the ISA bit** (covers: TASK-1.8, TASK-1.9, TASK-1.12)
   **Steps:** run the same program twice; then run it with the ISA mode bit flipped at a known point.
   **Expected:** identical streams for the first pair; a differing checkpoint for the second.
-  (blocked: the ORACLE half, TASK-1.9 / `gort-6ar.9`, is in progress — its emitter is 166
-  uncommitted lines in `reference/digibox-boot.html` at audit time and there is no committed
-  artefact that runs `__cpVectors().ok` or compares an oracle stream to a Go stream.
-  **The Go half IS proved:** `internal/platform/statehash/statehash_test.go::TestTwoIdenticalRunsProduceIdenticalStreams`
+  (proved — Go half: `internal/platform/statehash/statehash_test.go::TestTwoIdenticalRunsProduceIdenticalStreams`
   (byte-identical, with a ≥5-line guard against a vacuous empty stream) and
   `::TestFlippingTheIsaBitDivergesTheStream` (flip at instruction 2,500; asserts the FIRST
   differing line is the `3000` checkpoint, so it localises rather than merely differs).
-  `::TestEveryFieldOfTheMachineChangesTheHash` has an explicit "the ISA mode bit" case, and
-  `vectors_test.go::TestKnownVectors` pins the algorithm (`0x3D280665` whole-machine) so the two
-  emitters cannot drift silently. To flip this to `[x]`: a committed check that the oracle's
-  self-test vectors agree and that an oracle `?cp=` stream matches the Go stream header/format.)
+  `::TestEveryFieldOfTheMachineChangesTheHash` has an explicit "the ISA mode bit" case;
+  `vectors_test.go::TestKnownVectors` pins the algorithm and the `0x3D280665` whole-machine vector.
+  Oracle half (TASK-1.9, commit 23487c1): `statehash/oracle_agreement_test.go::TestTheOracleAgreesWithThisHash`
+  reads the oracle's own `__cpVectors()` expectations out of `reference/digibox-boot.html` and
+  asserts they equal what the Go package computes, plus the same FNV constants, `Math.imul`, the
+  `?cp=` flag guard, and the `GRTV-CHECKPOINTS`/`END` stream format; it harness-fails if an
+  expectation cannot be found. Re-audited by overlay: pointing it at a copy of the page with ONE
+  hex digit drifted turns it red naming the drifted digest. **First audit was `[?]` because the
+  emitter was uncommitted and nothing committed checked the two implementations against each
+  other; both are now true, so flipped.**
+  **Limits, stated:** (1) the committed guard pins the PRIMITIVES (`mixWord`, two page digests),
+  not the whole-machine composition — the oracle's self-test does not carry `0x3D280665`, so a
+  field-order or ISA-encoding drift in `cpHash()` would pass it; by reading, `cpHash()` folds
+  PC, ISA-as-octet, HI, LO, 32 GPR, 32 COP0, RAM digest in the same order as Go's `Hash`, and a
+  drift there would surface at checkpoint 0 in TC-1.6's live comparison. Recommended to p1-core:
+  add the whole-machine vector to `__cpVectors` and to this guard. (2) Oracle end-to-end
+  determinism is proved by hand, not by a committed test: p1-qa independently checked the two
+  cold-boot streams p1-core recorded — run2 is a clean PREFIX of run1 over 4,613 checkpoints /
+  461M instructions (run1 was left running to 4,934), every line canonical, both `END` trailers
+  self-consistent, 4,934 distinct hashes so the hash is not constant. Automating that needs a
+  browser and belongs to the boot gate (TC-1.7).)
 
 - [?] **TC-1.6: The comparison localises an injected divergence** (covers: TASK-1.10, TASK-1.12)
   **Steps:** corrupt one register at instruction 4,500,000 in one stream.

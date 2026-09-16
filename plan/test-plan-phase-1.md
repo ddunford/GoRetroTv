@@ -88,22 +88,27 @@ a file, not read through a pipe). The real firmware is on this machine, so
   hex digit drifted turns it red naming the drifted digest. **First audit was `[?]` because the
   emitter was uncommitted and nothing committed checked the two implementations against each
   other; both are now true, so flipped.**
-  **Limits, stated:** (1) the committed guard pins the PRIMITIVES (`mixWord`, two page digests),
-  not the whole-machine composition — the oracle's self-test does not carry `0x3D280665`, so a
-  field-order or ISA-encoding drift in `cpHash()` would pass it; by reading, `cpHash()` folds
-  PC, ISA-as-octet, HI, LO, 32 GPR, 32 COP0, RAM digest in the same order as Go's `Hash`, and a
-  drift there would surface at checkpoint 0 in TC-1.6's live comparison. Recommended to p1-core:
-  add the whole-machine vector to `__cpVectors` and to this guard. (2) Oracle end-to-end
-  determinism is proved by hand, not by a committed test: p1-qa independently checked the two
-  cold-boot streams p1-core recorded — run2 is a clean PREFIX of run1 over 4,613 checkpoints /
-  461M instructions (run1 was left running to 4,934), every line canonical, both `END` trailers
-  self-consistent, 4,934 distinct hashes so the hash is not constant. Automating that needs a
-  browser and belongs to the boot gate (TC-1.7). **Both limits are tracked as `gort-6ar.25`,
-  which blocks gate `gort-6ar.16`; when it lands — a committed oracle `?cp=` stream compared to a
-  Go stream, and the whole-machine vector pinned on both sides — TC-1.5 gets a third look and the
-  limits come off.**)
+  **Third look (gort-6ar.25 closed, commit 6e553e2) — the limits recorded on the second look:**
+  (1) *composition unpinned* — CLOSED. `statehash/oracle_execution_test.go::TestTheOracleComputesTheSameHash`
+  lifts the oracle's hash block out of the HTML and RUNS it under node against the same
+  every-field-different machine Go hashes, comparing `wholeMachine`, `ramDigest` and the three
+  primitives; it skips loudly if node is absent (node v24 is present here and it RAN, 0.22s).
+  p1-core found the defect one level above mine — the literal test could not see an algorithm
+  edit — and p1-qa proved the new one by overlay: a copy of the page with `hhi`/`hlo` swapped
+  inside `cpHashOf` leaves `TestTheOracleAgreesWithThisHash` GREEN and turns
+  `TestTheOracleComputesTheSameHash` RED naming `wholeMachine` (`0x03E0A005` vs `0x3D280665`).
+  The literal test now also carries `wholeMachine` and `ramDigest_four_zero_pages`.
+  (2) *oracle determinism by hand only* — NARROWED, not gone. A real cold boot is now a committed
+  fixture, `statehash/testdata/oracle-cold-boot.stream` (4,629 checkpoints to 462.8M
+  instructions; `oracle_stream_test.go::TestTheRecordedOracleStreamIsARealBoot` asserts it is
+  complete, whole, contains ≥1-in-20 straddles — 477 — and pins the reset hash `0xF1F29240`), so
+  the oracle's stream is regression-pinned and is what phase 2's port compares against. That the
+  oracle produces the SAME stream on a second cold boot remains a by-hand fact (p1-qa: run2 a
+  clean prefix of run1 over 4,613 checkpoints); a committed re-run needs a browser and belongs
+  with the gate's phase-2 stage (`docs/reference/oracle-boot-gate.md`). Recorded, not tracked —
+  it is a property of the instrument's platform, not an open defect.)
 
-- [?] **TC-1.6: The comparison localises an injected divergence** (covers: TASK-1.10, TASK-1.12)
+- [x] **TC-1.6: The comparison localises an injected divergence** (covers: TASK-1.10, TASK-1.12)
   **Steps:** corrupt one register at instruction 4,500,000 in one stream.
   **Expected:** reports the divergence in the 4,500,000–4,501,000 window. **And over an empty or
   truncated stream it must report a harness failure, not success.**
@@ -121,30 +126,66 @@ a file, not read through a pipe). The real firmware is on this machine, so
   checkpoint 2000 → exit 1 "state diverged at window 2000 (200000000..200099999)". No hand-rolled
   hex in `compare.go`/`stream.go`/`main.go`; hashes print via `hexfmt.Word` and parse via
   `hexfmt.ParseAddr`.
-  **Finding, recorded as a limit on this tick — the straddle case:** the real oracle stream has
-  478 of 4,934 checkpoints off-boundary (`300001`, `1000001`, …) because its MIPS32 path retires a
-  branch and its delay slot together. `Compare` pairs those by WINDOW (so no `WindowMissing`) but
-  then demands equal instruction counts inside the window and reports `CadenceDiverged`, exit 1.
-  p1-qa fed it a synthetic straddle with IDENTICAL hashes (`300000` vs `300001`) → exit 1 "cadence
-  diverged at window 3". `compare.go`'s doc says demanding equal counts "would report a
-  divergence at the first straddling branch between two machines that agree perfectly" — and the
-  code then does exactly that, and `::TestADifferentInstructionCountInTheSameWindowIsItsOwnKindOfDivergence`
-  pins it as intended. The classification is HONEST (a hash after 300,001 instructions is not
-  comparable to one after 300,000), so the defect is upstream in the emitters, not in the
-  comparator: on a live oracle-vs-Go run with per-instruction Go retirement the tool exits 1 at
-  the 4th checkpoint and never reaches a state divergence. Fix belongs to whichever emitter
-  changes — the oracle hashing at the exact boundary before retiring the delay slot, or Go
-  adopting the oracle's retirement granularity — and must land before `gort-6ar.25`'s live
-  comparison and phase 2's TASK-2.9 can mean anything. Issue to be filed by the lead.)
+  **Marker correction:** commit da71a6e wrote this body and left the checkbox at `[?]` — the
+  edit replaced the "(blocked …)" paragraph and never touched the marker line above it. The
+  p1-qa report of that commit said `[x]`; the report was the intent, the marker was the error.
+  Caught by the lead reading the file, which is what gate `gort-6ar.16` is for.
+  **The straddle limit recorded on da71a6e — CLOSED as a tool defect (`gort-6ar.26`, commits
+  0f2dc1f + 5c02f82):** the real oracle stream has 477 of 4,629 checkpoints off-boundary because
+  its MIPS32 path retires a branch and its delay slot together; the first `Compare` stopped dead
+  at the first one (checkpoint 4) so no live run could ever reach a state divergence. `Compare`
+  now walks the WHOLE shared range: a window sampled at different counts is counted in `Cadence`
+  and skipped (its hashes describe different instants, so it is neither agreement nor
+  divergence), and `FirstState` carries the first window where equal counts had unequal hashes;
+  the command points tier 2 at THAT window. `::TestAStraddledBoundaryDoesNotStopTheComparison`
+  pins the bug, `::TestTwoAgreeingMachinesThatStraddleTheSameBoundariesCompareEqual` is the
+  positive case (subject-guarded: asserts two checkpoints actually straddle), and
+  `oracle_stream_test.go::TestTheComparisonWorksOnARealOracleStream` runs the localisation and
+  the positive straddle case on the REAL fixture (`Cadence == 0` across 477 straddles against a
+  copy of itself; one corrupted checkpoint at 4,500,000 localised with 4,628 agreed). p1-qa
+  re-ran the built binary: fixture vs itself → exit 0 over 4,629; fixture vs a port-like stream
+  with all 477 straddles moved onto boundaries and one planted divergence at 200,000,000 → exit 1,
+  headline "cadence diverged at window 3", "states first differ at window 2000", 4,151 agreed, 477
+  incomparable, tier 2 → `200000000..200099999`; the old identical-hash straddle → exit 1 with
+  "the states agree everywhere both sampled alike, so this is a difference between the two
+  EMITTERS". That last line is the design decision 5c02f82 records and this audit accepts: **the
+  port conforms to the oracle** — the Go emitter must observe only where the oracle can, never
+  between a branch and its delay slot (sampling mid-pair would hash a state this hash does not
+  fully describe: the pending branch target and MIPS16 delay flag are not folded in). That is an
+  obligation on phase 2's CPU/emitter integration (TASK-2.2, TASK-2.9) with no committed
+  enforcement yet; a per-instruction Go sampler will show as `cadence diverged`, exit 1, with the
+  states still compared — a correct, readable report rather than a stopped instrument. The lead
+  should carry it onto phase 2 as a constraint.)
 
-- [?] **TC-1.7: The boot gate can go red** (covers: TASK-1.11, TASK-1.12)
+- [x] **TC-1.7: The boot gate can go red** (covers: TASK-1.11, TASK-1.12)
   **Steps:** run the gate against a deliberately broken build.
   **Expected:** non-zero exit and a readable reason. A gate nobody has seen fail is decoration.
-  (blocked: no gate verb in `ctl.sh` yet — TASK-1.11 / `gort-6ar.11` is open; `ctl.sh health`
-  exists but is a probe, not a gate. The health endpoint half has a unit test,
-  `internal/httpx/handlers/health_test.go::TestHealthReportsOKAndIdentifiesTheBuild`, which
-  asserts a non-empty version so a gate cannot pass against an unnameable binary. The
-  "shown to go red" clause needs the gate itself.)
+  (proved: `tools/boot-gate.sh` via `./ctl.sh gate` (commits 945f57c, fixed in 23382d8 /
+  `gort-6ar.27`). The gate is shell with no Go test of its own; the artefact is the gate run
+  against broken inputs, which p1-qa did six ways on 2026-09-16, exit codes read from files:
+  GREEN `./ctl.sh gate` → exit 0, five `ok` stages, `health names this build version=a8c6273-dirty
+  commit=a8c6273 (matches HEAD)`. BROKEN: (a) a binary built with bare `go build` (no ldflags),
+  `--binary` → exit 1, **exactly 1 of 5** — `FAIL health names this build reports
+  commit='unknown', this tree is a8c6273 — those are the linker defaults, so the build was not
+  stamped` — with the other four `ok`, which is what separates five stages from one check wearing
+  five labels; (b) `--firmware <absent dir>` → exit 1, refuses before any stage ("A gate that
+  cannot perform its check is a refusal, never a pass"), not a skip; (c) a copy of the firmware
+  with one byte flipped in `FLASH_U203.bin` → exit 1, `FAIL firmware verified` and the gate prints
+  the binary's own refusal, `SHA-256 is e2615f…` vs the manifest's `7832d6…`; (d) `--binary
+  /bin/true` → exit 1, 5 of 5 with "the process exited (0) before listening"; (e) a stub that
+  logs the two expected lines then ignores SIGTERM → exit 1, `FAIL shuts down gracefully still
+  alive 10s after SIGTERM`, so stage 5 fails on its own path. **History that matters:** the first
+  version's identity stage asserted only that version and commit were NON-EMPTY, which the
+  linker defaults `dev`/`unknown` satisfy on every unstamped build; it had been watched going red
+  only against a stub returning an EMPTY version, which the real build path cannot produce. The
+  fix builds through `make build` (one definition of identity) and asserts commit EQUALS `git
+  rev-parse --short HEAD`, a claim that can be false and was seen false in (a). The unit test
+  `handlers/health_test.go::TestHealthReportsOKAndIdentifiesTheBuild` still asserts only
+  non-emptiness and should not be read as proving identity.
+  **Limit, stated:** stages 2 and 3 trust the binary's own log lines (`"firmware verified"`,
+  `"listening"`) — stub (e) passed both by echoing them. That is inherent to a black-box gate and
+  is why stage 4's identity check exists: it is the one stage that ties the process to this tree.
+  The gate cannot run in CI (firmware not redistributable) and refuses there rather than passing.)
 
 - [x] **TC-1.8: The platform primitives hold their contracts** (covers: TASK-1.14, TASK-1.12)
   **Steps:** format an address containing a hex letter through `hexfmt` and look it up by the same

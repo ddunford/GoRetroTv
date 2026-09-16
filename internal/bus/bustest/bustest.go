@@ -21,6 +21,7 @@
 package bustest
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
@@ -275,6 +276,22 @@ func walk(path string, a, b reflect.Value) string {
 	case reflect.Array:
 		if a.Len() != b.Len() {
 			return at(path, fmt.Sprintf("length %d vs %d", a.Len(), b.Len()))
+		}
+		// A device's memory is a byte slice tens of megabytes long, and walking one element at a
+		// time through reflect makes this check cost minutes. Compare the bytes directly and then
+		// find the first difference the same way.
+		if a.Type().Elem().Kind() == reflect.Uint8 && a.Kind() == reflect.Slice && a.CanInterface() {
+			x, y := a.Bytes(), b.Bytes()
+			if bytes.Equal(x, y) {
+				return ""
+			}
+			for i := range x {
+				if x[i] != y[i] {
+					return at(fmt.Sprintf("%s[%d]", path, i),
+						fmt.Sprintf("%#02x vs %#02x", x[i], y[i]))
+				}
+			}
+			return at(path, "bytes differ")
 		}
 		for i := 0; i < a.Len(); i++ {
 			if d := walk(fmt.Sprintf("%s[%d]", path, i), a.Index(i), b.Index(i)); d != "" {

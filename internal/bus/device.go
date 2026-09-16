@@ -105,8 +105,14 @@ type Device interface {
 
 	// Restore replaces the device's state with a snapshot, in full.
 	//
-	// Restoring into a device that has been running must leave no trace of what it was doing:
-	// a field the snapshot does not mention is a field Restore must clear, not one it may leave
-	// alone. Restore reports an error rather than restoring part of itself.
+	// Restoring into a device that has been running must leave no trace of what it was doing: a
+	// STATE field the snapshot does not mention is one Restore must clear, not one it may leave
+	// alone. Identity and configuration are the exception and are preserved - a device's name,
+	// and a read-only part's contents, are established when it is built and a snapshot that
+	// could change them would be a snapshot that swapped one device for another. Which fields
+	// are which is declared to bustest.Check as Constant, so the distinction is written down
+	// rather than assumed.
+	//
+	// Restore reports an error rather than restoring part of itself.
 	Restore(state []byte) error
 }

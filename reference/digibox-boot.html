@@ -748,6 +748,158 @@
   var el = function(id){ return document.getElementById(id); };
   var hex32 = function(v){ return "0x"+(v>>>0).toString(16).toUpperCase().padStart(8,"0"); };
 
+  // ---- TIER-1 CHECKPOINTS, and everything here is OFF unless ?cp= asks for it -------------
+  //
+  // WHAT THIS IS FOR. The Go port needs one independent check that it matches this page, and
+  // comparing whole machines instruction by instruction costs 1.8-59 GB per run (spike 002). So
+  // both sides emit a 32-bit hash of the whole machine every N instructions -- 447,000 of them
+  // and 3.6 MB for a cold boot -- and only the first differing window gets re-run with full
+  // tracing. This is this page's half of that. The other half is internal/platform/statehash.
+  //
+  // IT IS PURELY ADDITIVE AND IT MUST STAY THAT WAY. This page is a measuring instrument, not a
+  // second implementation, and every probe ever written measured some particular state: "on a
+  // plain boot the match table is 0x40 and 0x73 only" is a statement about SILENCE, and a
+  // default that changed underneath it would invalidate the measurement without anything
+  // looking wrong. So nothing below runs unless the URL asks: with no ?cp= the only cost is one
+  // boolean test in burst() and one in store(), which is the same shape as the ?u203= and ?si=
+  // switches already here and the wwOn guard already in store().
+  //
+  // THE HASH IS NOT "THE SAME IDEA" AS THE GO ONE, IT IS THE SAME FUNCTION. It is written in
+  // 32-bit integer operations a browser has, and Math.imul rather than * because JavaScript's
+  // multiply goes through a double and loses the low bits above 2^53 -- silently, and only for
+  // some inputs, which is the worst way for this to be wrong. The vectors at the bottom are
+  // pinned on both sides: internal/platform/statehash/vectors_test.go holds the same numbers,
+  // so neither implementation can drift without a test going red.
+  //
+  //   FNV-1a, 32-bit:  h = 2166136261;  per byte:  h = imul(h ^ b, 16777619) >>> 0
+  //   words are fed BIG-ENDIAN, because the machine is
+  //   a page digest is FNV-1a over the page INDEX as a word, then the page's 4096 bytes
+  //   the DRAM digest is the XOR of every page digest -- which is what makes it incremental
+  //   the state hash is FNV-1a over: pc, isa, hi, lo, reg[0..31], cp0[0..31], the DRAM digest
+  //
+  // The ISA bit is in there because without it a MIPS16/MIPS32 mode divergence arrives looking
+  // like a wrong instruction, and the reader goes hunting through a decoder that is fine.
+  var CP_PAGE = 4096;
+  var cpOn=false, cpInterval=0, cpNext=0, cpCount=0, cpLast=0, cpTrunc=false, cpMax=0;
+  var cpLines=null, cpPages=null, cpDirty=null, cpTotal=0;
+
+  var cpMixOctet = function(v, x){ return Math.imul(v ^ (x & 0xFF), 16777619) >>> 0; };
+  function cpMixWord(v, w){
+    v = cpMixOctet(v, w >>> 24); v = cpMixOctet(v, w >>> 16);
+    v = cpMixOctet(v, w >>> 8);  return cpMixOctet(v, w);
+  }
+  function cpPageDigest(page, off){
+    var v = cpMixWord(2166136261 >>> 0, page >>> 0), end = off + CP_PAGE;
+    for(var i = off; i < end; i++) v = cpMixOctet(v, ram[i]);
+    return v >>> 0;
+  }
+  // A page that changed is XORed OUT before its new digest is XORed in. Leaving that out is not
+  // a small error -- the digest stops being a function of the memory at all and starts being a
+  // function of its history, so two identical machines disagree.
+  function cpFoldDirty(){
+    for(var w = 0; w < cpDirty.length; w++){
+      var bits = cpDirty[w];
+      if(bits === 0) continue;
+      cpDirty[w] = 0;
+      for(var b = 0; b < 32; b++){
+        if((bits & (1 << b)) === 0) continue;
+        var pg = w * 32 + b;
+        if(pg >= cpPages.length) continue;
+        cpTotal = (cpTotal ^ cpPages[pg]) >>> 0;
+        cpPages[pg] = cpPageDigest(pg, pg * CP_PAGE);
+        cpTotal = (cpTotal ^ cpPages[pg]) >>> 0;
+      }
+    }
+    return cpTotal >>> 0;
+  }
+  function cpHash(){
+    var ramDigest = cpFoldDirty();
+    var v = 2166136261 >>> 0;
+    v = cpMixWord(v, pc >>> 0);
+    v = cpMixOctet(v, isa & 1);
+    v = cpMixWord(v, hi >>> 0);
+    v = cpMixWord(v, lo >>> 0);
+    for(var i = 0; i < 32; i++) v = cpMixWord(v, reg[i] >>> 0);
+    for(var j = 0; j < 32; j++) v = cpMixWord(v, cp0[j] >>> 0);
+    return cpMixWord(v, ramDigest) >>> 0;
+  }
+  // Called at the TOP of burst()'s loop, so icount is the number of instructions retired and the
+  // state is the state after exactly that many. The Go emitter uses the same convention.
+  //
+  // The next boundary is computed from the boundary CROSSED, not from the instruction observed.
+  // The two loops retire instructions at different granularities -- a MIPS32 branch and its
+  // delay slot go in one iteration here -- so a cadence that advanced by the interval from
+  // wherever it happened to land would drift a little at every checkpoint, and the drift would
+  // arrive looking like the machine.
+  function cpEmit(){
+    if(cpTrunc) return;
+    if(cpLines.length >= cpMax){ cpTrunc = true; return; }
+    cpLines.push(icount + " " + hex32(cpHash()));
+    cpCount++; cpLast = icount;
+    cpNext = (Math.floor(icount / cpInterval) + 1) * cpInterval;
+  }
+  function cpReset(){
+    var q = new URLSearchParams(location.search);
+    var want = q.get("cp");
+    cpOn = false; cpInterval = 0; cpNext = 0; cpCount = 0; cpLast = 0; cpTrunc = false;
+    cpLines = null; cpPages = null; cpDirty = null; cpTotal = 0;
+    if(want === null || want === "0" || !ram) return;
+    var n = parseInt(want, 10);
+    cpInterval = (isFinite(n) && n > 0) ? n : 1000;
+    cpMax = Math.max(1, parseInt(q.get("cpmax") || "1000000", 10) || 1000000);
+    var pages = (RAM_SIZE / CP_PAGE) | 0;
+    cpPages = new Uint32Array(pages);
+    cpDirty = new Uint32Array((pages + 31) >> 5);
+    cpLines = [];
+    cpOn = true;
+    // Every page counts as dirty to begin with, so the first fold digests all of DRAM rather
+    // than leaving the untouched pages at zero and calling that a digest of the machine.
+    for(var w = 0; w < cpDirty.length; w++) cpDirty[w] = 0xFFFFFFFF;
+    cpFoldDirty();
+    for(var w2 = 0; w2 < cpDirty.length; w2++) cpDirty[w2] = 0;
+  }
+
+  // The stream, in the format cmd/oraclecmp reads from both sides.
+  //
+  // The END line carries the count and the final instruction, and that is what makes a stream
+  // that was cut short DETECTABLE. Without it a run that died half way through is
+  // indistinguishable from a short one that finished, and a comparison reports agreement over
+  // the part that happens to exist -- the easiest vacuous pass there is. So a stream that hit
+  // its line limit deliberately does NOT get an END line.
+  window.__checkpoints = function(){
+    if(!cpOn) return "";
+    var head = "GRTV-CHECKPOINTS 1 interval=" + cpInterval + "\n";
+    var body = cpLines.join("\n") + (cpLines.length ? "\n" : "");
+    return head + body + (cpTrunc ? "" : ("END " + cpCount + " " + cpLast + "\n"));
+  };
+  window.__cpState = function(){
+    return { on: cpOn, interval: cpInterval, count: cpCount, last: cpLast,
+             truncated: cpTrunc, max: cpMax, pages: cpPages ? cpPages.length : 0 };
+  };
+  // The self-test. These are the numbers internal/platform/statehash/vectors_test.go pins, and
+  // they were agreed between the two implementations rather than copied from one: a mismatch
+  // here means this page and the port no longer compute the same function, which would arrive
+  // at the far end looking like a divergence at checkpoint zero -- that is, like a CPU fault.
+  window.__cpVectors = function(){
+    var zero = new Uint8Array(CP_PAGE);
+    var counting = new Uint8Array(CP_PAGE);
+    for(var i = 0; i < CP_PAGE; i++) counting[i] = i & 0xFF;
+    var digestOf = function(page, data){
+      var v = cpMixWord(2166136261 >>> 0, page >>> 0);
+      for(var k = 0; k < data.length; k++) v = cpMixOctet(v, data[k]);
+      return v >>> 0;
+    };
+    var out = {
+      mixWord_offset_80081C58: hex32(cpMixWord(2166136261 >>> 0, 0x80081C58)),
+      pageDigest_0_zeros:      hex32(digestOf(0, zero)),
+      pageDigest_3_counting:   hex32(digestOf(3, counting))
+    };
+    out.ok = out.mixWord_offset_80081C58 === "0xBE2386A9" &&
+             out.pageDigest_0_zeros      === "0x9B5D3515" &&
+             out.pageDigest_3_counting   === "0xE18B905C";
+    return out;
+  };
+
   var RN=["zero","at","v0","v1","a0","a1","a2","a3","t0","t1","t2","t3","t4","t5","t6","t7",
           "s0","s1","s2","s3","s4","s5","s6","s7","t8","t9","k0","k1","gp","sp","fp","ra"];
 
@@ -761,6 +913,7 @@
     unknown = 0; unknownSites = new Map();
     stalled=false; stallAddr=0; lastReadAddr=-1; lastReadRun=0; jalxSkips=0; jalxTaken=0; eretCount=0; stallKind=""; isa=0; cp0=new Int32Array(32); irqCount=0; timerPending=false; mmioRegs=new Map(); CHIP0.mode=0; CHIP0.seq=0; CHIP0.program=false; CHIP0.erase=false; CHIP1.mode=0; CHIP1.seq=0; CHIP1.program=false; CHIP1.erase=false; flashAutoselects=0; flashPrograms=0; flashErases=0; flashLog=[]; handoffDone=false; handoffAt=0; idleSpin=0; timerCounter=0; timerTicks=0; timerArmed=false; forceIP=0; csiReset(); i2cReset(); vramReset(); uartReset(); sc1Reset(); dmaReset(); blitReset(); dispReset();
     busLines=[]; socWrites=0; phase=0; lastCount=0; lastT=0;
+    cpReset();                                 // no-op unless ?cp= asked for checkpoints
     drawAll(); paint();
     pushBus("·","reset", "pc = "+hex32(pc));
   }
@@ -1175,6 +1328,14 @@
       else if(size===2){ ram[r]=(val>>>8)&255; ram[r+1]=val&255; }
       else ram[r]=val&255;
       ramWritten+=size;
+      // The checkpoint hash's dirty set. Off unless ?cp= asked for it; when it is on, BOTH ends
+      // of the write are marked, because a four-byte store at the end of a page lands in two of
+      // them and marking only the first leaves half the change out of the digest.
+      if(cpOn){
+        var cpP0=(r/CP_PAGE)|0, cpP1=((r+size-1)/CP_PAGE)|0;
+        cpDirty[cpP0>>5] |= (1<<(cpP0&31));
+        if(cpP1!==cpP0) cpDirty[cpP1>>5] |= (1<<(cpP1&31));
+      }
       if(dcache.size !== 0){                  // code that is written to must be re-decoded
         var va = (RAM_K0 + r) & ~1;
         dcache.delete(va>>>0);
@@ -4443,6 +4604,11 @@
   };
   function burst(n){
     for(var i=0;i<n && !stalled;i++){
+      // Tier-1 checkpoint, if this run asked for them. One boolean test per instruction when it
+      // did not, which is the same cost as the FW_PRINTF compare below and the wwOn guard in
+      // store(). Here at the top, so icount is the count of instructions RETIRED and the machine
+      // is in the state that follows exactly that many of them.
+      if(cpOn && icount >= cpNext) cpEmit();
       tickCount();
       // THE DEVICES DO NOT NEED LOOKING AT EVERY INSTRUCTION, and looking at them anyway was
       // most of the emulator's cost. Seven calls stood here per instruction; uartPump alone

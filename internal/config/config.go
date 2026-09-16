@@ -16,6 +16,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"reflect"
 	"strconv"
@@ -53,6 +54,10 @@ type Config struct {
 	// one real control over them. A container overrides this to bind all interfaces and publishes
 	// the port through a loopback-only mapping instead.
 	HTTPAddr string `env:"GORETROTV_HTTP_ADDR"`
+
+	// AllowNonLoopbackBind is for the container only. Its port is mapped to host loopback by
+	// docker-compose.yml; a native process has no such fence and must leave this false.
+	AllowNonLoopbackBind bool `env:"GORETROTV_BIND_ALL_INTERFACES"`
 
 	// LogLevel is one of debug, info, warn, error.
 	LogLevel string `env:"GORETROTV_LOG_LEVEL"`
@@ -153,7 +158,28 @@ func Load() (*Config, error) {
 	if len(problems) > 0 {
 		return nil, errors.Join(problems...)
 	}
+	if err := validateHTTPBind(cfg.HTTPAddr, cfg.AllowNonLoopbackBind); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+func validateHTTPBind(addr string, allowNonLoopback bool) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("GORETROTV_HTTP_ADDR: %w", err)
+	}
+	if allowNonLoopback {
+		return nil
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return fmt.Errorf("GORETROTV_HTTP_ADDR %q: developer surfaces bind to localhost only (CLAUDE.md); set GORETROTV_BIND_ALL_INTERFACES only behind a loopback-only port mapping", addr)
+	}
+	return nil
 }
 
 // parseTag reads the `env:"NAME[,required]"` tag. A field without one is not a setting.

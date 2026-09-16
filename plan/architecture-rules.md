@@ -10,7 +10,7 @@ due to exist.
 
 | Rule | Invariant | Source decision | Class | Arming | State |
 |---|---|---|---|---|---|
-| `ARCH-DEV-1` | Developer surfaces bind only to loopback | Deployment and access | STATIC | SELF-ARMING | deferred — gort-87m.2 |
+| `ARCH-DEV-1` | Developer surfaces bind only to loopback | Deployment and access | STATIC | ARMED | **enforced** |
 | `ARCH-SNAP-1` | Every device state field is captured by Snapshot and Restore | The core patterns | STATIC | SELF-ARMING | pending — gort-87m.3 |
 | `ARCH-DET-1` | CPU and devices use instruction time, with no wall clock or goroutine in the instruction loop | The core patterns | STATIC | SELF-ARMING | pending — gort-87m.4 |
 | `ARCH-LAYER-1` | Core and device packages do not import outward transport packages | Application structure | STATIC | SELF-ARMING | pending — gort-87m.5 |
@@ -22,9 +22,12 @@ due to exist.
 
 ### `ARCH-DEV-1`
 
-The public demo must not expose the gdb stub or instrument endpoints. Binding either to a public
-interface is the deliberate violation. The surfaces are not built yet; this rule must enrol them
-when they arrive.
+The public demo must not expose developer endpoints. The current HTTP server can mount pprof; its
+loader refuses a non-loopback address unless the container-only override is explicit, and Compose
+must publish that container port on host loopback. Removing the refusal, setting the override
+outside Compose, making it interpolated, or publishing the port publicly are separate violations.
+The planned gdb and instrument surfaces must use this validated bind path or extend this rule when
+they are built.
 
 ### `ARCH-SNAP-1`
 

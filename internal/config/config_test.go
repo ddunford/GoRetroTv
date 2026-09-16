@@ -245,13 +245,14 @@ func TestLoadAppliesDefaultsAndOverrides(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	want := config.Config{
-		Env:         "development",
-		FirmwareDir: env["GORETROTV_FIRMWARE_DIR"],
-		ServiceName: "goretrotv-oracle",
-		HTTPAddr:    "127.0.0.1:9000",
-		LogLevel:    "debug",
-		LogFormat:   "text",
-		EnablePprof: true,
+		Env:                  "development",
+		FirmwareDir:          env["GORETROTV_FIRMWARE_DIR"],
+		ServiceName:          "goretrotv-oracle",
+		HTTPAddr:             "127.0.0.1:9000",
+		AllowNonLoopbackBind: false,
+		LogLevel:             "debug",
+		LogFormat:            "text",
+		EnablePprof:          true,
 	}
 	if *cfg != want {
 		t.Errorf("Load = %+v, want %+v", *cfg, want)
@@ -265,6 +266,42 @@ func TestTheDefaultListenerBindsLoopback(t *testing.T) {
 
 	if !strings.HasPrefix(config.Defaults.HTTPAddr, "127.0.0.1:") {
 		t.Errorf("the default listener is %q; developer surfaces bind to localhost (CLAUDE.md -> Deployment and access)", config.Defaults.HTTPAddr)
+	}
+}
+
+func TestNonLoopbackListenerRequiresExplicitContainerOverride(t *testing.T) {
+	cases := []struct {
+		name, addr, override string
+		allowed              bool
+	}{
+		{"IPv4 loopback", "127.0.0.1:8099", "", true},
+		{"IPv6 loopback", "[::1]:8099", "", true},
+		{"localhost", "localhost:8099", "", true},
+		{"empty host", ":8099", "", false},
+		{"IPv4 any", "0.0.0.0:8099", "", false},
+		{"IPv6 any", "[::]:8099", "", false},
+		{"public IP", "192.0.2.1:8099", "", false},
+		{"DNS name", "example.test:8099", "", false},
+		{"malformed", "not-an-address", "", false},
+		{"container override", ":8099", "true", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := validEnv()
+			env["GORETROTV_HTTP_ADDR"] = tc.addr
+			env["GORETROTV_BIND_ALL_INTERFACES"] = tc.override
+			setEnv(t, env)
+			cfg, err := config.Load()
+			if tc.allowed && err != nil {
+				t.Fatalf("Load rejected %q with override %q: %v", tc.addr, tc.override, err)
+			}
+			if !tc.allowed && err == nil {
+				t.Fatalf("Load accepted %q without an override: %+v", tc.addr, cfg)
+			}
+			if !tc.allowed && tc.addr != "not-an-address" && !strings.Contains(err.Error(), "localhost only") {
+				t.Errorf("refusal %q does not name the loopback rule", err)
+			}
+		})
 	}
 }
 
@@ -323,6 +360,7 @@ func TestEveryFieldHasAParser(t *testing.T) {
 			t.Errorf("%s (Config.%s) is a %s, which config.assign has no parser for", v.Name, v.Field, v.Kind)
 		}
 	}
+	env["GORETROTV_HTTP_ADDR"] = "127.0.0.1:8099"
 	// GORETROTV_ENV is a string like any other here; "x" is a value, not a meaningful one.
 	setEnvMap(t, env)
 

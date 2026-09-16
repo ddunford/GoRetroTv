@@ -9,7 +9,7 @@
   **Expected:** each rule reports ARMED / SELF-ARMING / DEFERRED with a reason; a deferred rule names
   the task that owes it.
 
-- [ ] **TC-1a.2: A public-bound developer surface is refused** (covers: TASK-1a.2)
+- [x] **TC-1a.2: A public-bound developer surface is refused** (covers: TASK-1a.2)
   **Steps:** probe — bind the gdb stub to `0.0.0.0`.
   **Expected:** ARCH-DEV-1 fails. This is the rule that matters most: the demo host is public.
 

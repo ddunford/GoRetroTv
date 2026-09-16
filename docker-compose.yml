@@ -23,6 +23,7 @@ services:
       # loopback-only: the recorded rule is that developer surfaces are not reachable off-host
       # (CLAUDE.md -> Deployment and access).
       GORETROTV_HTTP_ADDR: ":8099"
+      GORETROTV_BIND_ALL_INTERFACES: "true"
       GORETROTV_ENABLE_PPROF: ${GORETROTV_ENABLE_PPROF:-false}
     ports:
       - "127.0.0.1:${GORETROTV_PORT:-8099}:8099"

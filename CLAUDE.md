@@ -72,6 +72,19 @@ modelling any device.** This section is only for patterns discovered while build
   Where both are wrong in the same way they agree. Inherited errors are caught only by the measured
   record.
 
+## The emulator
+
+**Load the `digibox-emulator` skill before writing the CPU core, modelling a peripheral, reading the
+firmware's disassembly, feeding it DVB sections, or touching the oracle.** The NEC VR4111 and MIPS16
+reference, the firmware's device conventions, the instrument suite and the measurement rules are
+there rather than here, because only some sessions need them — and each rule in it cost the
+predecessor real time.
+
+The oracle is `reference/digibox-boot.html`. It is a **measuring instrument, not a sibling
+implementation**: editing it to agree with the Go port is the one move that destroys its value, and
+it will look reasonable at the time. Where the two disagree the measured record decides, and where
+the record is silent the answer is to measure.
+
 ## Conventions
 
 - **Firmware** lives in `firmware/`, is gitignored and is not redistributable. See its MANIFEST.

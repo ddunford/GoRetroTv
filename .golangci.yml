@@ -1,0 +1,47 @@
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.22"
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - revive
+    - misspell
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - exhaustive
+    - gocritic
+    - nilerr
+    - prealloc
+    - tparallel
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: false
+    errorlint:
+      asserts: true
+      comparison: true
+    gosec:
+      excludes:
+        - G104 # errcheck covers this and is quieter about it
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

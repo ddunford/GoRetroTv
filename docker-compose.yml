@@ -1,0 +1,26 @@
+services:
+  goretrotv:
+    build:
+      context: .
+      target: runtime
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+        BUILD_DATE: ${BUILD_DATE:-unknown}
+    environment:
+      GORETROTV_ENV: ${GORETROTV_ENV:-development}
+      GORETROTV_LOG_LEVEL: ${GORETROTV_LOG_LEVEL:-debug}
+      GORETROTV_LOG_FORMAT: ${GORETROTV_LOG_FORMAT:-json}
+      # Inside the container the listener must accept the published mapping, so it binds all
+      # interfaces here. The exposure decision lives in the port mapping below, which is
+      # loopback-only: the recorded rule is that developer surfaces are not reachable off-host
+      # (CLAUDE.md -> Deployment and access).
+      GORETROTV_HTTP_ADDR: ":8099"
+      GORETROTV_ENABLE_PPROF: ${GORETROTV_ENABLE_PPROF:-false}
+    ports:
+      - "127.0.0.1:${GORETROTV_PORT:-8099}:8099"
+    volumes:
+      # THE FIRMWARE IS NOT REDISTRIBUTABLE and is never baked into the image. It is mounted
+      # read-only from the working copy; a clone without it is inert by design.
+      - ./firmware:/firmware:ro
+    restart: unless-stopped

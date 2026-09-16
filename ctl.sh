@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# The one entry point for this project. Never call docker/compose/go directly -- this script owns
+# the dev/prod distinction, the port, the health check and the safety confirmations, and a command
+# that bypasses it is a command that skips one of them.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+PROJECT="goretrotv"
+PORT="${GORETROTV_PORT:-8099}"
+HEALTH_URL="http://127.0.0.1:${PORT}/health"
+
+# Colour only when a terminal is watching. A gate's output gets grepped, and an escape sequence
+# between the indent and the word defeats the grep that was supposed to read it.
+if [[ -t 1 ]]; then
+    RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; BOLD=$'\033[1m'; OFF=$'\033[0m'
+else
+    RED=''; GREEN=''; YELLOW=''; BOLD=''; OFF=''
+fi
+
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '%s%s%s\n' "$GREEN" "$*" "$OFF"; }
+warn() { printf '%s%s%s\n' "$YELLOW" "$*" "$OFF" >&2; }
+die()  { printf '%s%s%s\n' "$RED" "$*" "$OFF" >&2; exit 1; }
+
+require_firmware() {
+    # Nothing in this repository runs without the flash images, and they are gitignored because
+    # they are Pace's. Saying so plainly beats a confusing failure deep inside the loader.
+    local missing=()
+    for f in firmware/FLASH_U202.bin firmware/FLASH_U203.bin; do
+        [[ -f "$f" ]] || missing+=("$f")
+    done
+    if (( ${#missing[@]} )); then
+        die "missing firmware: ${missing[*]}
+The flash images are not redistributable and are not in git. See firmware/MANIFEST.md."
+    fi
+}
+
+cmd_build() { make build; }
+
+cmd_run() {
+    require_firmware
+    make run
+}
+
+# Build identity for the image. Without these, compose falls back to VERSION=dev/COMMIT=unknown and
+# /health answers with a build nobody can name -- which defeats the reason it reports one at all.
+export_build_args() {
+    VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+    COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    export VERSION COMMIT BUILD_DATE
+}
+
+cmd_up() {
+    require_firmware
+    export_build_args
+    docker compose up -d --build
+    cmd_health
+}
+
+cmd_down() { docker compose down; }
+
+cmd_restart() { cmd_down; cmd_up; }
+
+cmd_status() {
+    docker compose ps
+    say ""
+    cmd_health || true
+}
+
+cmd_logs() { docker compose logs -f --tail="${1:-100}" "$PROJECT"; }
+
+cmd_health() {
+    local tries=30
+    for ((i = 1; i <= tries; i++)); do
+        if curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
+            ok "healthy: $HEALTH_URL"
+            curl -fsS "$HEALTH_URL"
+            say ""
+            return 0
+        fi
+        sleep 1
+    done
+    die "unhealthy: $HEALTH_URL did not answer within ${tries}s"
+}
+
+cmd_test() { make test-race; }
+
+cmd_lint() {
+    make vet
+    if command -v golangci-lint >/dev/null 2>&1; then
+        make lint
+    else
+        warn "golangci-lint not on PATH; ran go vet only"
+    fi
+}
+
+cmd_fmt() { make fmt; }
+
+cmd_vuln() {
+    command -v govulncheck >/dev/null 2>&1 \
+        || die "govulncheck not on PATH: go install golang.org/x/vuln/cmd/govulncheck@latest"
+    make vuln
+}
+
+cmd_clean() {
+    printf '%sThis removes bin/ and the compose stack (volumes kept). Continue? [y/N] %s' "$BOLD" "$OFF"
+    read -r reply
+    [[ "$reply" == [yY] ]] || die "aborted"
+    make clean
+    docker compose down
+}
+
+cmd_help() {
+    cat <<'USAGE'
+GoRetroTV control script
+
+  ./ctl.sh <command>
+
+Running
+  run            Build and run natively (the fast loop -- the emulator gains nothing from a container)
+  up             Build and start the compose stack, then wait for health
+  down           Stop the compose stack
+  restart        down, then up
+  status         Compose state plus a health probe
+  logs [n]       Follow the container log (default: last 100 lines)
+  health         Probe the health endpoint and print what it says
+
+Building and checking
+  build          Build every binary into bin/
+  test           Run the tests under the race detector
+  lint           go vet, plus golangci-lint when it is installed
+  fmt            Format the tree
+  vuln           Check against the Go vulnerability database
+  clean          Remove bin/ and stop the stack (asks first)
+
+  help           This text
+USAGE
+}
+
+main() {
+    local cmd="${1:-help}"
+    shift || true
+    case "$cmd" in
+        build)   cmd_build "$@" ;;
+        run)     cmd_run "$@" ;;
+        up)      cmd_up "$@" ;;
+        down)    cmd_down "$@" ;;
+        restart) cmd_restart "$@" ;;
+        status)  cmd_status "$@" ;;
+        logs)    cmd_logs "$@" ;;
+        health)  cmd_health "$@" ;;
+        test)    cmd_test "$@" ;;
+        lint)    cmd_lint "$@" ;;
+        fmt)     cmd_fmt "$@" ;;
+        vuln)    cmd_vuln "$@" ;;
+        clean)   cmd_clean "$@" ;;
+        help|-h|--help) cmd_help ;;
+        *)       warn "unknown command: $cmd"; cmd_help; exit 1 ;;
+    esac
+}
+
+main "$@"

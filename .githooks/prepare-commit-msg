@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Delegates to beads.
+#
+# core.hooksPath points at .githooks, so git no longer looks in .beads/hooks — this file is what
+# keeps beads' own prepare-commit-msg hook running. It is not a placeholder: without it the tracker
+# silently stops doing its half of the work, and a tracker that quietly stops is worse than one
+# that errors, because the issue graph goes on looking authoritative.
+#
+# Project-specific prepare-commit-msg checks belong above the delegation, not instead of it.
+set -uo pipefail
+
+if [ -x .beads/hooks/prepare-commit-msg ]; then
+    exec .beads/hooks/prepare-commit-msg "$@"
+fi
+exit 0

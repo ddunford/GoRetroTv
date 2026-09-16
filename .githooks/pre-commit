@@ -1,0 +1,197 @@
+#!/usr/bin/env bash
+# Pre-commit guard — installed into a project's .githooks/ by the framework's scaffold
+# skills (copy, not symlink: the project must keep working on machines without the
+# framework). Enable with: git config core.hooksPath .githooks
+#
+# Four checks, all on STAGED content only:
+#   1. Secret literals: values from .env* files (never the allowlisted sample files)
+#      appearing in added lines.
+#   2. Secret-shaped strings: vendor key prefixes and PEM headers.
+#   3. Secret-bearing filenames being committed (.env, keys, credentials).
+#   4. bd projects: plan/phase-*.md task checkboxes that disagree with bd, or a phase
+#      reporting built work behind an unwalked test plan (bd-mirror-phases.py --check
+#      --strict). The mirror script is the source of truth; hand-ticked boxes cannot land.
+# Optional 5th: patterns in a markers file (PRECOMMIT_MARKERS_FILE, default
+#   local/publish-markers.txt) — personal identifiers that must never enter history.
+set -uo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root" || exit 1
+config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+lib="$config_dir/hooks/lib/sensitive-path.sh"
+fail=0
+say() { printf '%s\n' "$*" >&2; }
+
+# The shared classifier when the framework is present; a frozen copy of the same
+# list otherwise, so the guard never depends on the framework being installed.
+if [ -f "$lib" ]; then
+  # shellcheck source=/dev/null
+  . "$lib"
+else
+  sensitive_path_reason() {
+    local base; base="$(basename -- "$1")"
+    case "$base" in .env.example|.env.sample|.env.template|.env.testing|.env.test|.env.dist) return 1 ;; esac
+    case "$base" in
+      .env|.env.*) echo "env file"; return 0 ;;
+      id_rsa|id_rsa.*|id_ed25519|id_ed25519.*|id_ecdsa|id_ecdsa.*|id_dsa|id_dsa.*) echo "SSH key"; return 0 ;;
+      *.pem|*.key|*.p12|*.pfx|*.jks) echo "key material"; return 0 ;;
+      credentials.json|.credentials.json|*.credentials.json|credentials.yml|credentials.yaml) echo "credentials file"; return 0 ;;
+    esac
+    case "$1" in */secrets/*|secrets/*|*/.ssh/*|.ssh/*) echo "secrets directory"; return 0 ;; esac
+    return 1
+  }
+  SECRET_PATTERN='sk-ant-[A-Za-z0-9_-]{8}|sk-proj-[A-Za-z0-9_-]{8}|ghp_[A-Za-z0-9]{16}|github_pat_[A-Za-z0-9_]{16}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10}|(sk|rk)_(live|test)_[A-Za-z0-9]{16}|-----BEGIN (RSA|OPENSSH|EC|DSA|PGP) PRIVATE KEY'
+  SECRET_PATTERN_ALLOW='AKIAIOSFODNN7EXAMPLE'
+fi
+
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -n "$staged" ] || exit 0
+# Added lines, each PREFIXED WITH ITS FILE. A single flat diff cannot say where a
+# hit came from, so the rejection used to name the offending line and leave you to
+# find it — on a wide commit that is a search, and a guard that is annoying to obey
+# is one people learn to bypass.
+added=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  file_added="$(git diff --cached --diff-filter=ACMR -U0 -- "$f" | grep -E '^\+' | grep -Ev '^\+\+\+ ' || true)"
+  [ -n "$file_added" ] || continue
+  added="$added$(printf '%s\n' "$file_added" | sed "s|^|$f: |")
+"
+done <<< "$staged"
+
+# 3. Secret-bearing filenames
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  if r="$(sensitive_path_reason "$f")"; then say "✗ refusing to commit a $r: $f"; fail=1; fi
+done <<< "$staged"
+
+# 2. Secret-shaped strings
+hits="$(printf '%s\n' "$added" | grep -E "$SECRET_PATTERN" | grep -Ev "$SECRET_PATTERN_ALLOW" || true)"
+if [ -n "$hits" ]; then
+  say "✗ secret-shaped string in staged changes:"; printf '%s\n' "$hits" | cut -c1-160 | sed 's/^/    /' >&2; fail=1
+fi
+
+# 1. Literal values from local env files. Only keys that name a secret, only values
+#    long enough to be one — DB_HOST=localhost is not a leak.
+for envf in .env .env.* */.env */.env.*; do
+  [ -f "$envf" ] || continue
+  sensitive_path_reason "$envf" >/dev/null || continue     # skip the sample files
+  while IFS= read -r line; do
+    case "$line" in ''|'#'*) continue ;; esac
+    key="${line%%=*}"; val="${line#*=}"
+    val="${val#\"}"; val="${val%\"}"; val="${val#\'}"; val="${val%\'}"
+    printf '%s' "$key" | grep -Eqi 'secret|key|token|password|passwd|pass$|dsn|private|credential|auth' || continue
+    [ "${#val}" -ge 12 ] || continue
+    where="$(printf '%s\n' "$added" | grep -F -- "$val" | sed 's/:.*//' | sort -u | tr '\n' ' ' || true)"
+    if [ -n "$where" ]; then
+      say "✗ the value of $key from $envf appears in staged changes, in: $where"; fail=1
+    fi
+  done < "$envf"
+done
+
+# 4. Shell scripts must parse. A broken ctl.sh is not one agent's problem — every
+#    agent in the tree runs it, and under `set -euo pipefail` a call to a function
+#    that is not defined yet kills the whole command. Catches the half-landed edit.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in *.sh|*/ctl.sh|ctl.sh) ;; *) continue ;; esac
+  [ -f "$f" ] || continue
+  head -n1 -- "$f" | grep -q 'bash' || continue
+  if ! err="$(bash -n -- "$f" 2>&1)"; then
+    say "✗ $f is not valid bash:"; printf '%s\n' "$err" | sed 's/^/    /' >&2; fail=1
+  fi
+done <<< "$staged"
+
+# 5. Personal markers (optional)
+markers="${PRECOMMIT_MARKERS_FILE:-local/publish-markers.txt}"
+if [ -f "$markers" ]; then
+  while IFS= read -r pat; do
+    [ -z "$pat" ] || [ "${pat#\#}" != "$pat" ] && continue
+    if printf '%s\n' "$added" | grep -Eq -- "$pat"; then say "✗ personal marker '$pat' in staged changes"; fail=1; fi
+  done < "$markers"
+fi
+
+# 4. bd mirror drift
+if [ -d .beads ] && printf '%s\n' "$staged" | grep -Eq '^plan/phase-[^/]+\.md$'; then
+  mirror="$config_dir/scripts/bd-mirror-phases.py"
+  if ! command -v bd >/dev/null 2>&1; then
+    say "⚠ plan/phase-*.md staged on a bd project but bd is not installed here — mirror drift NOT checked"
+  elif [ ! -f "$mirror" ]; then
+    say "✗ plan/phase-*.md staged on a bd project but $mirror is missing; install the framework or run the mirror check by hand"; fail=1
+  elif ! python3 "$mirror" --check --strict . >&2; then
+    fail=1
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  say ""; say "Commit refused by .githooks/pre-commit. Fix the cause — do not bypass with --no-verify."
+  exit 1
+fi
+
+# Project-specific checks (formatters, vet, lint) may be appended below this line by a
+# scaffold skill; they run only once the guard above has passed.
+
+# ---------------------------------------------------------------------------------------------
+# Go hygiene. Scoped to what is being committed, on purpose.
+#
+# gofmt runs against the STAGED content rather than the working tree, because this repository is
+# worked by several agents at once and the two are routinely different — a hook that judged the
+# working tree would pass or fail on somebody else's half-finished edit.
+#
+# go vet needs a whole package to compile, so it cannot be run on staged content alone. It runs
+# over the packages the staged files belong to rather than ./... for the same reason: a teammate
+# mid-edit in an unrelated package must not block a commit nobody can fix, and a guard that fails
+# for reasons you cannot act on is one people learn to bypass with --no-verify.
+# ---------------------------------------------------------------------------------------------
+go_fail=0
+staged_go="$(printf '%s\n' "$staged" | grep -E '\.go$' || true)"
+
+if [ -n "$staged_go" ] && command -v gofmt >/dev/null 2>&1; then
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' EXIT
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    mkdir -p "$work/$(dirname "$f")"
+    git show ":$f" > "$work/$f" 2>/dev/null || continue
+  done <<< "$staged_go"
+
+  unformatted="$(gofmt -l "$work" 2>/dev/null | sed "s|^$work/||" || true)"
+  if [ -n "$unformatted" ]; then
+    say "✗ staged Go files are not gofmt'd:"
+    printf '%s\n' "$unformatted" | sed 's/^/    /' >&2
+    say "    run: make fmt"
+    go_fail=1
+  fi
+fi
+
+if [ -n "$staged_go" ] && command -v go >/dev/null 2>&1; then
+  pkgs="$(printf '%s\n' "$staged_go" | xargs -r -n1 dirname | sort -u | sed 's|^|./|' || true)"
+  if [ -n "$pkgs" ]; then
+    # Captured to a file rather than piped: reading an exit status through a pipe reads the
+    # pipe's last command, and a guard that misreads its own result is worse than no guard.
+    vet_out="$(mktemp)"
+    # shellcheck disable=SC2086
+    if ! GOTOOLCHAIN=local go vet $pkgs > "$vet_out" 2>&1; then
+      say "✗ go vet failed in the packages being committed:"
+      sed 's/^/    /' < "$vet_out" >&2
+      go_fail=1
+    fi
+    rm -f "$vet_out"
+  fi
+fi
+
+if [ "$go_fail" -ne 0 ]; then
+  say ""
+  say "Commit refused by .githooks/pre-commit. Fix the cause — do not bypass with --no-verify."
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------------------------
+# Beads. `bd init` set core.hooksPath to .beads/hooks; pointing it here instead would have
+# silently disabled every beads hook, so each hook in this directory runs its .beads counterpart
+# afterwards. Deleting this block does not produce an error, it produces an issue tracker that
+# quietly stops exporting — which is the kind of breakage nobody notices for a week.
+# ---------------------------------------------------------------------------------------------
+if [ -x .beads/hooks/pre-commit ]; then
+    .beads/hooks/pre-commit "$@" || exit $?
+fi

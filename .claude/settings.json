@@ -1,4 +1,48 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(./ctl.sh help)",
+      "Bash(./ctl.sh status:*)",
+      "Bash(./ctl.sh logs:*)",
+      "Bash(./ctl.sh health:*)",
+      "Bash(./ctl.sh build:*)",
+      "Bash(./ctl.sh test:*)",
+      "Bash(./ctl.sh lint:*)",
+      "Bash(./ctl.sh fmt:*)",
+      "Bash(./ctl.sh vuln:*)",
+      "Bash(make build:*)",
+      "Bash(make test:*)",
+      "Bash(make test-race:*)",
+      "Bash(make vet:*)",
+      "Bash(make lint:*)",
+      "Bash(make fmt:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go list:*)",
+      "Bash(go doc:*)",
+      "Bash(gofmt:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(bd ready:*)",
+      "Bash(bd show:*)",
+      "Bash(bd blocked:*)",
+      "Bash(bd list:*)",
+      "Read(./.env.example)",
+      "Read(./.env.testing)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/secrets/**)"
+    ]
+  },
+  "enabledMcpjsonServers": ["playwright"],
   "hooks": {
     "SessionStart": [
       {

@@ -92,6 +92,23 @@ func NewEmitter(w io.Writer, interval uint64, h *Hasher) (*Emitter, error) {
 // The icount written is the one observed, not the boundary it crossed. A caller that skips
 // instructions therefore produces a stream whose instants are visible rather than one that silently
 // claims to have sampled the boundary.
+//
+// # The contract the other implementation has to meet, and it is not optional
+//
+// Two machines can only be compared where they were sampled at the SAME instant. A hash taken
+// after 300,000 instructions and one taken after 300,001 describe different machines, so equal
+// hashes there would be coincidence and unequal ones would prove nothing.
+//
+// The oracle steps over about one boundary in ten - 477 of 4,629 on a real recorded boot - because
+// its MIPS32 path retires a branch and its delay slot in one loop iteration. A port that samples
+// between those two instructions lands on 300,000 where the oracle lands on 300,001, and every
+// such window becomes uncomparable. The comparison survives that now (it counts them, says so, and
+// carries on to find where the STATES differ), but the windows themselves are lost.
+//
+// So: observe only where the oracle can observe, which means never between a branch and its delay
+// slot. That is the same rule the interrupt path already follows for the same reason - the skill's
+// "an interrupt must not be taken in a branch delay slot", which cost a night - and the state
+// mid-pair is not well defined anyway, because the pending branch target is not in this hash.
 func (e *Emitter) Observe(icount uint64, s State) error {
 	// The sticky error comes first, before the not-due shortcut. A broken stream must report
 	// itself on EVERY call, not only on the ones where a checkpoint happened to be due: the

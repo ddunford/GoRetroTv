@@ -123,8 +123,16 @@ func TestTheComparisonWorksOnARealOracleStream(t *testing.T) {
 		if got.Lo != 4_500_000 || got.Hi != 4_599_999 {
 			t.Fatalf("localised to instructions %d..%d, want 4500000..4599999", got.Lo, got.Hi)
 		}
-		if got.Compared != 45 {
-			t.Fatalf("it compared %d checkpoints before reaching window 45", got.Compared)
+		// Every window of the boot agreed except the one corrupted, so the comparison walked
+		// the whole run rather than stopping at the first thing it found. A tool that reported
+		// the right window having examined forty-five checkpoints of a 4,629-checkpoint boot
+		// would satisfy a looser assertion.
+		if want := len(s.Checkpoints) - 1; got.Compared != want {
+			t.Fatalf("%d windows agreed, want %d - one short of the whole boot", got.Compared, want)
+		}
+		if got.Cadence != 0 {
+			t.Fatalf("%d windows were not comparable; a stream against a copy of itself samples "+
+				"every window at the same instruction count", got.Cadence)
 		}
 		t.Logf("caught: %s", got)
 	})

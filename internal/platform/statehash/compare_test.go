@@ -73,7 +73,14 @@ func TestAnInjectedDivergenceIsLocalisedToItsWindow(t *testing.T) {
 	good := emit(t, n, interval, nil)
 	bad := emit(t, n, interval, func(i uint64, s *statehash.State) {
 		if i >= at {
-			s.GPR[7] ^= 0x00000001 // one bit of one register, from that instruction on
+			// COP0 12 is Status, which the toy program never writes, so the corruption sticks.
+			// Two earlier versions of this line did not: an XOR applied every instruction
+			// toggles the bit back and forth so half the later checkpoints match by accident,
+			// and an OR into a general register the program rewrites every 32 instructions set
+			// a bit that was already set. Both are corruptions that do not corrupt, and the
+			// assertion below would have passed on luck in the first case and on nothing in
+			// the second.
+			s.COP0[12] = 0xDEADBEEF
 		}
 	})
 
@@ -91,11 +98,12 @@ func TestAnInjectedDivergenceIsLocalisedToItsWindow(t *testing.T) {
 		t.Fatalf("reported window %d, want %d", got.Window, at/interval)
 	}
 	// And it must have actually walked the stream to get there, not stopped at the first line.
-	if got.Compared != at/interval {
-		t.Fatalf("it reports %d checkpoints agreed before the divergence at instruction %d; the "+
-			"windows before it are 0..%d, so it should be %d - and a tool that reported the "+
-			"right window having examined far less would pass a looser assertion",
-			got.Compared, at, at/interval-1, at/interval)
+	// Windows 0..4,499 agree and 4,500..4,501 do not, so 4,500 of the 4,502 agree. Asserting
+	// the exact number matters: a tool that reported the right window having examined almost
+	// none of the run would satisfy anything looser.
+	if want := uint64(n-at) / interval; got.Compared != int(at/interval) {
+		t.Fatalf("it reports %d windows agreed; windows 0..%d agree and the last %d do not, so "+
+			"it should be %d", got.Compared, at/interval-1, want, at/interval)
 	}
 	t.Logf("caught: %s", got)
 }
@@ -205,10 +213,14 @@ func TestStreamsThatOverlapNowhereAreRefused(t *testing.T) {
 }
 
 // The oracle's MIPS32 path retires a branch and its delay slot in one iteration, so its
-// checkpoints land on instruction counts like 300001. Two machines that agree perfectly will
-// produce those; two that retire instructions differently will not, and that is a real
-// disagreement about the machine - but it is NOT a state divergence, and reporting it as one
-// sends the reader looking at a hash of two different instants.
+// checkpoints land on instruction counts like 300001 - 477 of 4,629 on a real recorded boot. Two
+// machines that agree perfectly will produce those; a port whose loop samples a moment earlier
+// will not, and that is a difference between the two EMITTERS rather than between the machines.
+//
+// It is reported, because something is wrong. But it is reported as ITS OWN kind, because the two
+// hashes describe the machine after different numbers of instructions: equal ones there would be
+// coincidence and unequal ones would prove nothing, and calling either a state divergence would
+// manufacture a false finding.
 func TestADifferentInstructionCountInTheSameWindowIsItsOwnKindOfDivergence(t *testing.T) {
 	t.Parallel()
 	a := read(t, "go", "GRTV-CHECKPOINTS 1 interval=1000\n0 0x00000001\n1000 0x0000BEEF\nEND 2 1000\n")
@@ -227,6 +239,90 @@ func TestADifferentInstructionCountInTheSameWindowIsItsOwnKindOfDivergence(t *te
 	}
 	if !strings.Contains(got.String(), "1001") {
 		t.Fatalf("the report must give both instruction counts: %s", got)
+	}
+	// And it must say what it found about the STATES, or the headline is all the reader gets and
+	// the headline is about sampling.
+	if got.FirstState != nil {
+		t.Fatalf("there is no state divergence here to find: %s", got)
+	}
+	if !strings.Contains(got.String(), "agree") {
+		t.Fatalf("with no state divergence, the report must say the states agreed where they "+
+			"could be compared: %s", got)
+	}
+	t.Logf("caught: %s", got)
+}
+
+// THE BUG THIS PACKAGE SHIPPED, pinned so it cannot come back.
+//
+// The first version stopped dead on a cadence difference and returned. Since the oracle steps over
+// about one boundary in ten and the FIRST of them is at its fourth checkpoint, every live
+// oracle-versus-port comparison would have ended there having compared no state at all - the
+// instrument for the project's only independent correctness check, unable to reach a single
+// comparison of the two machines. Found by a QA audit, not by any test here.
+func TestAStraddledBoundaryDoesNotStopTheComparison(t *testing.T) {
+	t.Parallel()
+	// Window 1 straddles: different instruction counts, IDENTICAL hashes. Window 3 is a real
+	// state divergence, reached only if the walk continues past window 1.
+	a := read(t, "go", "GRTV-CHECKPOINTS 1 interval=1000\n"+
+		"0 0x00000001\n1000 0x0000BEEF\n2000 0x00000003\n3000 0x0000AAAA\n4000 0x00000005\nEND 5 4000\n")
+	b := read(t, "oracle", "GRTV-CHECKPOINTS 1 interval=1000\n"+
+		"0 0x00000001\n1001 0x0000BEEF\n2000 0x00000003\n3000 0x0000BBBB\n4000 0x00000005\nEND 5 4000\n")
+
+	got, err := statehash.Compare(a, b)
+	if err != nil {
+		t.Fatalf("Compare: %v", err)
+	}
+	if got.FirstState == nil {
+		t.Fatal("the comparison stopped at the straddled boundary and never reached the state " +
+			"divergence at window 3 - which is every live oracle-versus-port run ending at its " +
+			"fourth checkpoint having compared nothing")
+	}
+	if got.FirstState.Window != 3 || got.FirstState.Lo != 3000 || got.FirstState.Hi != 3999 {
+		t.Fatalf("the state divergence is reported at window %d (%d..%d), want 3 (3000..3999)",
+			got.FirstState.Window, got.FirstState.Lo, got.FirstState.Hi)
+	}
+	if got.FirstState.AtA.Hash != 0xAAAA || got.FirstState.AtB.Hash != 0xBBBB {
+		t.Fatalf("the state divergence carries the wrong checkpoints: %+v", got.FirstState)
+	}
+	// The headline is still the first disagreement in order, which is the straddle.
+	if got.Kind != statehash.CadenceDiverged || got.Window != 1 {
+		t.Fatalf("the headline should still be the first disagreement, the straddle at window 1; "+
+			"got %q at %d", got.Kind, got.Window)
+	}
+	if got.Cadence != 1 {
+		t.Fatalf("it counted %d windows it could not compare, want 1", got.Cadence)
+	}
+	// Windows 0, 2 and 4 agreed; window 1 was not comparable and window 3 differed.
+	if got.Compared != 3 {
+		t.Fatalf("%d windows agreed, want 3", got.Compared)
+	}
+	if !strings.Contains(got.String(), "3000..3999") {
+		t.Fatalf("the report must name the window worth re-running under tier 2: %s", got)
+	}
+	t.Logf("caught: %s", got)
+}
+
+// A run where the only difference is sampling: the machines agree everywhere they can be
+// compared. The report must say so rather than leaving a bare "cadence diverged".
+func TestAPureSamplingDifferenceSaysTheMachinesAgree(t *testing.T) {
+	t.Parallel()
+	a := read(t, "go", "GRTV-CHECKPOINTS 1 interval=1000\n"+
+		"0 0x1\n1000 0x2\n2000 0x3\n3000 0x4\nEND 4 3000\n")
+	b := read(t, "oracle", "GRTV-CHECKPOINTS 1 interval=1000\n"+
+		"0 0x1\n1001 0x2\n2000 0x3\n3001 0x4\nEND 4 3001\n")
+
+	got, err := statehash.Compare(a, b)
+	if err != nil {
+		t.Fatalf("Compare: %v", err)
+	}
+	if got.FirstState != nil {
+		t.Fatalf("there is no state divergence here: %s", got)
+	}
+	if got.Cadence != 2 {
+		t.Fatalf("it counted %d incomparable windows, want 2", got.Cadence)
+	}
+	if got.Compared != 2 {
+		t.Fatalf("%d windows agreed, want 2", got.Compared)
 	}
 	t.Logf("caught: %s", got)
 }

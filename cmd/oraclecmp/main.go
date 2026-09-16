@@ -102,11 +102,29 @@ func run(args []string, out, errOut io.Writer) int {
 	}
 
 	_, _ = fmt.Fprintf(out, "DIVERGE  %s\n", cmp)
-	_, _ = fmt.Fprintf(out, "  agreed over the preceding %d checkpoints\n", cmp.Compared)
+	_, _ = fmt.Fprintf(out, "  %d checkpoints agreed\n", cmp.Compared)
+	if cmp.Cadence > 0 {
+		_, _ = fmt.Fprintf(out, "  %d windows could not be compared: the two sampled them at "+
+			"different instruction counts, so their hashes describe different instants\n", cmp.Cadence)
+	}
 	_, _ = fmt.Fprintf(out, "  %s reached instruction %d, %s reached %d\n",
 		cmp.A, cmp.ReachedA, cmp.B, cmp.ReachedB)
+
+	// Tier 2 re-runs a window with per-instruction tracing, and the window worth re-running is
+	// the one where the STATES differ. A cadence difference is a difference between the two
+	// emitters; pointing tier 2 at it would spend a tracing run on a question about sampling.
+	tier2 := cmp
+	if cmp.Kind == statehash.CadenceDiverged && cmp.FirstState != nil {
+		tier2.Lo, tier2.Hi = cmp.FirstState.Lo, cmp.FirstState.Hi
+	}
+	if cmp.Kind == statehash.CadenceDiverged && cmp.FirstState == nil {
+		_, _ = fmt.Fprintf(out, "  the states agree everywhere both sampled alike, so this is a "+
+			"difference between the two EMITTERS rather than between the two machines: they must "+
+			"sample at the same instant, which means never inside a branch pair\n")
+		return exitDiverge
+	}
 	_, _ = fmt.Fprintf(out, "  next: re-run instructions %d..%d on both sides with per-instruction "+
-		"tracing (tier 2)\n", cmp.Lo, cmp.Hi)
+		"tracing (tier 2)\n", tier2.Lo, tier2.Hi)
 	return exitDiverge
 }
 

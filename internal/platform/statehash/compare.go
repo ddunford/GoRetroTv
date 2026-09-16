@@ -46,6 +46,20 @@ func (k Kind) String() string {
 	}
 }
 
+// Finding is one disagreement, at the window it was found in.
+type Finding struct {
+	Kind   Kind
+	Window uint64
+
+	// Lo and Hi are the instructions the window covers - the range tier 2 re-runs with
+	// per-instruction tracing.
+	Lo, Hi uint64
+
+	// AtA and AtB are the checkpoints involved. For WindowMissing only one is present.
+	AtA, AtB   Checkpoint
+	HasA, HasB bool
+}
+
 // Comparison is what came of comparing two streams.
 type Comparison struct {
 	Kind Kind
@@ -56,22 +70,39 @@ type Comparison struct {
 	// Interval is the shared sampling interval.
 	Interval uint64
 
-	// Compared is how many windows AGREED. On a divergence it is the count before the one that
-	// disagreed, not including it, because that is what the report says out loud: "agreed over
-	// the preceding N checkpoints". Counting the failing window too made that sentence wrong by
-	// one, which was caught by comparing against a real recorded oracle boot rather than
-	// against a fixture written alongside the code.
+	// Compared is how many windows AGREED outright: both present, both at the same instruction
+	// count, both with the same hash. It is what the report says out loud, so it must not
+	// include a window that disagreed - counting the failing one made "agreed over the
+	// preceding N checkpoints" wrong by one, caught by comparing against a real recorded oracle
+	// boot rather than against a fixture written alongside the code.
+	//
+	// It counts the WHOLE shared range, not the part before the first disagreement. The walk
+	// does not stop early: an earlier version did, and then this number meant "agreed before I
+	// stopped looking", which is a different and much less useful claim to print in a report.
 	Compared int
 
-	// Window is where the disagreement is, when there is one; Lo and Hi are the instructions it
-	// covers, which is the range tier 2 re-runs with per-instruction tracing.
-	Window uint64
-	Lo, Hi uint64
+	// Cadence is how many windows the two reached at different instruction counts. Their hashes
+	// could not be compared there, so those windows are neither agreement nor disagreement
+	// about the machine - they are windows where nothing could be asked.
+	Cadence int
 
-	// AtA and AtB are the checkpoints that disagreed. For WindowMissing only one is present.
+	// The headline finding: the FIRST disagreement in window order. Zero when they agree.
+	Window   uint64
+	Lo, Hi   uint64
 	AtA, AtB Checkpoint
 	HasA     bool
 	HasB     bool
+
+	// FirstState is the first window where both sides reached the SAME instruction count and
+	// their states differed - the question this comparison exists to answer.
+	//
+	// It is reported even when the headline is a cadence divergence, and that is the whole point
+	// of it. The oracle steps over about one boundary in ten (a MIPS32 branch and its delay slot
+	// retire together), so a Go loop that samples at a slightly different moment produces a
+	// cadence difference within the first handful of checkpoints. Stopping there would mean
+	// every live oracle-versus-port run ended at checkpoint four having compared no state at
+	// all, and phase 2 would have no instrument to drive the first real divergence to zero.
+	FirstState *Finding
 
 	// ReachedA and ReachedB are how far each stream ran, so an "agree" can say over what.
 	ReachedA, ReachedB uint64
@@ -84,14 +115,28 @@ func (c Comparison) Agreed() bool { return c.Kind == Agree }
 func (c Comparison) String() string {
 	switch c.Kind {
 	case Agree:
+		if c.Cadence > 0 {
+			return fmt.Sprintf("agree over %d checkpoints, to instruction %d (%d further windows "+
+				"could not be compared: the two sampled them at different instruction counts)",
+				c.Compared, min64(c.ReachedA, c.ReachedB), c.Cadence)
+		}
 		return fmt.Sprintf("agree over %d checkpoints, to instruction %d",
 			c.Compared, min64(c.ReachedA, c.ReachedB))
 	case StateDiverged:
 		return fmt.Sprintf("%s at window %d (instructions %d..%d): %s %s, %s %s",
 			c.Kind, c.Window, c.Lo, c.Hi, c.A, hexfmt.Word(c.AtA.Hash), c.B, hexfmt.Word(c.AtB.Hash))
 	case CadenceDiverged:
-		return fmt.Sprintf("%s at window %d (instructions %d..%d): %s reached instruction %d, "+
+		head := fmt.Sprintf("%s at window %d (instructions %d..%d): %s reached instruction %d, "+
 			"%s reached %d", c.Kind, c.Window, c.Lo, c.Hi, c.A, c.AtA.ICount, c.B, c.AtB.ICount)
+		// The headline alone is misleading here: a cadence difference is usually about the two
+		// EMITTERS and says nothing about the machines, so the state answer goes with it.
+		if c.FirstState != nil {
+			return head + fmt.Sprintf("; the states first differ at window %d (instructions "+
+				"%d..%d): %s %s, %s %s", c.FirstState.Window, c.FirstState.Lo, c.FirstState.Hi,
+				c.A, hexfmt.Word(c.FirstState.AtA.Hash), c.B, hexfmt.Word(c.FirstState.AtB.Hash))
+		}
+		return head + fmt.Sprintf("; the states agree in all %d windows both sampled alike",
+			c.Compared)
 	case WindowMissing:
 		missing, present := c.B, c.A
 		if !c.HasA {
@@ -112,13 +157,21 @@ func (c Comparison) String() string {
 // They are the instrument saying it could not look, and a gate that cannot tell the two apart is
 // the gate this project has shipped before.
 //
-// Windows, not instruction counts, are what get paired. The two implementations retire
-// instructions at different granularities - the oracle's MIPS32 path runs a branch and its delay
-// slot in one iteration, so its checkpoints land on counts like 300001 - and demanding equal
-// instruction counts would report a divergence at the first straddling branch between two machines
-// that agree perfectly. A window whose counts DO differ is reported, but as a cadence divergence,
-// because their hashes describe the machine after different numbers of instructions and comparing
-// them would be meaningless.
+// Windows, not instruction counts, are what get paired. The oracle's MIPS32 path retires a branch
+// and its delay slot in one iteration and steps over the boundary, so about one checkpoint in ten
+// lands on a count like 300001 rather than 300000 - measured, on a real boot, at 477 of 4,629.
+//
+// Where the two counts differ the hashes are NOT compared, and that is not fastidiousness: they
+// describe the machine after different numbers of instructions, so equal hashes there would be a
+// coincidence and unequal ones would prove nothing. Reporting either as a state divergence would
+// be a false finding, which is the one thing this project must not manufacture.
+//
+// But such a window does not stop the comparison either. It is counted, noted, and the walk
+// continues, because a cadence difference is usually a difference between the two EMITTERS rather
+// than between the two machines - and an instrument that halts on it answers a question nobody
+// asked while leaving the one they did ask unasked. Both are reported: the first disagreement of
+// any kind, and the first STATE divergence among the windows where a state comparison was
+// actually possible.
 func Compare(a, b *Stream) (Comparison, error) {
 	if a == nil || b == nil {
 		return Comparison{}, fmt.Errorf("statehash: Compare needs two streams")
@@ -174,43 +227,67 @@ func Compare(a, b *Stream) (Comparison, error) {
 		}
 	}
 
+	var first, firstState *Finding
+	note := func(f Finding) {
+		if first == nil {
+			c := f
+			first = &c
+		}
+		if f.Kind == StateDiverged && firstState == nil {
+			c := f
+			firstState = &c
+		}
+	}
+
 	for w := lo; w <= hi; w++ {
 		ca, okA := wa[w]
 		cb, okB := wb[w]
-		if !okA || !okB {
-			// A window either side skipped inside the shared range. The machine did not stop,
-			// so this is a real disagreement about what happened, not an end of stream.
-			if !okA && !okB {
-				continue // neither reported it; nothing to say
-			}
-			out.Kind = WindowMissing
-			out.Window, out.Lo, out.Hi = w, w*interval, (w+1)*interval-1
-			out.AtA, out.HasA = ca, okA
-			out.AtB, out.HasB = cb, okB
-			return out, nil
+		at := Finding{Window: w, Lo: w * interval, Hi: (w+1)*interval - 1}
+
+		switch {
+		case !okA && !okB:
+			// Neither reported it. Both emitters stepped over this boundary, which is the
+			// ordinary consequence of a branch pair straddling it - nothing to say.
+			continue
+
+		case !okA || !okB:
+			// One side has a window the other never reported, inside a range they both cover.
+			// The machine did not stop, so this is a disagreement about what happened.
+			at.Kind = WindowMissing
+			at.AtA, at.HasA = ca, okA
+			at.AtB, at.HasB = cb, okB
+			note(at)
+
+		case ca.ICount != cb.ICount:
+			at.Kind = CadenceDiverged
+			at.AtA, at.AtB, at.HasA, at.HasB = ca, cb, true, true
+			out.Cadence++
+			note(at)
+
+		case ca.Hash != cb.Hash:
+			at.Kind = StateDiverged
+			at.AtA, at.AtB, at.HasA, at.HasB = ca, cb, true, true
+			note(at)
+
+		default:
+			out.Compared++
 		}
-		out.HasA, out.HasB = true, true
-		if ca.ICount != cb.ICount {
-			out.Kind = CadenceDiverged
-			out.Window, out.Lo, out.Hi = w, w*interval, (w+1)*interval-1
-			out.AtA, out.AtB = ca, cb
-			return out, nil
-		}
-		if ca.Hash != cb.Hash {
-			out.Kind = StateDiverged
-			out.Window, out.Lo, out.Hi = w, w*interval, (w+1)*interval-1
-			out.AtA, out.AtB = ca, cb
-			return out, nil
-		}
-		out.Compared++
+	}
+
+	if first != nil {
+		out.Kind = first.Kind
+		out.Window, out.Lo, out.Hi = first.Window, first.Lo, first.Hi
+		out.AtA, out.AtB, out.HasA, out.HasB = first.AtA, first.AtB, first.HasA, first.HasB
+		out.FirstState = firstState
+		return out, nil
 	}
 
 	if out.Compared == 0 {
 		return Comparison{}, &instrument.HarnessError{
 			Instrument: "checkpoint comparison",
 			Subject:    a.Name + " against " + b.Name,
-			Detail: "the two streams overlap but no window is present in both, so nothing was " +
-				"actually compared",
+			Detail: "the two streams overlap but no window had a state that could be compared in " +
+				"both, so nothing was actually compared",
 			Err: ErrNoCommonWindows,
 		}
 	}

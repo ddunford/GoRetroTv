@@ -29,6 +29,13 @@ RUN CGO_ENABLED=0 GOOS=linux GOTOOLCHAIN=local go build \
 
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 COPY --from=builder /out/goretrotv /goretrotv
+# oraclecmp travels with the emulator rather than being a separate developer-only build, because
+# it answers a question about THIS binary: whether the checkpoint stream this build produced
+# matches the browser oracle's (SPEC FR-6). Shipping it here removes the version-skew question -
+# "was that stream produced by this build?" - which is exactly the kind of doubt that turns a
+# divergence into an afternoon. Run it with `--entrypoint /oraclecmp`; it is inert otherwise, and
+# the base has no shell for it to be reachable from.
+COPY --from=builder /out/oraclecmp /oraclecmp
 USER nonroot:nonroot
 EXPOSE 8099
 ENTRYPOINT ["/goretrotv"]

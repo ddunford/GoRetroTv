@@ -812,16 +812,23 @@
     }
     return cpTotal >>> 0;
   }
-  function cpHash(){
-    var ramDigest = cpFoldDirty();
+  // The field ORDER lives here and nowhere else. It is a pure function of explicit inputs so that
+  // the self-test below can pin it by exercising this exact code, rather than by re-stating the
+  // order in a second place that could agree with itself while disagreeing with the machine --
+  // which is what the first version of the self-test did: it pinned the three PRIMITIVES and left
+  // a field-order change free to pass both this page's check and the port's.
+  function cpHashOf(hpc, hisa, hhi, hlo, hreg, hcp0, ramDigest){
     var v = 2166136261 >>> 0;
-    v = cpMixWord(v, pc >>> 0);
-    v = cpMixOctet(v, isa & 1);
-    v = cpMixWord(v, hi >>> 0);
-    v = cpMixWord(v, lo >>> 0);
-    for(var i = 0; i < 32; i++) v = cpMixWord(v, reg[i] >>> 0);
-    for(var j = 0; j < 32; j++) v = cpMixWord(v, cp0[j] >>> 0);
+    v = cpMixWord(v, hpc >>> 0);
+    v = cpMixOctet(v, hisa & 1);
+    v = cpMixWord(v, hhi >>> 0);
+    v = cpMixWord(v, hlo >>> 0);
+    for(var i = 0; i < 32; i++) v = cpMixWord(v, hreg[i] >>> 0);
+    for(var j = 0; j < 32; j++) v = cpMixWord(v, hcp0[j] >>> 0);
     return cpMixWord(v, ramDigest) >>> 0;
+  }
+  function cpHash(){
+    return cpHashOf(pc, isa, hi, lo, reg, cp0, cpFoldDirty());
   }
   // Called at the TOP of burst()'s loop, so icount is the number of instructions retired and the
   // state is the state after exactly that many. The Go emitter uses the same convention.
@@ -889,14 +896,29 @@
       for(var k = 0; k < data.length; k++) v = cpMixOctet(v, data[k]);
       return v >>> 0;
     };
+    // A WHOLE MACHINE, not just the primitives. Four zeroed pages of DRAM and a register file
+    // with a different, recognisable value in every slot, fed through cpHashOf -- the same
+    // function the running machine goes through. Without this, a change to the field ORDER or to
+    // how the ISA bit is encoded passes the three vectors above and passes the port's committed
+    // agreement test too, and only shows up as a divergence at checkpoint zero on the day
+    // somebody runs a real comparison.
+    var vRam = 0;
+    for(var p = 0; p < 4; p++) vRam = (vRam ^ digestOf(p, zero)) >>> 0;
+    var vReg = new Int32Array(32), vCp0 = new Int32Array(32);
+    for(var r = 0; r < 32; r++){ vReg[r] = (0x10000000 + r * 0x11) | 0; vCp0[r] = (0x20000000 + r * 0x13) | 0; }
+
     var out = {
       mixWord_offset_80081C58: hex32(cpMixWord(2166136261 >>> 0, 0x80081C58)),
       pageDigest_0_zeros:      hex32(digestOf(0, zero)),
-      pageDigest_3_counting:   hex32(digestOf(3, counting))
+      pageDigest_3_counting:   hex32(digestOf(3, counting)),
+      ramDigest_four_zero_pages: hex32(vRam),
+      wholeMachine:            hex32(cpHashOf(0x80081C58, 1, 0x0000DEAD, 0x0000BEEF, vReg, vCp0, vRam))
     };
-    out.ok = out.mixWord_offset_80081C58 === "0xBE2386A9" &&
-             out.pageDigest_0_zeros      === "0x9B5D3515" &&
-             out.pageDigest_3_counting   === "0xE18B905C";
+    out.ok = out.mixWord_offset_80081C58   === "0xBE2386A9" &&
+             out.pageDigest_0_zeros        === "0x9B5D3515" &&
+             out.pageDigest_3_counting     === "0xE18B905C" &&
+             out.ramDigest_four_zero_pages === "0x44C40724" &&
+             out.wholeMachine              === "0x3D280665";
     return out;
   };
 

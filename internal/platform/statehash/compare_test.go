@@ -91,9 +91,11 @@ func TestAnInjectedDivergenceIsLocalisedToItsWindow(t *testing.T) {
 		t.Fatalf("reported window %d, want %d", got.Window, at/interval)
 	}
 	// And it must have actually walked the stream to get there, not stopped at the first line.
-	if got.Compared < 4000 {
-		t.Fatalf("it compared only %d checkpoints before reporting a divergence at instruction "+
-			"%d, so it cannot have examined the run", got.Compared, at)
+	if got.Compared != at/interval {
+		t.Fatalf("it reports %d checkpoints agreed before the divergence at instruction %d; the "+
+			"windows before it are 0..%d, so it should be %d - and a tool that reported the "+
+			"right window having examined far less would pass a looser assertion",
+			got.Compared, at, at/interval-1, at/interval)
 	}
 	t.Logf("caught: %s", got)
 }

@@ -56,7 +56,11 @@ type Comparison struct {
 	// Interval is the shared sampling interval.
 	Interval uint64
 
-	// Compared is how many windows were checked before the answer was reached.
+	// Compared is how many windows AGREED. On a divergence it is the count before the one that
+	// disagreed, not including it, because that is what the report says out loud: "agreed over
+	// the preceding N checkpoints". Counting the failing window too made that sentence wrong by
+	// one, which was caught by comparing against a real recorded oracle boot rather than
+	// against a fixture written alongside the code.
 	Compared int
 
 	// Window is where the disagreement is, when there is one; Lo and Hi are the instructions it
@@ -185,7 +189,6 @@ func Compare(a, b *Stream) (Comparison, error) {
 			out.AtB, out.HasB = cb, okB
 			return out, nil
 		}
-		out.Compared++
 		out.HasA, out.HasB = true, true
 		if ca.ICount != cb.ICount {
 			out.Kind = CadenceDiverged
@@ -199,6 +202,7 @@ func Compare(a, b *Stream) (Comparison, error) {
 			out.AtA, out.AtB = ca, cb
 			return out, nil
 		}
+		out.Compared++
 	}
 
 	if out.Compared == 0 {

@@ -63,10 +63,28 @@ func TestTheOracleAgreesWithThisHash(t *testing.T) {
 		for i := range counting {
 			counting[i] = byte(i)
 		}
+		// The whole-machine value is computed by running this package's real Hash over a known
+		// machine, and the oracle's by running ITS real hash over the same one. Pinning only the
+		// primitives left the COMPOSITION unpinned: a change to the field order, or to how the
+		// ISA bit is encoded, passed both sides' checks and would have surfaced as a divergence
+		// at checkpoint zero the first time anyone ran a real comparison.
+		h, err := New(&fixedRAM{pages: 4, len: 4096})
+		if err != nil {
+			t.Fatalf("harness failure: %v", err)
+		}
+		machine := State{PC: 0x80081C58, ISA: 1, HI: 0x0000DEAD, LO: 0x0000BEEF}
+		for i := range machine.GPR {
+			machine.GPR[i] = 0x10000000 + uint32(i)*0x11
+			machine.COP0[i] = 0x20000000 + uint32(i)*0x13
+		}
+		wholeMachine := h.Hash(machine)
+
 		want := map[string]uint32{
-			"mixWord_offset_80081C58": mixWord(fnvOffset, 0x80081C58),
-			"pageDigest_0_zeros":      pageDigest(0, zero),
-			"pageDigest_3_counting":   pageDigest(3, counting),
+			"mixWord_offset_80081C58":   mixWord(fnvOffset, 0x80081C58),
+			"pageDigest_0_zeros":        pageDigest(0, zero),
+			"pageDigest_3_counting":     pageDigest(3, counting),
+			"ramDigest_four_zero_pages": h.RAMDigest(),
+			"wholeMachine":              wholeMachine,
 		}
 
 		found := 0

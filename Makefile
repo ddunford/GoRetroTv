@@ -46,8 +46,8 @@ fmt: ## Format the tree
 tidy: ## Tidy the module
 	go mod tidy
 
-vuln: ## Check dependencies and stdlib against the Go vulnerability database
-	govulncheck ./...
+vuln: ## Check the stdlib against the Go vulnerability database for anything NEW
+	./tools/vulncheck.sh
 
 docker: ## Build the container image
 	docker build \

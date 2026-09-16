@@ -180,9 +180,11 @@ cmd_lint() {
 cmd_fmt() { make fmt; }
 
 cmd_vuln() {
-    command -v govulncheck >/dev/null 2>&1 \
-        || die "govulncheck not on PATH: go install golang.org/x/vuln/cmd/govulncheck@latest"
-    make vuln
+    # The gate, not a bare scan. With no external dependencies the standard library is the whole
+    # supply-chain surface, and the Go 1.22 line is out of support -- so "govulncheck reports
+    # nothing" can never be true here and would be a permanently red gate. tools/vulncheck.sh
+    # asks the answerable question instead: is there anything NEW?
+    ./tools/vulncheck.sh "$@"
 }
 
 cmd_clean() {

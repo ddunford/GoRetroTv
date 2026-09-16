@@ -102,3 +102,38 @@ jobs:
           set -euo pipefail
           CGO_ENABLED=0 go build -trimpath -o /tmp/ci-bin/ ./cmd/...
           ls -l /tmp/ci-bin/
+
+  vulnerabilities:
+    name: vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Install govulncheck
+        # PINNED, and to v1.1.4 specifically: it is the newest release whose go directive is
+        # `go >= 1.22.0`. v1.2 and v1.3 require Go 1.25 to build, so @latest fails outright here -
+        # which is worth knowing, because the failure is at install time and would leave the job
+        # red for a reason that has nothing to do with this repository's code.
+        run: |
+          set -euo pipefail
+          GOTOOLCHAIN=local go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          "$(go env GOPATH)/bin/govulncheck" -version
+
+      - name: Anything newly vulnerable?
+        # Not a bare `govulncheck ./...`. This project has no external dependencies, so the
+        # standard library is the whole supply-chain surface - and the Go 1.22 line is out of
+        # support, so 25 of the 29 vulnerabilities this tree reaches are fixed only in 1.23 or
+        # later and cannot be fixed here at all. A plain scan would be red on every run for ever,
+        # and a permanently red gate is one people stop reading.
+        #
+        # So the gate asks what can actually be acted on: is there anything NEW? The accepted set
+        # and its reasoning are in tools/govulncheck-baseline.txt.
+        run: |
+          set -euo pipefail
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          ./tools/vulncheck.sh

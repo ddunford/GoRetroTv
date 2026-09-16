@@ -1,0 +1,60 @@
+# Known standard-library vulnerabilities, accepted because they cannot be fixed here.
+#
+# This project has NO external dependencies (docs/decisions/0001-scaffold.md), so the Go standard
+# library is the entire supply-chain surface. That sounded like a small surface. It is not: the
+# toolchain is pinned at the Go 1.22 line because this host cannot fetch a newer one, Go 1.22 is
+# out of support, and 25 of the 29 entries below are fixed only in Go 1.23 or later. They are
+# unfixable without a toolchain upgrade, which is an environment change rather than a code change.
+#
+# So the gate is NOT "govulncheck reports nothing" - that can never be true here, and a gate that
+# is permanently red is one people learn to ignore, which is the same decoration failure wearing a
+# different hat. The gate is "govulncheck reports nothing NEW". Anything not on this list fails
+# tools/vulncheck.sh, and that is the thing worth knowing: a newly disclosed vulnerability that
+# our code actually calls.
+#
+# THE REAL FIX IS A NEWER GO. Four of these are already fixed within the 1.22 line and would go
+# away on the newest 1.22.x; the other 25 need 1.23+. When the host can run a current toolchain,
+# regenerate this file - it should shrink to almost nothing.
+#
+# Only CALLED vulnerabilities are listed: govulncheck's symbol-level findings, where our code has a
+# real path to the vulnerable function. Imported-but-not-called findings are not listed and are not
+# gated, because they are not reachable.
+#
+# Generated from the OLDEST toolchain in use, on purpose. A newer 1.22.x patch reports a SUBSET of
+# these, so it produces no new entries and the gate stays green without anyone pinning patch
+# versions to keep it that way.
+#
+# Regenerate with:  ./tools/vulncheck.sh --write-baseline
+#
+# Toolchain when generated: go1.22.2
+# Scanner: govulncheck v1.1.4 (newest that builds under Go 1.22; v1.2+ needs Go 1.25)
+#
+GO-2024-2824
+GO-2024-2887
+GO-2025-3373
+GO-2025-3447
+GO-2025-3563
+GO-2025-3750
+GO-2025-4007
+GO-2025-4008
+GO-2025-4009
+GO-2025-4010
+GO-2025-4011
+GO-2025-4013
+GO-2025-4155
+GO-2025-4175
+GO-2026-4337
+GO-2026-4340
+GO-2026-4341
+GO-2026-4601
+GO-2026-4602
+GO-2026-4870
+GO-2026-4946
+GO-2026-4947
+GO-2026-4971
+GO-2026-5037
+GO-2026-5039
+GO-2026-5856
+GO-2026-5972
+GO-2026-6089
+GO-2026-6090

@@ -41,8 +41,19 @@ func setEnv(t *testing.T, env map[string]string) {
 	}
 }
 
+// validEnv is a complete, minimal environment: every required variable and nothing else, so a
+// test that removes one is testing the removal rather than an unrelated omission.
 func validEnv() map[string]string {
-	return map[string]string{"GORETROTV_ENV": "development"}
+	env := make(map[string]string)
+	for _, v := range config.Variables() {
+		if !v.Required {
+			continue
+		}
+		// Derived from the declaration rather than listed by hand: a new required variable must
+		// break the tests that assert refusal, not the ones that assert success.
+		env[v.Name] = "set-for-test"
+	}
+	return env
 }
 
 // TestEveryVariableTheBinaryReadsIsDocumented is TC-1.9's second clause: asserted by walking the
@@ -55,11 +66,22 @@ func TestEveryVariableTheBinaryReadsIsDocumented(t *testing.T) {
 	t.Parallel()
 
 	declared := config.Variables()
-	// Assert the instrument found its subject before asserting anything about it. A walk that
-	// found no fields would otherwise satisfy "every variable is documented" vacuously, which is
-	// the exact shape of the green that means nothing.
+	// Two guards before any coverage claim, because they catch different failures.
+	//
+	// The first is that the instrument found its subject at all: a walk returning nothing would
+	// satisfy "every variable is documented" vacuously, which is the green that means nothing.
 	if err := instrument.MustFind("config completeness", "env-tagged Config fields", len(declared), 5); err != nil {
 		t.Fatalf("%v", err)
+	}
+	// The second is stronger and is the one that is easy to miss: the DRIVER must reach every
+	// field, not merely some. A field the walk never visits is invisible to every assertion
+	// below while they all keep reporting success - the same defect as a snapshot mutator that
+	// leaves a field at its fresh value and so compares it against itself.
+	fields := reflect.TypeOf(config.Config{}).NumField()
+	if len(declared) != fields {
+		t.Fatalf("the walk produced %d variables for %d struct fields; the %d it did not reach are "+
+			"invisible to the coverage check below, which would still pass",
+			len(declared), fields, fields-len(declared))
 	}
 
 	documented := parseExample(t)
@@ -196,8 +218,8 @@ func TestLoadAppliesDefaultsAndOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Env != "development" {
-		t.Errorf("Env = %q, want development", cfg.Env)
+	if cfg.Env != "set-for-test" {
+		t.Errorf("Env = %q, want set-for-test", cfg.Env)
 	}
 	if cfg.ServiceName != config.Defaults.ServiceName {
 		t.Errorf("ServiceName = %q, want the default %q", cfg.ServiceName, config.Defaults.ServiceName)
@@ -210,6 +232,7 @@ func TestLoadAppliesDefaultsAndOverrides(t *testing.T) {
 	}
 
 	env := validEnv()
+	env["GORETROTV_ENV"] = "development"
 	env["GORETROTV_SERVICE_NAME"] = "goretrotv-oracle"
 	env["GORETROTV_HTTP_ADDR"] = "127.0.0.1:9000"
 	env["GORETROTV_LOG_LEVEL"] = "debug"
@@ -223,6 +246,7 @@ func TestLoadAppliesDefaultsAndOverrides(t *testing.T) {
 	}
 	want := config.Config{
 		Env:         "development",
+		FirmwareDir: env["GORETROTV_FIRMWARE_DIR"],
 		ServiceName: "goretrotv-oracle",
 		HTTPAddr:    "127.0.0.1:9000",
 		LogLevel:    "debug",

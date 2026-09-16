@@ -11,6 +11,11 @@ services:
       # `:?` rather than `:-`: GORETROTV_ENV is required, and a compose-layer default would put
       # the guess back one level below the loader that refuses it.
       GORETROTV_ENV: ${GORETROTV_ENV:?set it in .env - see .env.example}
+      # The mount below, named explicitly. Until now the binary found its firmware through a
+      # relative path that resolved only because the distroless base sets no WORKDIR; anything
+      # that set one would have turned this into a wrong-or-absent ROM, which is the very failure
+      # the manifest verification exists to catch.
+      GORETROTV_FIRMWARE_DIR: /firmware
       GORETROTV_LOG_LEVEL: ${GORETROTV_LOG_LEVEL:-debug}
       GORETROTV_LOG_FORMAT: ${GORETROTV_LOG_FORMAT:-json}
       # Inside the container the listener must accept the published mapping, so it binds all

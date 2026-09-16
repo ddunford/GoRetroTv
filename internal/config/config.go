@@ -29,6 +29,21 @@ type Config struct {
 	// box is the failure that announces itself last.
 	Env string `env:"GORETROTV_ENV,required"`
 
+	// FirmwareDir is where the flash images and their manifest live. Required, and for a
+	// sharper reason than Env.
+	//
+	// firmware.Load reads MANIFEST.md from this same directory and verifies the images against
+	// it, so the checksum guard cannot notice a wrong DIRECTORY - a different firmware set
+	// arrives with its own manifest and verifies perfectly against itself. The one failure
+	// TC-1.4 exists to prevent, silently running a different ROM, is therefore invisible to
+	// every check downstream of this value, which means the value itself has to be stated.
+	//
+	// A relative default would be worse than no default: it resolves against the process's
+	// working directory, so the same binary finds different ROMs depending on where it was
+	// started. That is exactly how the container works today by accident - the image mounts
+	// /firmware and a relative path happens to resolve because distroless sets no WORKDIR.
+	FirmwareDir string `env:"GORETROTV_FIRMWARE_DIR,required"`
+
 	// ServiceName labels log lines.
 	ServiceName string `env:"GORETROTV_SERVICE_NAME"`
 

@@ -3,6 +3,8 @@ package bus
 import (
 	"fmt"
 	"sort"
+
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 // The VR4111's kernel segments, and the only two this firmware uses.
@@ -204,7 +206,7 @@ func (b *Bus) Attach(base, size uint32, d Device) error {
 // width is exactly the kind of plausible wrongness this machine does not report.
 func (b *Bus) Read(virt uint32, size Size) uint32 {
 	if !size.Valid() {
-		panic(fmt.Sprintf("bus: read at %#08x with invalid size %d", virt, size))
+		panic(fmt.Sprintf("bus: read at %s with invalid size %d", hexfmt.Addr(virt), size))
 	}
 	phys, ok := Physical(virt)
 	if !ok {
@@ -222,7 +224,7 @@ func (b *Bus) Read(virt uint32, size Size) uint32 {
 // dropped and recorded. Like Read it panics on an invalid size.
 func (b *Bus) Write(virt uint32, size Size, value uint32) {
 	if !size.Valid() {
-		panic(fmt.Sprintf("bus: write at %#08x with invalid size %d", virt, size))
+		panic(fmt.Sprintf("bus: write at %s with invalid size %d", hexfmt.Addr(virt), size))
 	}
 	phys, ok := Physical(virt)
 	if !ok {

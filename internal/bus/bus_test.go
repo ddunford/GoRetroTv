@@ -8,6 +8,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/bus/bustest"
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 // The virtual bases this machine actually uses, written the way the measured record writes them
@@ -687,5 +688,85 @@ func TestAMachineThatCouldNotBeRolledBackRefusesToBeUsed(t *testing.T) {
 	if _, err := live.Snapshot(); err != nil {
 		t.Fatalf("a Reset returns the machine to a state that IS known, so it must be usable "+
 			"again afterwards: %v", err)
+	}
+}
+
+// The one panic this package keeps, and it is kept deliberately.
+//
+// An invalid bus.Size cannot come from the firmware: only this program's own CPU constructs one,
+// from this program's own constants. So it is a bug in OUR code, and the alternative - routing it
+// through the CPU's guest halt path - would disguise our bug as a firmware fault, which is this
+// project's single worst failure mode. "A wrong register model is a boot that stops at 20 tasks";
+// an emulator bug wearing a firmware fault's clothing costs days.
+//
+// It is tested because an unreachable panic nobody has watched is still an untested branch, and a
+// panic whose message does not name the offending value is a stack trace that sends the reader
+// looking in the wrong place.
+func TestAnInvalidAccessWidthPanicsAndNamesItself(t *testing.T) {
+	t.Parallel()
+	const bad = bus.Size(3) // not Byte, Half or Word
+
+	cases := map[string]func(b *bus.Bus){
+		"read":  func(b *bus.Bus) { b.Read(asicBase+0x74, bad) },
+		"write": func(b *bus.Bus) { b.Write(asicBase+0x74, bad, 0x1234) },
+	}
+	for name, access := range cases {
+		name, access := name, access
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b := bus.New()
+			attach(t, b, asicBase, asicSize, newProbe("asic"))
+
+			var got any
+			func() {
+				defer func() { got = recover() }()
+				access(b)
+			}()
+
+			if got == nil {
+				t.Fatalf("a %s at an invalid width must panic: it is a bug in our own code, and "+
+					"silently reading some other width is the plausible wrongness this machine "+
+					"does not report", name)
+			}
+			msg, ok := got.(string)
+			if !ok {
+				t.Fatalf("the panic value is %T, want a string a reader can act on: %v", got, got)
+			}
+			// The offending value AND where it happened, or the reader is left with a stack
+			// trace and no idea which access was malformed.
+			// Case-SENSITIVE on the address: the canonical form is hexfmt's upper case, and a
+			// message that rendered 0xb0000074 would be the second casing this project spent a
+			// day on. Checking it case-insensitively here would let that back in.
+			for _, want := range []string{"bus:", name, "invalid size", "3"} {
+				if !strings.Contains(msg, want) {
+					t.Fatalf("the panic message must name %q; got %q", want, msg)
+				}
+			}
+			if !strings.Contains(msg, hexfmt.Addr(asicBase+0x74)) {
+				t.Fatalf("the panic message must name the address in the canonical %s form; "+
+					"got %q", hexfmt.Addr(asicBase+0x74), msg)
+			}
+			t.Logf("caught: %s", msg)
+		})
+	}
+}
+
+// And the widths that ARE valid must not panic - or the check above could be satisfied by a bus
+// that panics on everything, which would pass while examining nothing.
+func TestValidAccessWidthsDoNotPanic(t *testing.T) {
+	t.Parallel()
+	b := bus.New()
+	attach(t, b, asicBase, asicSize, newProbe("asic"))
+
+	for _, size := range []bus.Size{bus.Byte, bus.Half, bus.Word} {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("a %s access panicked: %v", size, r)
+				}
+			}()
+			b.Read(asicBase+0x74, size)
+			b.Write(asicBase+0x74, size, 0x1234)
+		}()
 	}
 }

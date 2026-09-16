@@ -64,9 +64,19 @@ invariant = "The shared platform layer does not import domain packages"
 source = "plan/module-decisions.md § The shared / platform layer"
 classification = "STATIC"
 arming = "ARMED"
-state = "pending"
-owner_task = "gort-87m.9"
-reason = "The platform package exists, but its import detector and probe have not been added."
+state = "enforced"
+command = ["conformance/checkers/platform_imports.py"]
+tooling = "go list -e enumerates parsed imports, including imports of not-yet-built packages; the Go toolchain is already required, so no architecture dependency is added."
+subjects = ["internal/platform"]
+coverage_detector = "platform-subject-missing"
+probes = [
+  { name = "domain-import", detectors = ["platform-imports-domain"] },
+  { name = "platform-removed", detectors = ["platform-subject-missing"] },
+]
+halves = [
+  { half = "the platform layer contains tracked Go source", held_by = "probe", probe = "platform-removed", detectors = ["platform-subject-missing"] },
+  { half = "platform packages do not import domain packages", held_by = "probe", probe = "domain-import", detectors = ["platform-imports-domain"] },
+]
 
 [[rule]]
 id = "ARCH-MODULE-1"

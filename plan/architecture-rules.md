@@ -15,7 +15,7 @@ due to exist.
 | `ARCH-DET-1` | CPU and devices use instruction time, with no wall clock or goroutine in the instruction loop | The core patterns | STATIC | SELF-ARMING | pending — gort-87m.4 |
 | `ARCH-LAYER-1` | Core and device packages do not import outward transport packages | Application structure | STATIC | SELF-ARMING | pending — gort-87m.5 |
 | `ARCH-FW-1` | Firmware bytes are absent from git and built images | Deployment and access | STATIC | ARMED | pending — gort-87m.6 |
-| `ARCH-PLATFORM-1` | The shared platform layer does not import domain packages | The shared / platform layer | STATIC | ARMED | pending — gort-87m.9 |
+| `ARCH-PLATFORM-1` | The shared platform layer does not import domain packages | The shared / platform layer | STATIC | ARMED | **enforced** |
 | `ARCH-MODULE-1` | The Go module graph contains only the project module until a dependency is deliberately approved | Dependencies | STATIC | ARMED | pending — gort-87m.11 |
 
 ## Rule definitions

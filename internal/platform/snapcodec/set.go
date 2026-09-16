@@ -26,6 +26,12 @@ import (
 // compared as well as restored, and a container whose byte image depended on insertion order could
 // not be compared at all.
 
+// minMemberBytes is the least payload a single member can occupy: a four-byte length prefix for
+// its name and another for its blob, both of which may then be empty. It is the multiplier that
+// turns a claimed member count into a smallest-possible byte count, which is what makes a forged
+// count checkable before anything is allocated on the strength of it.
+const minMemberBytes = 8
+
 // Sentinel causes for a set that does not describe what the caller expected.
 var (
 	// ErrMemberMissing means the set says nothing about a member the caller expected.
@@ -132,6 +138,29 @@ func OpenSet(blob []byte, name string, minVersion, maxVersion uint16) (*Set, err
 	}
 
 	count := r.Uint32()
+
+	// The count is the blob's own claim, so it is checked against what the blob could possibly
+	// hold BEFORE it is used to size anything. Every member costs at least eight payload bytes -
+	// a four-byte length prefix for its name and another for its blob - so a container claiming
+	// more members than remaining/8 is describing a payload that is not there.
+	//
+	// Without this, `make([]string, 0, count)` asked the allocator for whatever a corrupt or
+	// hostile header named: a forged uint32 in a 40-byte file requested a 64 GB block. That is a
+	// runtime THROW rather than a panic, so no recover() anywhere can catch it - it takes the
+	// process down, which is the one outcome "errors are values; it must never take the process
+	// down" forbids, and on a host with generous overcommit it reads as a hang instead. Reader.Words
+	// already guards its own length the same way; this was the one place that trusted the header.
+	// Widened to int64 rather than uint64: both conversions are then widening and cannot
+	// misrepresent their input, and the largest product possible here - 0xFFFFFFFF members at
+	// eight bytes - is about 34 billion, which int64 holds with room to spare. An unsigned
+	// comparison would need remaining() proved non-negative first, which is a second thing to
+	// get right for no benefit.
+	if need := int64(count) * minMemberBytes; need > int64(r.remaining()) {
+		return nil, fmt.Errorf("snapcodec: %s: %w: header claims %d members, which need at least "+
+			"%d payload bytes, and %d remain",
+			name, ErrTruncated, count, need, r.remaining())
+	}
+
 	members := make(map[string][]byte)
 	names := make([]string, 0, count)
 	for i := uint32(0); i < count; i++ {

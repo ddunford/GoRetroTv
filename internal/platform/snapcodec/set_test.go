@@ -1,6 +1,7 @@
 package snapcodec_test
 
 import (
+	"encoding/binary"
 	"errors"
 	"reflect"
 	"sort"
@@ -354,9 +355,13 @@ func TestAHeaderCountThatDisagreesWithItsContentsIsRefused(t *testing.T) {
 		pairs int
 		want  error
 	}{
-		{name: "count overstates the members", count: 4, pairs: 2, want: snapcodec.ErrShortRead},
+		// The first and third are now caught by the smallest-possible-payload guard before any
+		// member is read, which is earlier and cheaper than running off the end. They used to
+		// surface as ErrShortRead; that path is still real and is proved on its own below,
+		// because a guard that has come to shadow another leaves the shadowed one unexercised.
+		{name: "count overstates the members", count: 4, pairs: 2, want: snapcodec.ErrTruncated},
 		{name: "count understates the members", count: 1, pairs: 3, want: snapcodec.ErrTrailingBytes},
-		{name: "count claims members that are not there at all", count: 1, pairs: 0, want: snapcodec.ErrShortRead},
+		{name: "count claims members that are not there at all", count: 1, pairs: 0, want: snapcodec.ErrTruncated},
 	}
 
 	for _, tt := range tests {
@@ -383,5 +388,111 @@ func TestAHeaderCountThatDisagreesWithItsContentsIsRefused(t *testing.T) {
 				t.Errorf("error %v does not wrap %v", err, tt.want)
 			}
 		})
+	}
+}
+
+// TestAForgedMemberCountIsRefusedBeforeAnythingIsAllocated is the control for a fault a real file
+// can carry: a genuine container whose count field has been overwritten.
+//
+// OpenSet used to size its name slice from that field directly. A 40-byte blob with the count set
+// to 0xFFFFFFFF asked the allocator for a 64 GB block, which is a runtime THROW and not a panic —
+// no recover() can catch it, so it takes the process down, and on a host with generous overcommit
+// it reads as a hang instead. Reproduced under `ulimit -v` before the guard existed:
+// "runtime: out of memory: cannot allocate 68719476736-byte block ... fatal error: out of memory"
+// at set.go's make([]string, 0, count).
+//
+// The assertion is deliberately that the error NAMES the claimed count and the bytes actually
+// present. "It returned an error" would also be satisfied by the reader running off the end a
+// moment later, which is a different failure that happens to look the same from outside.
+func TestAForgedMemberCountIsRefusedBeforeAnythingIsAllocated(t *testing.T) {
+	t.Parallel()
+
+	blob := buildSet(t, map[string][]byte{"dram": {1, 2, 3}})
+
+	// magic(4) + containerVersion(2) + nameLen(2) + name + formatVersion(2) + payloadLen(4)
+	countOffset := 4 + 2 + 2 + len(machineName) + 2 + 4
+	if got := binary.BigEndian.Uint32(blob[countOffset:]); got != 1 {
+		t.Fatalf("the count field is not where this test thinks it is: offset %d reads %d, want 1",
+			countOffset, got)
+	}
+	binary.BigEndian.PutUint32(blob[countOffset:], 0xFFFFFFFF)
+
+	set, err := snapcodec.OpenSet(blob, machineName, machineVersion, machineVersion)
+	if err == nil {
+		t.Fatalf("a forged member count was accepted, giving a set of %d", set.Len())
+	}
+	if !errors.Is(err, snapcodec.ErrTruncated) {
+		t.Errorf("error %v does not wrap ErrTruncated", err)
+	}
+	for _, want := range []string{"4294967295", machineName} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err, want)
+		}
+	}
+}
+
+// TestAMemberCountLargerThanThePayloadCouldHoldIsRefused covers the same guard across the range,
+// including the boundary. Eight bytes is the least a member can occupy: a four-byte length prefix
+// for its name and another for its blob.
+func TestAMemberCountLargerThanThePayloadCouldHoldIsRefused(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		count uint32
+	}{
+		{name: "the largest count a uint32 can hold", count: 0xFFFFFFFF},
+		{name: "a merely enormous count", count: 1 << 20},
+		{name: "one more member than the payload could hold", count: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// A header claiming members, and a payload carrying none of them.
+			w := snapcodec.NewWriter(machineName, machineVersion)
+			w.Uint32(tt.count)
+			blob, err := w.Blob()
+			if err != nil {
+				t.Fatalf("Blob: %v", err)
+			}
+
+			set, err := snapcodec.OpenSet(blob, machineName, machineVersion, machineVersion)
+			if err == nil {
+				t.Fatalf("a container claiming %d members with an empty payload was accepted, giving a set of %d",
+					tt.count, set.Len())
+			}
+			if !errors.Is(err, snapcodec.ErrTruncated) {
+				t.Errorf("error %v does not wrap ErrTruncated", err)
+			}
+		})
+	}
+}
+
+// TestAMemberWhoseOwnLengthRunsOffTheEndIsRefused keeps the short-read path exercised now that the
+// member-count guard catches the cases that used to reach it.
+//
+// A plausible count with a lying length inside it is the gap between the two: the container claims
+// one member and carries enough bytes for one, so the count guard is satisfied, and the member's
+// own blob length then points past the end.
+func TestAMemberWhoseOwnLengthRunsOffTheEndIsRefused(t *testing.T) {
+	t.Parallel()
+
+	w := snapcodec.NewWriter(machineName, machineVersion)
+	w.Uint32(1)      // one member, which the payload below could plausibly hold
+	w.String("dram") // its name, complete
+	w.Uint32(1000)   // its blob length - and no blob follows
+	blob, err := w.Blob()
+	if err != nil {
+		t.Fatalf("Blob: %v", err)
+	}
+
+	set, err := snapcodec.OpenSet(blob, machineName, machineVersion, machineVersion)
+	if err == nil {
+		t.Fatalf("a member claiming 1000 bytes it does not carry was accepted, giving a set of %d", set.Len())
+	}
+	if !errors.Is(err, snapcodec.ErrShortRead) {
+		t.Errorf("error %v does not wrap ErrShortRead; the count guard should not be shadowing this path", err)
 	}
 }

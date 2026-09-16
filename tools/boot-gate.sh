@@ -12,8 +12,10 @@
 #   1. the binary builds
 #   2. it verifies the firmware against the manifest, and says so
 #   3. it reaches the listener
-#   4. /health answers, and NAMES THE BUILD -- a gate that passes against a binary nobody can
-#      identify has proved nothing about the tree it was supposed to be checking
+#   4. /health answers, and NAMES THIS BUILD -- the commit it reports must match this working
+#      tree's HEAD. A gate that passes against a binary nobody can identify has proved nothing
+#      about the tree it was supposed to be checking, and "nobody can identify" includes the
+#      linker defaults, which are non-empty and mean exactly nothing
 #   5. it shuts down gracefully on a signal rather than being killed
 #
 # The stages are named and ordered so phase 2 adds "and the machine reached N tasks" as another
@@ -102,9 +104,13 @@ if [[ -n "$BINARY" ]]; then
     [[ -x "$BINARY" ]] || die "boot gate cannot run: $BINARY is not an executable"
     stage_ok "binary" "supplied: $BINARY"
 else
-    if GOTOOLCHAIN=local go build -o "$work/goretrotv" ./cmd/goretrotv > "$work/build.txt" 2>&1; then
+    # Through the Makefile's own target, not a re-implementation of it. A bare `go build` here
+    # omitted -ldflags, so the binary under test could only ever report the linker defaults -
+    # which made the identity stage below pass against exactly the binary it exists to reject.
+    # One definition of the build identity, in one place.
+    if make -s build BIN_DIR="$work" > "$work/build.txt" 2>&1; then
         BINARY="$work/goretrotv"
-        stage_ok "binary builds" "$(du -h "$BINARY" | cut -f1)"
+        stage_ok "binary builds" "$(du -h "$BINARY" | cut -f1), stamped by the Makefile's ldflags"
     else
         stage_fail "binary builds" "go build failed:"
         sed 's/^/    /' "$work/build.txt" >&2
@@ -166,19 +172,37 @@ if (( listening )); then
             stage_fail "health answers ok" "status is '${status:-absent}': $(cat "$body")"
         fi
         # A gate that passes against a binary nobody can identify has proved nothing about the
-        # tree it was checking.
-        if [[ -n "$version" && -n "$commit" ]]; then
-            stage_ok "health names the build" "version=$version commit=$commit"
+        # tree it was checking -- so the claim has to be IDENTITY, not merely non-emptiness.
+        #
+        # The previous version asserted both fields were non-empty. `dev` and `unknown` are the
+        # linker defaults in internal/version: they are precisely what a binary reports when
+        # nobody told it what it is, and they are non-empty, so the check passed against the one
+        # binary it existed to reject, on every run. Its negative control fired only on an EMPTY
+        # version, which the real build path cannot produce -- a control proving the assertion
+        # against a fault the system cannot exhibit.
+        #
+        # Comparing the reported commit to this working tree's HEAD is a claim that can actually
+        # be false, and it fails on the real path the moment the stamping stops happening. It also
+        # answers the question that matters when a divergence turns up later: was that binary
+        # built from this tree?
+        expected_commit="$(git rev-parse --short HEAD 2>/dev/null || true)"
+        if [[ -z "$expected_commit" ]]; then
+            stage_fail "health names this build" "cannot determine the expected commit (not a git tree?) — the identity claim cannot be checked, so it is not granted"
+        elif [[ "$commit" != "$expected_commit" ]]; then
+            stage_fail "health names this build" "reports commit='${commit}', this tree is ${expected_commit}$(
+                [[ "$commit" == "unknown" || "$version" == "dev" ]] && printf '%s' " — those are the linker defaults, so the build was not stamped")"
+        elif [[ "$version" == "dev" || -z "$version" ]]; then
+            stage_fail "health names this build" "commit matches but version='${version}' is the linker default — half-stamped"
         else
-            stage_fail "health names the build" "version='${version}' commit='${commit}' — unidentifiable"
+            stage_ok "health names this build" "version=$version commit=$commit (matches HEAD)"
         fi
     else
         stage_fail "health answers ok" "no answer from http://127.0.0.1:$port/health: $(tr -d '\n' < "$work/curl.txt")"
-        stage_fail "health names the build" "not reached"
+        stage_fail "health names this build" "not reached"
     fi
 else
     stage_fail "health answers ok" "not reached — it never listened"
-    stage_fail "health names the build" "not reached"
+    stage_fail "health names this build" "not reached"
 fi
 
 # ---- 5. it shuts down gracefully ---------------------------------------------------------------
@@ -208,6 +232,6 @@ fi
 
 printf '\n'
 if (( failures )); then
-    die "boot gate: FAILED ($failures of 5 stages). The build does not come up."
+    die "boot gate: FAILED — $failures of 5 stages. Each FAIL line above says which claim did not hold."
 fi
 printf '%sboot gate: ok%s\n' "$GREEN" "$OFF"

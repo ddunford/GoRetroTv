@@ -18,9 +18,16 @@ export GOTOOLCHAIN := local
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
-build: ## Build every binary into bin/
-	@mkdir -p bin
-	CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o bin/ ./cmd/...
+# Where `build` puts binaries. Overridable so the boot gate can build into a scratch directory
+# without disturbing another agent's bin/, and -- more importantly -- so it builds through THIS
+# recipe rather than re-implementing it. Two definitions of the build identity is the duplication
+# this project keeps paying for: the gate's own "does /health name the build" stage was satisfied
+# by construction for exactly that reason.
+BIN_DIR ?= bin
+
+build: ## Build every binary into $(BIN_DIR)
+	@mkdir -p "$(BIN_DIR)"
+	CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o "$(BIN_DIR)/" ./cmd/...
 
 run: build ## Build and run the emulator server
 	./bin/$(SERVICE)

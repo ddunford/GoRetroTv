@@ -13,7 +13,7 @@ due to exist.
 | `ARCH-DEV-1` | Developer surfaces bind only to loopback | Deployment and access | STATIC | ARMED | **enforced** |
 | `ARCH-SNAP-1` | Every device state field is captured by Snapshot and Restore | The core patterns | STATIC | SELF-ARMING | **enforced** |
 | `ARCH-DET-1` | CPU and devices use instruction time, with no wall clock or goroutine in the instruction loop | The core patterns | STATIC | SELF-ARMING | **enforced** |
-| `ARCH-LAYER-1` | Core and device packages do not import outward transport packages | Application structure | STATIC | SELF-ARMING | pending — gort-87m.5 |
+| `ARCH-LAYER-1` | Core and device packages do not import outward transport packages | Application structure | STATIC | SELF-ARMING | **enforced** |
 | `ARCH-FW-1` | Firmware bytes are absent from git and built images | Deployment and access | STATIC | ARMED | pending — gort-87m.6 |
 | `ARCH-PLATFORM-1` | The shared platform layer does not import domain packages | The shared / platform layer | STATIC | ARMED | **enforced** |
 | `ARCH-MODULE-1` | The Go module graph contains only the project module until a dependency is deliberately approved | Dependencies | STATIC | ARMED | **enforced** |

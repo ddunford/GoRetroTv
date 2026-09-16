@@ -22,7 +22,7 @@
   statement.
   **Expected:** ARCH-DET-1 fails on each independently.
 
-- [ ] **TC-1a.5: An inward-pointing violation is refused** (covers: TASK-1a.5)
+- [x] **TC-1a.5: An inward-pointing violation is refused** (covers: TASK-1a.5)
   **Steps:** probe — import `internal/web` from a device.
   **Expected:** ARCH-LAYER-1 fails.
 

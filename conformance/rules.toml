@@ -86,9 +86,19 @@ invariant = "Core and device packages do not import outward transport packages"
 source = "plan/module-decisions.md § Application structure"
 classification = "STATIC"
 arming = "SELF-ARMING"
-state = "pending"
-owner_task = "gort-87m.5"
-reason = "The import boundary can be checked now, but its detector and probe have not been added."
+state = "enforced"
+command = ["conformance/checkers/layer_imports.py"]
+tooling = "go list -e reports parsed imports including future packages; the scanner checks direct edges from hardware and oracle packages into HTTP or app wiring."
+subjects = ["internal/bus", "internal/memory"]
+coverage_detector = "core-subject-missing"
+probes = [
+  { name = "device-imports-http", detectors = ["core-imports-transport"] },
+  { name = "bus-removed", detectors = ["core-subject-missing"] },
+]
+halves = [
+  { half = "the bus and memory source sets exist", held_by = "probe", probe = "bus-removed", detectors = ["core-subject-missing"] },
+  { half = "core packages never import transport or app wiring", held_by = "probe", probe = "device-imports-http", detectors = ["core-imports-transport"] },
+]
 
 [[rule]]
 id = "ARCH-FW-1"

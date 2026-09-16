@@ -30,7 +30,7 @@
   **Steps:** probe — commit a file with the flash image's magic.
   **Expected:** ARCH-FW-1 fails. Not redistributable is a licence fact, not a preference.
 
-- [ ] **TC-1a.7: Every detector is caught on its own** (covers: TASK-1a.7)
+- [x] **TC-1a.7: Every detector is caught on its own** (covers: TASK-1a.7)
   **Steps:** run the stop-gate, which neutralises each detector in turn.
   **Expected:** each rule's own probe goes uncaught while its siblings stay caught. A rule caught
   only by a sibling is not armed.

@@ -171,6 +171,9 @@ func (r *RAM) markDirty(off, n uint32) {
 // PageLen is the size of one dirty page.
 func (r *RAM) PageLen() uint32 { return DirtyPageLen }
 
+// Pages is how many dirty pages DRAM is divided into.
+func (r *RAM) Pages() uint32 { return u32len(r.bytes) / DirtyPageLen }
+
 // EachDirtyPage calls fn for every page written since the dirty set was last cleared, in address
 // order, with that page's current contents.
 //
@@ -178,7 +181,7 @@ func (r *RAM) PageLen() uint32 { return DirtyPageLen }
 // hash whose inputs arrive in a different order on two runs of the same program is not a hash the
 // oracle comparison can use.
 func (r *RAM) EachDirtyPage(fn func(page uint32, data []byte)) {
-	pages := u32len(r.bytes) / DirtyPageLen
+	pages := r.Pages()
 	for p := uint32(0); p < pages; p++ {
 		if r.dirty[p/64]&(1<<(p%64)) == 0 {
 			continue
@@ -205,7 +208,7 @@ func (r *RAM) ClearDirty() {
 // MarkAllDirty marks every page, which is what a restore needs: the incremental digest that
 // follows one has no earlier state to be incremental against.
 func (r *RAM) MarkAllDirty() {
-	pages := u32len(r.bytes) / DirtyPageLen
+	pages := r.Pages()
 	for p := uint32(0); p < pages; p++ {
 		r.dirty[p/64] |= 1 << (p % 64)
 	}

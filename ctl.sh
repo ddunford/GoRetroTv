@@ -109,7 +109,59 @@ cmd_health() {
 
 cmd_test() { make test-race; }
 
+# The five hooks git must be running, and the beads hooks each one delegates to.
+HOOK_NAMES=(pre-commit pre-push post-merge post-checkout prepare-commit-msg)
+
+cmd_hooks() {
+    # This check lives out here rather than inside a hook deliberately. Every failure below is a
+    # failure in which the hooks are NOT INVOKED, so a hook cannot report it -- and git says
+    # nothing: point core.hooksPath at a directory that does not exist and `git commit` exits 0,
+    # prints nothing, and makes the commit. Unguarded is indistinguishable from guarded, which is
+    # how four proof cases came back green against no hook at all.
+    local problems=0
+    local configured
+    configured="$(git config core.hooksPath || true)"
+
+    if [[ "$configured" != ".githooks" ]]; then
+        warn "core.hooksPath is '${configured:-unset}', not .githooks -- the credential guard is NOT running"
+        warn "  fix: git config core.hooksPath .githooks"
+        problems=1
+    fi
+
+    if [[ ! -d .githooks ]]; then
+        warn "the .githooks directory is missing -- git runs no hooks at all and says nothing about it"
+        problems=1
+    else
+        for h in "${HOOK_NAMES[@]}"; do
+            if [[ ! -f ".githooks/$h" ]]; then
+                warn "missing hook: .githooks/$h"
+                problems=1
+            elif [[ ! -x ".githooks/$h" ]]; then
+                warn "not executable, so git will skip it silently: .githooks/$h"
+                problems=1
+            fi
+        done
+    fi
+
+    # The delegation targets. Losing these does not break a commit -- it quietly stops beads doing
+    # its half, which is the kind of breakage nobody notices for a week.
+    for h in "${HOOK_NAMES[@]}"; do
+        if [[ ! -x ".beads/hooks/$h" ]]; then
+            warn "beads hook missing or not executable: .beads/hooks/$h (bd hooks install)"
+            problems=1
+        fi
+    done
+
+    if (( problems )); then
+        die "hooks are not armed. A commit made now would look exactly like a guarded one."
+    fi
+    ok "hooks armed: core.hooksPath=.githooks, ${#HOOK_NAMES[@]} shims present, beads delegation intact"
+}
+
 cmd_lint() {
+    # Folded in so the hook assertion runs wherever checks run, rather than depending on somebody
+    # remembering a verb that only matters when it fails.
+    cmd_hooks
     make vet
     # `go install` puts it in GOPATH/bin, which is not on PATH in a plain non-login shell. Looking
     # there before giving up is the difference between running the linters and reporting a pass
@@ -159,7 +211,8 @@ Running
 Building and checking
   build          Build every binary into bin/
   test           Run the tests under the race detector
-  lint           go vet, plus golangci-lint when it is installed
+  lint           Hook check, go vet and golangci-lint (fails if the linter is absent)
+  hooks          Assert the git hooks are armed and delegating to beads
   fmt            Format the tree
   vuln           Check against the Go vulnerability database
   clean          Remove bin/ and stop the stack (asks first)
@@ -182,6 +235,7 @@ main() {
         health)  cmd_health "$@" ;;
         test)    cmd_test "$@" ;;
         lint)    cmd_lint "$@" ;;
+        hooks)   cmd_hooks "$@" ;;
         fmt)     cmd_fmt "$@" ;;
         vuln)    cmd_vuln "$@" ;;
         clean)   cmd_clean "$@" ;;

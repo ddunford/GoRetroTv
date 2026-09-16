@@ -3,7 +3,7 @@
 # This project has NO external dependencies (docs/decisions/0001-scaffold.md), so the Go standard
 # library is the entire supply-chain surface. That sounded like a small surface. It is not: the
 # toolchain is pinned at the Go 1.22 line because this host cannot fetch a newer one, Go 1.22 is
-# out of support, and 25 of the 29 entries below are fixed only in Go 1.23 or later. They are
+# out of support, and 26 of the 32 entries below are fixed only in Go 1.23 or later. They are
 # unfixable without a toolchain upgrade, which is an environment change rather than a code change.
 #
 # So the gate is NOT "govulncheck reports nothing" - that can never be true here, and a gate that
@@ -12,8 +12,8 @@
 # tools/vulncheck.sh, and that is the thing worth knowing: a newly disclosed vulnerability that
 # our code actually calls.
 #
-# THE REAL FIX IS A NEWER GO. Four of these are already fixed within the 1.22 line and would go
-# away on the newest 1.22.x; the other 25 need 1.23+. When the host can run a current toolchain,
+# THE REAL FIX IS A NEWER GO. Six of these are already fixed within the 1.22 line and would go
+# away on the newest 1.22.x; the other 26 need 1.23+. When the host can run a current toolchain,
 # regenerate this file - it should shrink to almost nothing.
 #
 # Only CALLED vulnerabilities are listed: govulncheck's symbol-level findings, where our code has a
@@ -31,10 +31,19 @@
 #
 GO-2024-2824
 GO-2024-2887
+# GO-2024-3105 and GO-2024-3107 reach only the developer conformance checker, which parses
+# git-tracked Go source. Deeply nested source could crash that local/CI checker but cannot reach
+# the emulator HTTP process. Fixed in Go 1.22.7; the Phase 5 toolchain gate remains the fix.
+GO-2024-3105
+GO-2024-3107
 GO-2025-3373
 GO-2025-3447
 GO-2025-3563
 GO-2025-3750
+# GO-2025-3956 reaches exec.LookPath through exec.Command("git") in that same checker. The
+# advisory requires a LookPath argument of "", ".", or ".."; this fixed call passes "git".
+# The host's Go 1.22 line has no fix, so the Phase 5 toolchain gate remains necessary.
+GO-2025-3956
 GO-2025-4007
 GO-2025-4008
 GO-2025-4009

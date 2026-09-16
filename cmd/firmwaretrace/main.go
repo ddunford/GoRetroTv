@@ -29,6 +29,7 @@ func run() error {
 	traceFrom := flag.Uint64("trace-from", 0, "first instruction included in the trace")
 	traceTo := flag.Uint64("trace-to", ^uint64(0), "first instruction excluded from the trace")
 	unmapped := flag.Bool("unmapped", false, "list unmapped access sites at the end")
+	bootState := flag.Bool("boot-state", false, "print bootloader handoff and decompression probes")
 	flag.Parse()
 	images, err := firmware.Load(context.Background(), *dir)
 	if err != nil {
@@ -92,6 +93,12 @@ func run() error {
 		for _, site := range busMap.Unmapped() {
 			fmt.Fprintf(os.Stderr, "unmapped %+v\n", site)
 		}
+	}
+	if *bootState {
+		fmt.Fprintf(os.Stderr, "boot ready=%08X current=%08X image=%08X entry=%08X dram-main=%08X\n",
+			busMap.Read(0x800083CC, bus.Word), busMap.Read(0x800083D0, bus.Word),
+			busMap.Read(0xBFC20000, bus.Word), busMap.Read(0xBFC2002C, bus.Word),
+			busMap.Read(0x800009F4, bus.Word))
 	}
 	return nil
 }

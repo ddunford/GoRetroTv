@@ -49,6 +49,7 @@ func (c *Core) Restore(blob []byte) error {
 	}
 	if len(gpr) != 32 || len(cop0) != 32 || gpr[0] != 0 || pc&1 != 0 || (!isa && pc&3 != 0) ||
 		(delayed.armed && (delayed.immediate || delayed.target&1 != 0 || (!delayed.isa && delayed.target&3 != 0))) ||
+		(delayed.armed && (delayed.from&1 != 0 || (!isa && delayed.from&3 != 0))) ||
 		(!delayed.armed && (delayed.immediate || delayed.target != 0 || delayed.from != 0)) {
 		return fmt.Errorf("cpu: restore: incompatible register state")
 	}

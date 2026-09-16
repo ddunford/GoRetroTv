@@ -34,6 +34,19 @@ decision gets revisited then — not before.
   `internal/broadcast`, `internal/oracle`, `internal/snapshot`, `internal/web`), with dependencies
   pointing inward: devices know the bus, the bus knows nothing of the web layer.
 
+  **Two names changed when phase 1 built this, recorded here so the plan and the tree agree:**
+  - **`internal/web` shipped as `internal/httpx`**, with `internal/app` holding the wiring. `httpx`
+    is the ordinary Go name for "our additions to `net/http`", and it keeps the *server* plumbing
+    distinct from the browser client that phase 5 will add — which is what a reader would expect
+    `web/` to mean.
+  - **`internal/snapshot` does not exist, deliberately.** Snapshot framing split along the line
+    settled during phase 1: the generic part — versioned name→blob container, duplicate rejection,
+    name-ordered encoding so equal sets produce identical bytes, and the completeness refusal — is
+    `internal/platform/snapcodec`, because it is what `ARCH-SNAP-1` must inspect and one format is
+    the whole point. The *policy* that "the expected set is my attached devices" stays in
+    `internal/bus`, because what is attached to a bus is bus knowledge. A third package would have
+    owned neither half.
+
 ### The core patterns
 - **Devices behind one interface** (`Read(addr, size)`, `Write(addr, size, value)`, plus
   `Snapshot`/`Restore`) registered on an address-decoding bus. Uniformity is what makes snapshot

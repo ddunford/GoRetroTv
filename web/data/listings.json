@@ -1,0 +1,840 @@
+{
+  "note": "The demo Digibox's line-up and its day of listings. THE FORMAT is measured end to end against the running box; THE CHANNELS AND PROGRAMMES ARE INVENTED. The authentic 1998 London line-up and its schedules are the listings-reconstruction phase's work, from scanned magazines with provenance, and this file is the shape that work will deliver. Channel numbers are sequential on purpose so nobody reads them as historical.",
+  "fields": {
+    "serviceId": "DVB service_id. The NIT, SDT and BAT all declare it, so the tables agree.",
+    "listingsRef": "MEASURED load-bearing: the box turns this into the table_id extension it asks its listings with. The per-service listings reference.",
+    "channelNumber": "The 12-bit half of the BAT 0xB1 entry's packed field. Its MEANING is not established; sequential on purpose.",
+    "startSeconds": "Seconds from midnight. The wire carries start and duration halved, so both must be even.",
+    "flags": "The four low bits of the BAT 0xB1 entry's packed field, which the box unpacks into four separate record fields. THEIR MEANING IS NOT ESTABLISHED. 0x5 is the value every probe that got the guide to draw used; the demo page had always left them 0, and its ALL CHANNELS grid listed no channels at all. Carried per channel so the question can be asked by changing a data file rather than by editing the page."
+  },
+  "channels": [
+    {
+      "serviceId": 100,
+      "listingsRef": 3000,
+      "channelNumber": 101,
+      "name": "Sky One",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Hours"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Early Breakfast"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Breakfast News"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Morning Magazine"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Daytime Drama"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Lunchtime News"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Film"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Children s Hour"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Early Evening News"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "The Quiz Show"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Feature Film"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Late News"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 101,
+      "listingsRef": 3001,
+      "channelNumber": 102,
+      "name": "Sky Two",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Music"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Sunrise"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Morning Cartoons"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "The Chat Show"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Daytime Repeats"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Comedy Hour"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Matinee"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Teen Drama"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Early Evening Comedy"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Sitcom Double"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Drama Series"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Late Comedy"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 102,
+      "listingsRef": 3002,
+      "channelNumber": 103,
+      "name": "Sky News",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night News"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Sunrise News"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Breakfast Briefing"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Morning Bulletin"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "News On The Hour"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Lunchtime Bulletin"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Live"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "News Review"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening Bulletin"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "The World Tonight"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Night Briefing"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "News Extra"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 103,
+      "listingsRef": 3003,
+      "channelNumber": 104,
+      "name": "Sky Sports 1",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Sports Night"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Sports Centre"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Morning Workout"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Racing Preview"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Live Racing"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Sports News"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Football"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Rugby Special"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Football Preview"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Live Football"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Sports Round Up"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Boxing Night"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 104,
+      "listingsRef": 3004,
+      "channelNumber": 105,
+      "name": "Sky Sports 2",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Overnight Sport"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Golf Highlights"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Tennis Classics"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Cricket Replay"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Live Cricket"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Sports Desk"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Motor Racing"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Snooker"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Darts Preview"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Live Darts"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Sports Review"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Late Sport"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 105,
+      "listingsRef": 3005,
+      "channelNumber": 106,
+      "name": "Sky Movies",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Feature"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Morning Matinee"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Family Film"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Comedy Film"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Afternoon Movie"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Classic Film"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Adventure Film"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Family Feature"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Early Evening Film"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Premiere"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late Feature"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Midnight Movie"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 106,
+      "listingsRef": 3006,
+      "channelNumber": 107,
+      "name": "Sky Movies Gold",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Golden Years"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Black And White"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Classic Comedy"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Vintage Drama"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Matinee Classic"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Silver Screen"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Classic"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Golden Musical"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening Classic"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Gold Premiere"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late Classic"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Night Gold"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 107,
+      "listingsRef": 3007,
+      "channelNumber": 108,
+      "name": "Sky Travel",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Journeys"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Wake Up Abroad"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Holiday Guide"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "City Breaks"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Island Life"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Travel News"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Escape"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Coast And Country"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening Journeys"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Great Railways"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late Travel"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Night Flight"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 108,
+      "listingsRef": 3008,
+      "channelNumber": 109,
+      "name": "Sky Soap",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Drama"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Morning Serial"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Daily Serial"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "The Neighbours"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Midday Drama"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Serial Double"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Serial"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Family Serial"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening Serial"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Soap Double"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late Serial"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Night Serial"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 109,
+      "listingsRef": 3009,
+      "channelNumber": 110,
+      "name": "Sky Scifi",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Space"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Morning Adventure"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Robot Stories"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Space Patrol"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Future World"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Science Report"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Fantasy"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Time Travellers"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening Adventure"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Deep Space"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late Fantasy"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Night Voyage"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 110,
+      "listingsRef": 3010,
+      "channelNumber": 111,
+      "name": "The History Ch",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night History"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Ancient World"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Great Battles"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Kings And Queens"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "The Middle Ages"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "History News"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon History"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Lost Empires"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening History"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "The Great War"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late History"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Night Chronicle"
+        }
+      ],
+      "flags": 5
+    },
+    {
+      "serviceId": 111,
+      "listingsRef": 3011,
+      "channelNumber": 112,
+      "name": "The Nature Ch",
+      "programmes": [
+        {
+          "startSeconds": 0,
+          "durationSeconds": 7200,
+          "title": "Night Wildlife"
+        },
+        {
+          "startSeconds": 7200,
+          "durationSeconds": 7200,
+          "title": "Dawn Chorus"
+        },
+        {
+          "startSeconds": 14400,
+          "durationSeconds": 7200,
+          "title": "Animal World"
+        },
+        {
+          "startSeconds": 21600,
+          "durationSeconds": 7200,
+          "title": "Ocean Life"
+        },
+        {
+          "startSeconds": 28800,
+          "durationSeconds": 7200,
+          "title": "Wild Britain"
+        },
+        {
+          "startSeconds": 36000,
+          "durationSeconds": 7200,
+          "title": "Nature Notes"
+        },
+        {
+          "startSeconds": 43200,
+          "durationSeconds": 7200,
+          "title": "Afternoon Safari"
+        },
+        {
+          "startSeconds": 50400,
+          "durationSeconds": 7200,
+          "title": "Birds Of Prey"
+        },
+        {
+          "startSeconds": 57600,
+          "durationSeconds": 7200,
+          "title": "Evening Wildlife"
+        },
+        {
+          "startSeconds": 64800,
+          "durationSeconds": 7200,
+          "title": "Big Cats"
+        },
+        {
+          "startSeconds": 72000,
+          "durationSeconds": 7200,
+          "title": "Late Nature"
+        },
+        {
+          "startSeconds": 79200,
+          "durationSeconds": 7200,
+          "title": "Night Wild"
+        }
+      ],
+      "flags": 5
+    }
+  ]
+}

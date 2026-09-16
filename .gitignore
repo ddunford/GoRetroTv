@@ -1,0 +1,18 @@
+# THE FIRMWARE IS NOT REDISTRIBUTABLE. The flash images and the decompressed application image are
+# Pace's, not ours. They are required to run anything here, they are recorded in
+# firmware/MANIFEST.md with their sizes and checksums, and they must never be committed or baked
+# into an image. A clone is inert until someone supplies them.
+firmware/*.bin
+
+# Build output, caches, and the Go binary
+/bin/
+/dist/
+*.test
+__pycache__/
+.playwright-mcp/
+test-results/
+node_modules/
+
+# Machine snapshots and recorded traces: reproducible, often large, and never reviewable
+/snapshots/
+/traces/

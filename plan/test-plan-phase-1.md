@@ -179,9 +179,15 @@ a file, not read through a pipe). The real firmware is on this machine, so
   linker defaults `dev`/`unknown` satisfy on every unstamped build; it had been watched going red
   only against a stub returning an EMPTY version, which the real build path cannot produce. The
   fix builds through `make build` (one definition of identity) and asserts commit EQUALS `git
-  rev-parse --short HEAD`, a claim that can be false and was seen false in (a). The unit test
-  `handlers/health_test.go::TestHealthReportsOKAndIdentifiesTheBuild` still asserts only
-  non-emptiness and should not be read as proving identity.
+  rev-parse --short HEAD`, a claim that can be false and was seen false in (a). The handler's
+  unit test had the same defect one layer down — `TestHealthReportsOKAndIdentifiesTheBuild`
+  asserted only non-emptiness, which the linker defaults satisfy — and was replaced in 1bdf713 by
+  `handlers/health_test.go::TestHealthReportsTheBuildItWasLinkedWith`, which SETS
+  `version.Version`/`version.Commit` to values nothing else produces and asserts equality (p1-qa
+  read the body and ran it: PASS, exit 0). p1-platform's first repair compared against the
+  unset globals and was still satisfied by a hardcoded `"dev"`; only mutation caught that. It
+  still does not prove build identity — nothing under `go test` can — and says so in its own
+  comment; identity is proved by the gate's stage 4 alone.
   **Limit, stated:** stages 2 and 3 trust the binary's own log lines (`"firmware verified"`,
   `"listening"`) — stub (e) passed both by echoing them. That is inherent to a black-box gate and
   is why stage 4's identity check exists: it is the one stage that ties the process to this tree.

@@ -3,23 +3,25 @@ package bus
 import (
 	"errors"
 	"fmt"
-	"math"
-	"sort"
-	"strings"
 
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
 )
 
 // The machine-snapshot container: one opaque blob per attached device, keyed by the device's name.
 //
-// What is INSIDE a blob is that device's business. This layer's whole job is to make sure the set
-// of blobs matches the set of devices EXACTLY, because the failure spike 003 exists to name is a
-// snapshot that restores most of a machine. That failure has no symptom - it produces a plausible
-// machine whose faults read as firmware bugs - so the only place it can be caught is here, where
-// the two sets can still be compared.
+// The FRAMING and the completeness refusal are snapcodec's. What stays here is the policy that
+// makes them mean anything on a bus: that the set of members a snapshot must describe IS the set
+// of devices attached. "What is attached to this bus" is this package's knowledge, and nothing in
+// snapcodec should have a view on it.
 //
-// The framing is snapcodec's, not this package's, so that the magic, the container version, the
-// truncation checks and the not-fully-consumed check are the same ones every device gets.
+// That division matters because the failure being guarded against has no symptom. A snapshot that
+// restores most of a machine does not fail - it produces a plausible machine whose faults read as
+// firmware bugs (spike 003), and by the time anyone is reading those the snapshot is long out of
+// sight. The comparison can only be made here, while both sets are still in hand.
+//
+// This file framed its own set until snapcodec grew one. Two ways to frame a device set, both
+// tested and both looking authoritative, is worse than either alone: the next person reaches for
+// whichever they find first.
 const (
 	snapWriter  = "machine"
 	snapVersion = 1
@@ -27,38 +29,23 @@ const (
 
 // Snapshot encodes the state of every attached device.
 //
-// Devices are written in name order, so two snapshots of the same machine state are byte-identical
-// - which is what lets a snapshot be compared rather than only restored.
+// Members come back in name order whatever order they were added in, so two snapshots of the same
+// machine state are byte-identical - which is what lets a snapshot be compared rather than only
+// restored.
 func (b *Bus) Snapshot() ([]byte, error) {
 	if b.unknownState != nil {
 		return nil, fmt.Errorf("bus: snapshot: %w", b.unknownState)
 	}
 
-	type entry struct {
-		name string
-		blob []byte
-	}
-	entries := make([]entry, 0, len(b.regions))
+	w := snapcodec.NewSetWriter(snapWriter, snapVersion)
 	for _, r := range b.regions {
 		blob, err := r.dev.Snapshot()
 		if err != nil {
 			return nil, fmt.Errorf("bus: snapshot %q: %w", r.dev.Name(), err)
 		}
-		entries = append(entries, entry{name: r.dev.Name(), blob: blob})
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
-
-	// Bounded by the devices actually attached, but a conversion that is silently wrong when it
-	// is not is exactly the shape of fault this package exists to make loud.
-	total := uint64(len(entries))
-	if total > math.MaxUint32 {
-		return nil, fmt.Errorf("bus: snapshot: %d devices is more than the format can count", total)
-	}
-	w := snapcodec.NewWriter(snapWriter, snapVersion)
-	w.Uint32(uint32(total))
-	for _, e := range entries {
-		w.String(e.name)
-		w.Bytes(e.blob)
+		if err := w.Add(r.dev.Name(), blob); err != nil {
+			return nil, fmt.Errorf("bus: snapshot: %w", err)
+		}
 	}
 	blob, err := w.Blob()
 	if err != nil {
@@ -69,7 +56,7 @@ func (b *Bus) Snapshot() ([]byte, error) {
 
 // Restore replaces every attached device's state from a snapshot.
 //
-// It is all or nothing. A snapshot that does not name exactly the devices attached is refused
+// It is all or nothing. A snapshot that does not describe exactly the devices attached is refused
 // before any device is touched, and a device that rejects its own blob part-way through rolls the
 // whole machine back to where it was. A half-applied restore is worse than a refused one: the
 // caller believes nothing happened, and the machine is a mixture of two states that will diverge
@@ -79,12 +66,35 @@ func (b *Bus) Restore(state []byte) error {
 		return fmt.Errorf("bus: restore: %w", b.unknownState)
 	}
 
-	blobs, err := decodeSnapshot(state)
+	set, err := snapcodec.OpenSet(state, snapWriter, snapVersion, snapVersion)
 	if err != nil {
-		return err
+		return fmt.Errorf("bus: restore: %w", err)
 	}
-	if err := b.checkDeviceSet(blobs); err != nil {
-		return err
+
+	// The policy, and the only part of this a bus owns: what the snapshot must describe is
+	// exactly what is attached.
+	attached := make([]string, 0, len(b.regions))
+	for _, r := range b.regions {
+		attached = append(attached, r.dev.Name())
+	}
+	if err := set.Require(attached); err != nil {
+		// snapcodec says which members are missing and which are unexpected, and why that
+		// matters; what it cannot know is that the members here are DEVICES.
+		return fmt.Errorf("bus: restore: the snapshot does not describe the devices on this "+
+			"bus: %w", err)
+	}
+
+	blobs := make(map[string][]byte, len(attached))
+	for _, name := range attached {
+		blob, ok := set.Member(name)
+		if !ok {
+			// Require has just established that this cannot happen. Saying so, rather than
+			// restoring a device from nothing, is the difference between a refusal and the
+			// plausible machine this file exists to prevent.
+			return fmt.Errorf("bus: restore: %q passed the completeness check and then had no "+
+				"blob, which cannot happen and means this package and snapcodec disagree", name)
+		}
+		blobs[name] = blob
 	}
 
 	// The rollback copy, taken before anything is written, so a device that refuses its blob
@@ -114,39 +124,6 @@ func (b *Bus) Restore(state []byte) error {
 	return nil
 }
 
-// checkDeviceSet refuses a snapshot whose devices are not exactly the devices attached, naming
-// what is wrong on each side.
-func (b *Bus) checkDeviceSet(blobs map[string][]byte) error {
-	var missing, unknown []string
-	for name := range blobs {
-		if _, attached := b.names[name]; !attached {
-			unknown = append(unknown, name)
-		}
-	}
-	for name := range b.names {
-		if _, present := blobs[name]; !present {
-			missing = append(missing, name)
-		}
-	}
-	sort.Strings(missing)
-	sort.Strings(unknown)
-
-	switch {
-	case len(missing) > 0 && len(unknown) > 0:
-		return fmt.Errorf("bus: restore: the snapshot does not describe this machine - it is "+
-			"missing %s and names %s, which is not attached",
-			strings.Join(missing, ", "), strings.Join(unknown, ", "))
-	case len(missing) > 0:
-		return fmt.Errorf("bus: restore: the snapshot says nothing about %s, and a device left "+
-			"holding whatever it happened to hold is a machine that looks right and is not",
-			strings.Join(missing, ", "))
-	case len(unknown) > 0:
-		return fmt.Errorf("bus: restore: the snapshot names %s, which this machine does not have",
-			strings.Join(unknown, ", "))
-	}
-	return nil
-}
-
 // rollback puts back the devices a failed restore had already reached.
 //
 // It should not be able to fail: the blobs it writes came out of these same devices moments
@@ -164,38 +141,4 @@ func rollback(reached []region, before map[string][]byte) error {
 		}
 	}
 	return errors.Join(failures...)
-}
-
-func decodeSnapshot(state []byte) (map[string][]byte, error) {
-	r, err := snapcodec.Open(state)
-	if err != nil {
-		return nil, fmt.Errorf("bus: restore: %w", err)
-	}
-	if err := r.Expect(snapWriter, snapVersion, snapVersion); err != nil {
-		return nil, fmt.Errorf("bus: restore: %w", err)
-	}
-
-	count := r.Uint32()
-	blobs := make(map[string][]byte)
-	for i := uint32(0); i < count; i++ {
-		name := r.String()
-		blob := r.Bytes()
-		if r.Err() != nil {
-			// The count is the blob's own claim, so a corrupt one must not be looped on: the
-			// reader's error is sticky and Done below reports it.
-			break
-		}
-		if _, dup := blobs[name]; dup {
-			return nil, fmt.Errorf("bus: restore: the snapshot describes %q twice", name)
-		}
-		blobs[name] = blob
-	}
-	if err := r.Done(); err != nil {
-		return nil, fmt.Errorf("bus: restore: %w", err)
-	}
-	if uint64(len(blobs)) != uint64(count) {
-		return nil, fmt.Errorf("bus: restore: the snapshot claims %d devices and carries %d",
-			count, len(blobs))
-	}
-	return blobs, nil
 }

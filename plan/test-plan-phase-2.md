@@ -8,8 +8,9 @@
 - [x] **TC-2.1: Instruction families** (covers: TASK-2.1, TASK-2.10) — table-driven per family including the
   unaligned load/store path; expected values taken from the ISA, not from our own decoder.
   **Result:** `internal/cpu/mips32_test.go` covers arithmetic, shifts, loads/stores, HI/LO, branches and the big-endian unaligned quartet; `./ctl.sh test` passed.
-- [ ] **TC-2.2: Delay slots** (covers: TASK-2.2, TASK-2.10) — the slot executes before the transfer, for every
+- [x] **TC-2.2: Delay slots** (covers: TASK-2.2, TASK-2.10) — the slot executes before the transfer, for every
   branch and jump form including the likely/AL variants.
+  **Result:** `internal/cpu/branch_test.go` drives branch, jump, likely, link and JALX forms and verifies both instruction addresses; a negative control that hid a pending branch failed.
 - [ ] **TC-2.3: COP0 survives a context restore** (covers: TASK-2.3, TASK-2.10) — write Status/EPC, restore,
   `ERET`, land where expected. **A stubbed COP0 must fail this.**
 - [ ] **TC-2.4: ERET picks its register from ERL** (covers: TASK-2.4, TASK-2.10) — both branches, and the ISA

@@ -32,6 +32,10 @@ type branch struct {
 // New starts execution at pc on the supplied bus.
 func New(b *bus.Bus, pc uint32) *Core { return &Core{PC: pc, bus: b} }
 
+// HasPendingBranch reports the interval in which a checkpoint or interrupt would see an
+// incomplete machine: the branch has retired, but its delay slot has not.
+func (c *Core) HasPendingBranch() bool { return c.delayed.armed }
+
 // Step retires one instruction or returns a visible halt error without advancing PC.
 func (c *Core) Step() error {
 	if c.ISA {

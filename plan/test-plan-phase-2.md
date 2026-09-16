@@ -5,8 +5,9 @@
 
 ## Test Cases
 
-- [ ] **TC-2.1: Instruction families** (covers: TASK-2.1, TASK-2.10) — table-driven per family including the
+- [x] **TC-2.1: Instruction families** (covers: TASK-2.1, TASK-2.10) — table-driven per family including the
   unaligned load/store path; expected values taken from the ISA, not from our own decoder.
+  **Result:** `internal/cpu/mips32_test.go` covers arithmetic, shifts, loads/stores, HI/LO, branches and the big-endian unaligned quartet; `./ctl.sh test` passed.
 - [ ] **TC-2.2: Delay slots** (covers: TASK-2.2, TASK-2.10) — the slot executes before the transfer, for every
   branch and jump form including the likely/AL variants.
 - [ ] **TC-2.3: COP0 survives a context restore** (covers: TASK-2.3, TASK-2.10) — write Status/EPC, restore,

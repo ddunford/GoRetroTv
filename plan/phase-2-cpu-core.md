@@ -11,7 +11,7 @@ writing the decoder**; they record the traps, each of which cost the predecessor
 
 ## Tasks (mirror — bd epic `gort-dji` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-2.1` MIPS32 decode and execute: ALU, shifts, loads/stores including the unaligned `lwl`/`lwr`/`swl`/`swr` that memset's path uses, branches, jumps, HI/LO with `MTHI`/`MTLO` → `/go-engineer` [TC-2.1]
+- [x] `TASK-2.1` MIPS32 decode and execute: ALU, shifts, loads/stores including the unaligned `lwl`/`lwr`/`swl`/`swr` that memset's path uses, branches, jumps, HI/LO with `MTHI`/`MTLO` → `/go-engineer` [TC-2.1]
 - [ ] `TASK-2.2` Delay slots modelled as hardware does: a jump arms the slot and the slot executes before the transfer → `/go-engineer` [TC-2.2]
 - [ ] `TASK-2.3` COP0: Count, Compare (writing it clears the interrupt request), Status, Cause, EPC, ErrorEPC, BadVAddr, Config. **Stubbing COP0 destroys every context restore** → `/go-engineer` [TC-2.3]
 - [ ] `TASK-2.4` `ERET` picking its return register from `Status.ERL`, with no delay slot, and bit 0 of EPC carrying the ISA mode → `/go-engineer` [TC-2.4]

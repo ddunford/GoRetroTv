@@ -76,9 +76,9 @@ func TestMIPS32BigEndianUnalignedQuartet(t *testing.T) {
 		store   bool
 	}{
 		{"lwl first byte", 34, 0, 0xaabbccdd, 0x11223344, 0xaabbccdd, false},
-		{"lwl second byte", 34, 1, 0x11223344, 0xaabbccdd, 0xbbccdd44, false},
-		{"lwr third byte", 38, 2, 0x11223344, 0xaabbccdd, 0x11aabbcc, false},
-		{"lwr last byte", 38, 3, 0x11223344, 0xaabbccdd, 0xaabbccdd, false},
+		{"lwl second byte", 34, 1, 0x11223344, 0xaabbccdd, 0x223344dd, false},
+		{"lwr third byte", 38, 2, 0x11223344, 0xaabbccdd, 0xaa112233, false},
+		{"lwr last byte", 38, 3, 0x11223344, 0xaabbccdd, 0x11223344, false},
 		{"swl second byte", 42, 1, 0x11223344, 0xaabbccdd, 0x11aabbcc, true},
 		{"swr third byte", 46, 2, 0x11223344, 0xaabbccdd, 0xbbccdd44, true},
 	}
@@ -111,5 +111,55 @@ func TestMIPS32BadInstructionHaltsWithoutAdvancing(t *testing.T) {
 	}
 	if c.PC != codeBase {
 		t.Fatalf("PC advanced to %#x after bad instruction", c.PC)
+	}
+}
+
+func TestMIPS32LoadsStoresAndHiLo(t *testing.T) {
+	t.Parallel()
+	c, b := machine(t,
+		ri(40, 1, 2, 0x100), // sb
+		ri(32, 1, 3, 0x100), // lb
+		ri(36, 1, 4, 0x100), // lbu
+		rr(2, 0, 0, 0, 17),  // mthi
+		rr(0, 0, 5, 0, 16),  // mfhi
+		rr(2, 0, 0, 0, 19),  // mtlo
+		rr(0, 0, 6, 0, 18),  // mflo
+	)
+	c.GPR[1], c.GPR[2] = codeBase, 0x80
+	for i := 0; i < 7; i++ {
+		if err := c.Step(); err != nil {
+			t.Fatalf("instruction %d: %v", i, err)
+		}
+	}
+	if got := b.Read(codeBase+0x100, bus.Byte); got != 0x80 {
+		t.Fatalf("stored byte = %#x, want 0x80", got)
+	}
+	if c.GPR[3] != 0xffffff80 || c.GPR[4] != 0x80 || c.GPR[5] != 0x80 || c.GPR[6] != 0x80 {
+		t.Fatalf("signed/unsigned loads and HI/LO = %#x %#x %#x %#x", c.GPR[3], c.GPR[4], c.GPR[5], c.GPR[6])
+	}
+}
+
+func TestMIPS32BranchesAndJumpsRetireSlotFirst(t *testing.T) {
+	t.Parallel()
+	c, _ := machine(t,
+		ri(4, 1, 1, 2),     // beq to instruction 3
+		ri(9, 2, 2, 1),     // slot
+		ri(9, 2, 2, 100),   // skipped
+		ri(3, 0, 0, 6),     // jal to instruction 6
+		ri(9, 2, 2, 2),     // slot
+		ri(9, 2, 2, 100),   // skipped
+		rr(31, 0, 0, 0, 8), // jr ra
+		ri(9, 2, 2, 4),     // slot
+	)
+	for i, wantPC := range []uint32{codeBase + 4, codeBase + 12, codeBase + 16, codeBase + 24, codeBase + 28, codeBase + 20} {
+		if err := c.Step(); err != nil {
+			t.Fatalf("step %d: %v", i, err)
+		}
+		if c.PC != wantPC {
+			t.Fatalf("step %d PC = %#x, want %#x", i, c.PC, wantPC)
+		}
+	}
+	if c.GPR[2] != 7 || c.GPR[31] != codeBase+20 {
+		t.Fatalf("slots and link = value %#x, RA %#x", c.GPR[2], c.GPR[31])
 	}
 }

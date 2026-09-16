@@ -8,7 +8,9 @@ services:
         COMMIT: ${COMMIT:-unknown}
         BUILD_DATE: ${BUILD_DATE:-unknown}
     environment:
-      GORETROTV_ENV: ${GORETROTV_ENV:-development}
+      # `:?` rather than `:-`: GORETROTV_ENV is required, and a compose-layer default would put
+      # the guess back one level below the loader that refuses it.
+      GORETROTV_ENV: ${GORETROTV_ENV:?set it in .env - see .env.example}
       GORETROTV_LOG_LEVEL: ${GORETROTV_LOG_LEVEL:-debug}
       GORETROTV_LOG_FORMAT: ${GORETROTV_LOG_FORMAT:-json}
       # Inside the container the listener must accept the published mapping, so it binds all

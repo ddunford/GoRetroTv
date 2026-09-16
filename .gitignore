@@ -4,6 +4,13 @@
 # into an image. A clone is inert until someone supplies them.
 firmware/*.bin
 
+# The operator's environment file. .env.example is committed and carries variable NAMES and
+# harmless examples; the real one never is.
+.env
+.env.local
+.env.*.local
+!.env.example
+
 # Build output, caches, and the Go binary
 /bin/
 /dist/

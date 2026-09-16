@@ -6,6 +6,20 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+ENV_FILE=".env"
+ENV_EXAMPLE=".env.example"
+
+# Settings live in the environment, and ENV_FILE is the operator's copy of ENV_EXAMPLE. It is
+# gitignored, and it is deliberately NOT created here: a file conjured with defaults is exactly the
+# silent default that internal/config refuses to boot on. When it is missing, the binary's own
+# refusal names the variables, which is the message worth reading.
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "./$ENV_FILE"
+    set +a
+fi
+
 PROJECT="goretrotv"
 PORT="${GORETROTV_PORT:-8099}"
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
@@ -38,8 +52,15 @@ The flash images are not redistributable and are not in git. See firmware/MANIFE
 
 cmd_build() { make build; }
 
+require_env_file() {
+    [[ -f "$ENV_FILE" ]] && return 0
+    warn "no $ENV_FILE; copy it from $ENV_EXAMPLE and edit it (cp $ENV_EXAMPLE $ENV_FILE)"
+    warn "continuing so the loader can name what is actually missing"
+}
+
 cmd_run() {
     require_firmware
+    require_env_file
     make run
 }
 
@@ -54,6 +75,7 @@ export_build_args() {
 
 cmd_up() {
     require_firmware
+    require_env_file
     export_build_args
     docker compose up -d --build
     cmd_health
@@ -89,11 +111,18 @@ cmd_test() { make test-race; }
 
 cmd_lint() {
     make vet
-    if command -v golangci-lint >/dev/null 2>&1; then
-        make lint
-    else
-        warn "golangci-lint not on PATH; ran go vet only"
+    # `go install` puts it in GOPATH/bin, which is not on PATH in a plain non-login shell. Looking
+    # there before giving up is the difference between running the linters and reporting a pass
+    # having run twelve fewer of them than the name implies.
+    local gopath_bin
+    gopath_bin="$(go env GOPATH)/bin"
+    if ! command -v golangci-lint >/dev/null 2>&1 && [[ -x "$gopath_bin/golangci-lint" ]]; then
+        PATH="$gopath_bin:$PATH"
+        export PATH
     fi
+    command -v golangci-lint >/dev/null 2>&1 \
+        || die "golangci-lint not found on PATH or in $gopath_bin: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest"
+    make lint
 }
 
 cmd_fmt() { make fmt; }

@@ -12,9 +12,12 @@ set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 CLONE=$(mktemp -d)
-trap 'rm -rf "$CLONE"' EXIT
-rsync -a --exclude node_modules --exclude .git --exclude .venv --exclude dist \
-      --exclude __pycache__ ./ "$CLONE/" >/dev/null
+FILE_LIST=$(mktemp)
+trap 'rm -rf "$CLONE"; rm -f "$FILE_LIST"' EXIT
+# Copy only tracked paths. The working tree has local firmware and environment files;
+# neither belongs in a disposable probe repository.
+git ls-files -z > "$FILE_LIST"
+rsync -a --from0 --files-from="$FILE_LIST" ./ "$CLONE/" >/dev/null
 git -C "$CLONE" init -q .
 git -C "$CLONE" add -A
 git -C "$CLONE" -c user.name=t -c user.email=t@t commit -q --no-verify -m base
@@ -37,13 +40,13 @@ probe() {                       # probe <expected: refuse|allow> <label> <comman
 }
 
 echo "rule-guard self-test"
-probe refuse "a plain edit to a checker"            sh -c "echo '# probe' >> conformance/checkers/api-rules.py"
-probe refuse "git mv a checker out of the set"      git mv conformance/checkers/api-rules.py api-rules-moved.py
+probe refuse "a plain edit to a checker"            sh -c "echo '# probe' >> conformance/checkers/platform_imports.py"
+probe refuse "git mv a checker out of the set"      git mv conformance/checkers/platform_imports.py platform-imports-moved.py
 probe refuse "git mv the CI workflow away"          git mv .github/workflows/ci.yml ci-old.yml
 probe refuse "replace run.py with a symlink"        sh -c "rm conformance/run.py && ln -s /dev/null conformance/run.py"
 probe refuse "delete the catalogue"                 rm plan/architecture-rules.md
 probe refuse "edit ctl.sh, which carries the verb"  sh -c "echo '# probe' >> ctl.sh"
-probe allow  "an ungoverned file (negative control)" sh -c "echo '// probe' >> frontend/src/App.tsx"
+probe allow  "an ungoverned file (negative control)" sh -c "echo '// probe' >> internal/memory/ram.go"
 
 [ "$fail" -eq 0 ] && echo "rule-guard: every case behaves" || echo "rule-guard: SELF-TEST FAILED" >&2
 exit "$fail"

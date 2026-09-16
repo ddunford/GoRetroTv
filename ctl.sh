@@ -123,6 +123,10 @@ cmd_conformance_stop_gate() { python3 conformance/stop-gate.py "$@"; }
 
 cmd_conformance_ablate() { python3 conformance/ablate.py "$@"; }
 
+cmd_authorise_rules() { scripts/conformance/authorise-rules.sh "$@"; }
+
+cmd_rule_guard_selftest() { scripts/conformance/rule-guard-selftest.sh "$@"; }
+
 # The five hooks git must be running, and the beads hooks each one delegates to.
 HOOK_NAMES=(pre-commit pre-push post-merge post-checkout prepare-commit-msg)
 
@@ -253,6 +257,8 @@ Building and checking
   conformance    Run architecture rules and their probes
   stop-gate      Neutralise each conformance detector and check probe independence
   ablate         Remove each rule subject in turn and check its coverage guard
+  authorise-rules <reason>  Record why staged architecture controls changed
+  rule-guard-selftest    Prove the commit guard catches governed edits
   lint           Hook check, go vet and golangci-lint (fails if the linter is absent)
   hooks          Assert the git hooks are armed and delegating to beads
   agents         Assert AGENTS.md still symlinks to CLAUDE.md (Codex and Claude read one file)
@@ -281,6 +287,8 @@ main() {
         conformance) cmd_conformance "$@" ;;
         stop-gate) cmd_conformance_stop_gate "$@" ;;
         ablate) cmd_conformance_ablate "$@" ;;
+        authorise-rules) cmd_authorise_rules "$@" ;;
+        rule-guard-selftest) cmd_rule_guard_selftest "$@" ;;
         lint)    cmd_lint "$@" ;;
         hooks)   cmd_hooks "$@" ;;
         agents)  cmd_agentsdoc "$@" ;;

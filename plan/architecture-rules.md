@@ -59,8 +59,33 @@ packages. Importing one of them from `internal/platform` is the deliberate viola
 ### `ARCH-MODULE-1`
 
 The module graph currently contains only the project module. Adding a dependency without an
-explicit architecture decision is the deliberate violation. This currently has a CI assertion;
-its conformance probe is owed by `gort-87m.11`.
+explicit architecture decision is the deliberate violation. The conformance rule now owns the CI
+assertion and proves it rejects a new `require` directive.
+
+## Decision ledger
+
+Every decision in `plan/module-decisions.md` and `docs/decisions/0001-scaffold.md` is bound here.
+Where a decision has several parts, a rule holds the mechanically checkable part and the ledger
+names what requires tests or review. A claim that a check exists here means it has been run; future
+work is named as future work.
+
+| Recorded decision | Binding |
+|---|---|
+| One runtime Go binary and inward package boundaries | `ARCH-LAYER-1` checks import direction. The choice to split a process is a design judgement reviewed when proposed. The `oraclecmp` developer tool is a separate executable, not a second emulator service. |
+| `internal/httpx` and `internal/app` own transport and wiring; snapshot framing lives in `internal/platform/snapcodec` and bus policy in `internal/bus` | `ARCH-LAYER-1` and `ARCH-PLATFORM-1` hold the import boundaries. No rule pins those exact names: a coordinated rename is allowed when the design remains intact. |
+| One bus `Device` interface, every device serialisable from creation | `ARCH-SNAP-1` discovers hardware-shaped types, requires the methods and a live field-complete contract test. The bus's address-decoding behaviour is held by its own tests. |
+| Errors are values; a bad guest instruction halts visibly | None, because the CPU is not built yet and a static return-type check cannot prove visible halt behaviour. Phase 2 integration tests must exercise a bad instruction. |
+| No goroutine in the instruction loop; `icount` drives device time | `ARCH-DET-1` scans the existing clock and automatically enrols future CPU and device files. Replay determinism remains an integration-level requirement in phase 4. |
+| Shared `hexfmt`, `statehash`, `snapcodec`, `instrument` and `clock` | `ARCH-PLATFORM-1` holds the shared layer's dependency direction. Each primitive's behaviour is held by its own tests; a rule forbidding a second implementation would need semantic equivalence it cannot establish from names. |
+| No database, auth, tenancy, API envelope, cache or queue | None, because these are scope decisions. A new requirement may justify one; blanket banned-package checks would reject a deliberate change rather than detect accidental drift. |
+| One static page and TypeScript module, no SPA framework | None yet, because the browser client is a phase 5 deliverable. Its dependency and bundle review will make the choice visible when code exists. |
+| Structured JSON logs with `icount` | None as a conformance rule, because `internal/logging/logging_test.go` already exercises emitted JSON records and their instruction counts. Whether events are diagnostically useful is an operator judgement. |
+| No Sentry | None, because this is an observability scope decision; the boot and oracle gates are the chosen error-detection mechanism. |
+| Public TLS via Traefik | None yet, because deployment is a phase 5 deliverable; its production gate must exercise the served TLS route. A source string cannot prove a route is publicly reachable. |
+| Developer surfaces restricted to loopback | `ARCH-DEV-1` exercises the current loader and Compose mapping. A future gdb listener must use the validated path or extend this rule before it is exposed. |
+| Firmware stays outside source and images | `ARCH-FW-1` scans tracked source and the exported runtime image, with separate probes. |
+| Standard-library-only module floor from ADR 0001 | `ARCH-MODULE-1` checks the parsed module declaration. A needed dependency requires a deliberate decision and rule edit. |
+| Go toolchain version in ADR 0001 | None as a conformance rule yet: the recorded host ceiling was disproved, and `gort-4sx.15` owns the version update and vulnerability recheck before public deployment. |
 
 ## Not mechanisable
 
@@ -82,7 +107,8 @@ is absent from a built image.
 
 ## Tooling
 
-The harness uses Python's standard-library TOML parser and a tracked-file corpus. Rule checkers
-will record their own tool choice in the registry when enforced. Go import rules may use the
-existing Go tooling if it can report the exact import edge; adding a dependency requires a measured
-gap in those tools.
+The harness uses Python's standard-library TOML parser and a tracked-file corpus. Each enforced
+rule records its actual tool and rationale in `conformance/rules.toml`: Go's AST parser for source
+syntax, `go list` for import edges, the real config loader and Docker Compose for binding, Go's
+JSON test stream for device contracts, and a built/exported Docker image for firmware containment.
+No architecture-only package dependency was needed.

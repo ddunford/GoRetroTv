@@ -35,8 +35,11 @@ PROTECTED=(
   # conformance verb, and the CI workflow carrying the job that invokes it. Either can disable
   # every rule in the catalogue without touching a rule. Governing the rules but not their
   # execution guards the lock and leaves the door off its hinges.
-  #   'ctl.sh'
-  #   '.github/workflows/ci.yml'
+  'ctl.sh'
+  '.github/workflows/ci.yml'
+  'Dockerfile'
+  '.dockerignore'
+  'docker-compose.yml'
   # Add every config a rule is expressed in, e.g.:
   #   '.dependency-cruiser.cjs'
   #   'stylelint.config.mjs'

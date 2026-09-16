@@ -1,0 +1,8 @@
+# Ledger of authorised changes to the architecture rules.
+# Each row is somebody signing for a change to an agreement, not to code.
+# Never edit by hand - the whole value is that a row means an act happened.
+
+digest: 1aec2a390bc37f31226d2b812a4e7f527c7b9fb2b4319e08c0bd2ea09c608158
+  when: 2026-09-16T21:25:54Z
+   why: Bind recorded architecture decisions to checked rules and guard changes to the catalogue, harness, build configuration, CI, and commit hooks
+

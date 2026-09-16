@@ -186,6 +186,11 @@ if [ "$go_fail" -ne 0 ]; then
   exit 1
 fi
 
+# An architecture-rule change needs an explicit reason bound to its staged bytes.
+if ! scripts/conformance/rule-guard.sh; then
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------------------------
 # Beads. `bd init` set core.hooksPath to .beads/hooks; pointing it here instead would have
 # silently disabled every beads hook, so each hook in this directory runs its .beads counterpart

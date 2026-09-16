@@ -1,11 +1,11 @@
 # Test Plan: Phase 7 — The unsolved screens
 
 ## Test Cases
-- [ ] **TC-7.1: The grid's row loop is located and its behaviour known** (covers: TASK-7.1, TASK-7.2)
+- [ ] **TC-7.1: The grid's row loop is located and its behaviour known** (covers: TASK-7.1, TASK-7.2, TASK-7.7)
   — a named address, and evidence for whether the body executes.
-- [ ] **TC-7.2: PID 0x52's consumer is identified** (covers: TASK-7.3) — by letting the firmware name
+- [ ] **TC-7.2: PID 0x52's consumer is identified** (covers: TASK-7.3, TASK-7.7) — by letting the firmware name
   it, with a control proving the instrument works.
-- [ ] **TC-7.3: The trigger for a carousel request is found** (covers: TASK-7.4) — `carouselAcquire`
+- [ ] **TC-7.3: The trigger for a carousel request is found** (covers: TASK-7.4, TASK-7.7) — `carouselAcquire`
   runs, with its arguments captured. A census showing everything cold is a valid result and must be
   reported as one.
 - [ ] **TC-7.4: A module is accepted** (covers: TASK-7.5) — `0x800BECF0` executes for the first time

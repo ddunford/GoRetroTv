@@ -51,6 +51,22 @@ decision gets revisited then — not before.
   device pumps — is driven off `icount`, never wall time. Wall-clock scheduling is what made the
   browser emulator non-deterministic between runs and caused at least one wrong conclusion.
 
+### The shared / platform layer
+`internal/platform/` holds `hexfmt`, `statehash`, `snapcodec`, `instrument` and `clock` — the full
+rationale and the litmus each passes is in `CLAUDE.md → Shared / platform layer`.
+
+**Why it is decided before a line is written.** This is a greenfield tree with no duplication to
+find, so the reuse question is not "what already exists" but "what will six packages each invent".
+Two of the five are named because the predecessor already paid for their absence: `hexfmt` (a casing
+mismatch between a key's producer and its consumer reported zero for every address containing a hex
+letter) and `instrument` (the subject-assertion rule existed as prose and was broken by three agents
+in one afternoon). `statehash` is here because it is the acceptance instrument for three separate
+functional requirements and three copies would verify three different things.
+
+**The boundary is enforced, not hoped for.** `ARCH-LAYER-1` (phase 1a) already refuses outward
+imports; `internal/platform` may import nothing from `internal/device`, `internal/cpu`,
+`internal/broadcast` or `internal/web`, which is what stops domain logic drifting into it.
+
 ### Not applicable, and why
 - **No database.** No persistent product data. NVRAM is a byte array in a file.
 - **No auth, no tenancy.** One shared box, no accounts — the same decision the predecessor made.

@@ -34,3 +34,8 @@
   **Steps:** run the stop-gate, which neutralises each detector in turn.
   **Expected:** each rule's own probe goes uncaught while its siblings stay caught. A rule caught
   only by a sibling is not armed.
+
+- [ ] **TC-1a.8: Domain logic in the shared layer is refused** (covers: TASK-1a.9)
+  **Steps:** probe — import `internal/device/demux` from `internal/platform`.
+  **Expected:** ARCH-PLATFORM-1 fails, naming the import. A shared kernel fails by accumulating the
+  domain, not by being absent.

@@ -31,6 +31,27 @@ Full record with rationale and rejected alternatives: `plan/module-decisions.md`
 - **Errors are values; a bad guest instruction halts visibly.** It must never take the process down
   or, worse, continue plausibly.
 - **No database, no auth, no tenancy, no queue, no cache** — see the record. Nothing here needs them.
+### Shared / platform layer
+Owner: `internal/platform/`. Five primitives, each with three or more real consumers — declared here
+because the alternative is not "no shared layer", it is six improvised copies discovered by
+`/plan-reconcile` after they have shipped.
+- **`hexfmt`** — address and word formatting, one casing, one width. The predecessor's instruments
+  built lookup keys with `hex32` (uppercase) and read them with `toString(16)` (lowercase), and every
+  address containing a hex letter reported a plausible **zero**. That cost a day and two wrong
+  findings; one function with one casing is the fix.
+- **`statehash`** — the machine-state hash. It is the acceptance instrument for FR-6 (oracle), FR-7
+  (replay) and FR-8 (snapshot) and is also what the framebuffer and boot-gate comparisons use. One
+  definition, or the three requirements verify against three different hashes.
+- **`snapcodec`** — the versioned encode/decode every `Device.Snapshot` writes into, so completeness
+  is checkable by `ARCH-SNAP-1` rather than hopeful.
+- **`instrument`** — the subject-assertion guard: an instrument that cannot find what it counts
+  returns a harness failure, never zero. This project states that as a convention; a convention with
+  no code owning it becomes twelve copies that each forget it differently.
+- **`clock`** — the icount scheduler every timer, device pump and carousel wave is driven off.
+**Not shared, deliberately:** the Huffman codec, MPEG CRC-32 and the section builders (broadcast
+only); the MIPS16 decode tables (cpu only); the blitter's fill-bit and the demux's match-unit
+semantics (their own devices). Domain knowledge stays in its package.
+
 - **Developer surfaces bind to localhost only.** The gdb stub and instrument endpoints are the one
   real security control on a public demo host, and they carry a conformance rule.
 

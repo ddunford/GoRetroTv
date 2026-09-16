@@ -107,11 +107,35 @@ a file, not read through a pipe). The real firmware is on this machine, so
   **Steps:** corrupt one register at instruction 4,500,000 in one stream.
   **Expected:** reports the divergence in the 4,500,000–4,501,000 window. **And over an empty or
   truncated stream it must report a harness failure, not success.**
-  (blocked: `oraclecmp` does not exist — TASK-1.10 / `gort-6ar.10` is open; `cmd/` holds only
-  `goretrotv`. Nothing to audit. Note for whoever builds it: the emitter already writes an
-  `END <count> <last>` trailer (`TestTheStreamHasAHeaderAndATrailer`) precisely so a truncated
-  stream is distinguishable — the harness-failure clause must key off its absence, not off line
-  count.)
+  (proved, commit 8844aef: `internal/platform/statehash/compare_test.go::TestAnInjectedDivergenceIsLocalisedToItsWindow`
+  — one bit of GPR7 from instruction 4,500,000 on; asserts `StateDiverged`, `Lo/Hi` exactly
+  4,500,000..4,500,999, window 4500, and `Compared >= 4000` so it cannot have stopped at line one.
+  Harness-failure clause: `::TestAnUnusableStreamIsAHarnessFailureAndNotAgreement` — truncated
+  (END line removed, keyed off `Stream.Complete`, i.e. the trailer's ABSENCE, not line count →
+  `ErrTruncatedStream`) and empty (header only → `ErrEmptyStream`), each tried in BOTH argument
+  orders, each `IsHarnessFailure`. At the command: `cmd/oraclecmp/main_test.go::TestAnUnusableStreamExitsTwoAndSaysSo`
+  — exit 2 (not 0, not 1) with "HARNESS FAILURE" in words; `::TestDivergingStreamsExitOneAndNameTheWindow`
+  — exit 1 naming `2000..2999`. Empirically re-run by p1-qa on the built binary, exit codes
+  captured to files: real oracle run1 vs run2 → exit 0 "agree over 4613 checkpoints"; run1 vs a
+  2,000-line copy with no END → exit 2 harness failure; run1 vs itself with ONE hash zeroed at
+  checkpoint 2000 → exit 1 "state diverged at window 2000 (200000000..200099999)". No hand-rolled
+  hex in `compare.go`/`stream.go`/`main.go`; hashes print via `hexfmt.Word` and parse via
+  `hexfmt.ParseAddr`.
+  **Finding, recorded as a limit on this tick — the straddle case:** the real oracle stream has
+  478 of 4,934 checkpoints off-boundary (`300001`, `1000001`, …) because its MIPS32 path retires a
+  branch and its delay slot together. `Compare` pairs those by WINDOW (so no `WindowMissing`) but
+  then demands equal instruction counts inside the window and reports `CadenceDiverged`, exit 1.
+  p1-qa fed it a synthetic straddle with IDENTICAL hashes (`300000` vs `300001`) → exit 1 "cadence
+  diverged at window 3". `compare.go`'s doc says demanding equal counts "would report a
+  divergence at the first straddling branch between two machines that agree perfectly" — and the
+  code then does exactly that, and `::TestADifferentInstructionCountInTheSameWindowIsItsOwnKindOfDivergence`
+  pins it as intended. The classification is HONEST (a hash after 300,001 instructions is not
+  comparable to one after 300,000), so the defect is upstream in the emitters, not in the
+  comparator: on a live oracle-vs-Go run with per-instruction Go retirement the tool exits 1 at
+  the 4th checkpoint and never reaches a state divergence. Fix belongs to whichever emitter
+  changes — the oracle hashing at the exact boundary before retiring the delay slot, or Go
+  adopting the oracle's retirement granularity — and must land before `gort-6ar.25`'s live
+  comparison and phase 2's TASK-2.9 can mean anything. Issue to be filed by the lead.)
 
 - [?] **TC-1.7: The boot gate can go red** (covers: TASK-1.11, TASK-1.12)
   **Steps:** run the gate against a deliberately broken build.

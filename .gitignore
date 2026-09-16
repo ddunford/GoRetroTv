@@ -23,6 +23,7 @@ node_modules/
 # Machine snapshots and recorded traces: reproducible, often large, and never reviewable
 /snapshots/
 /traces/
+/.artifacts/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

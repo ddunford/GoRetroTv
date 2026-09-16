@@ -84,6 +84,16 @@ invariant = "The Go module graph contains only the project module until a depend
 source = "docs/decisions/0001-scaffold.md § Dependencies"
 classification = "STATIC"
 arming = "ARMED"
-state = "pending"
-owner_task = "gort-87m.11"
-reason = "CI has a single-module assertion; promotion into a probed conformance rule is outstanding."
+state = "enforced"
+command = ["conformance/checkers/module_graph.py"]
+tooling = "go mod edit -json parses the module declaration without fetching packages; any nonempty require set changes the single-module graph and fails deterministically."
+subjects = ["go.mod"]
+coverage_detector = "module-file-missing"
+probes = [
+  { name = "dependency-added", detectors = ["external-module"] },
+  { name = "module-file-removed", detectors = ["module-file-missing"] },
+]
+halves = [
+  { half = "the module declaration exists", held_by = "probe", probe = "module-file-removed", detectors = ["module-file-missing"] },
+  { half = "the module declares no external requirements", held_by = "probe", probe = "dependency-added", detectors = ["external-module"] },
+]

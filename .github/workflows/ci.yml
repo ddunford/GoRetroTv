@@ -51,22 +51,6 @@ jobs:
           go version
           go env GOTOOLCHAIN GOFLAGS
 
-      - name: The module still has no external dependencies
-        # ADR 0001 records this as a floor rather than a vow: a later phase that genuinely needs a
-        # dependency should take one. What it rules out is acquiring dependencies by default,
-        # before a requirement names them - and the way that happens is somebody running `go get`
-        # and nobody noticing. Adding one deliberately means editing this step, which is the point.
-        run: |
-          set -euo pipefail
-          modules="$(go list -m all)"
-          count="$(printf '%s\n' "$modules" | grep -c . || true)"
-          if [ "$count" -ne 1 ]; then
-            echo "::error::the module graph gained a dependency; ADR 0001 records this tree as standard-library only"
-            printf '%s\n' "$modules"
-            exit 1
-          fi
-          printf 'module graph: %s\n' "$modules"
-
       - name: gofmt
         run: |
           set -euo pipefail

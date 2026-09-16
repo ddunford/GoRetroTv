@@ -166,10 +166,32 @@ cmd_hooks() {
     ok "hooks armed: core.hooksPath=.githooks, ${#HOOK_NAMES[@]} shims present, beads delegation intact"
 }
 
+# AGENTS.md must stay a symlink to CLAUDE.md, so Codex CLI and Claude Code read the same
+# instructions. This is asserted rather than trusted because the failure is silent: `bd setup codex`
+# and similar generators WRITE to AGENTS.md, and replacing the symlink with a real file resumes the
+# drift with no error. That is not hypothetical -- AGENTS.md previously held three copies of the
+# beads block and none of this project's actual instructions, so an agent reading it learned nothing
+# about the oracle, the firmware, or why changing what a read returns is dangerous.
+cmd_agentsdoc() {
+    if [[ ! -L AGENTS.md ]]; then
+        die "AGENTS.md is not a symlink. Codex CLI reads it and Claude Code reads CLAUDE.md, so they
+have drifted apart -- and a generator that rewrote it would have said nothing.
+  fix: rm -f AGENTS.md && ln -s CLAUDE.md AGENTS.md
+  then re-apply anything the generator meant to add to CLAUDE.md instead."
+    fi
+    local target
+    target="$(readlink AGENTS.md)"
+    [[ "$target" == "CLAUDE.md" ]] \
+        || die "AGENTS.md points at '$target', not CLAUDE.md. fix: rm -f AGENTS.md && ln -s CLAUDE.md AGENTS.md"
+    [[ -f CLAUDE.md ]] || die "AGENTS.md is a symlink to CLAUDE.md, which does not exist"
+    ok "AGENTS.md -> CLAUDE.md: Codex and Claude read the same instructions"
+}
+
 cmd_lint() {
     # Folded in so the hook assertion runs wherever checks run, rather than depending on somebody
     # remembering a verb that only matters when it fails.
     cmd_hooks
+    cmd_agentsdoc
     make vet
     # `go install` puts it in GOPATH/bin, which is not on PATH in a plain non-login shell. Looking
     # there before giving up is the difference between running the linters and reporting a pass
@@ -224,6 +246,7 @@ Building and checking
   test           Run the tests under the race detector
   lint           Hook check, go vet and golangci-lint (fails if the linter is absent)
   hooks          Assert the git hooks are armed and delegating to beads
+  agents         Assert AGENTS.md still symlinks to CLAUDE.md (Codex and Claude read one file)
   fmt            Format the tree
   vuln           Check against the Go vulnerability database
   clean          Remove bin/ and stop the stack (asks first)
@@ -248,6 +271,7 @@ main() {
         test)    cmd_test "$@" ;;
         lint)    cmd_lint "$@" ;;
         hooks)   cmd_hooks "$@" ;;
+        agents)  cmd_agentsdoc "$@" ;;
         fmt)     cmd_fmt "$@" ;;
         vuln)    cmd_vuln "$@" ;;
         clean)   cmd_clean "$@" ;;

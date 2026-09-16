@@ -2,6 +2,10 @@
 
 > A Pace 2500N Sky Digibox (1998–2002) running its own firmware, in Go, with a browser for a screen.
 
+*This file is the project's instructions for **every** agent. `AGENTS.md` is a symlink to it, so
+Codex CLI and Claude Code read the same text and cannot drift apart. Where something is specific to
+one tool it says so and names the equivalent for the others.*
+
 ## Stack
 
 | Layer | Technology |
@@ -12,7 +16,9 @@
 | Persistence | Files only — NVRAM image, machine snapshots, recorded traces |
 | Video (later phase) | ffmpeg via CGo or a subprocess — not in v1 |
 
-Scaffolds: `/go-scaffold`. Agent: `/go-engineer`. Standards: `/go-testing`.
+Scaffolds: `/go-scaffold`. Agent: `/go-engineer`. Standards: `/go-testing`. *(Claude Code skills. An
+agent without them builds to the conventions in this file and the recorded decisions in
+`plan/module-decisions.md` and `docs/decisions/`, which is where the binding parts live anyway.)*
 
 ## Architecture Decisions
 
@@ -74,10 +80,12 @@ modelling any device.** This section is only for patterns discovered while build
 
 ## The emulator
 
-**Load the `digibox-emulator` skill before writing the CPU core, modelling a peripheral, reading the
-firmware's disassembly, feeding it DVB sections, or touching the oracle.** The NEC VR4111 and MIPS16
-reference, the firmware's device conventions, the instrument suite and the measurement rules are
-there rather than here, because only some sessions need them — and each rule in it cost the
+**Read the emulator reference before writing the CPU core, modelling a peripheral, reading the
+firmware's disassembly, feeding it DVB sections, or touching the oracle.** In Claude Code that is the
+`digibox-emulator` skill; every other agent reads the same text at
+`docs/reference/digibox-emulator-skill.md`. It is not optional in either case. The NEC VR4111 and
+MIPS16 reference, the firmware's device conventions, the instrument suite and the measurement rules
+are there rather than here, because only some sessions need them — and each rule in it cost the
 predecessor real time.
 
 The oracle is `reference/digibox-boot.html`. It is a **measuring instrument, not a sibling
@@ -95,16 +103,25 @@ the record is silent the answer is to measure.
 - **Every instrument asserts its own subject.** A census that cannot find the thing it is counting
   is a harness failure, never a count of zero — this rule is written in blood upstream.
 - **Git hooks:** `.githooks/pre-commit` (credential guard + bd mirror check); `git config
-  core.hooksPath .githooks`.
+  core.hooksPath .githooks`. That setting is LOCAL config a clone does not carry, and **git runs no
+  hooks at all, silently and with exit 0, when it points at a directory that does not exist** — so a
+  fresh clone is unguarded and looks identical to a guarded one. `./ctl.sh hooks` asserts it, and
+  `./ctl.sh lint` runs that assertion.
 - **Naming:** no phase numbers, ticket ids or plan metadata in code.
+- **Shell commands must be non-interactive.** `cp`, `mv` and `rm` are aliased to `-i` on some
+  systems, which hangs an agent for ever on a y/n prompt nobody can answer: use `cp -f`, `mv -f`,
+  `rm -f`, `rm -rf`. Likewise `-o BatchMode=yes` for `ssh`/`scp` and `-y` for `apt-get`. The same
+  failure wearing its other hat: **never read an exit code through a pipe** (`cmd | tail` gives you
+  `tail`'s status), and never `pgrep`/`pkill -f` a pattern your own command line contains.
 
 ## Tracker
 
 Open work: **beads (`bd`)** — `bd ready` / `bd blocked` are the single source of truth. No
 `plan/TODO.md`. Claim before building (`bd update --claim`), close with a verification reason
 (`bd close --reason`). Phase-file `[ ]` / `[x]` boxes are a **generated mirror**
-(`scripts/bd-mirror-phases.py`) and are never hand-ticked. Execute with `/team-execute`, stating
-scope in plain words.
+(`scripts/bd-mirror-phases.py`) and are never hand-ticked. In Claude Code, execute with
+`/team-execute`, stating scope in plain words; any agent can work the same graph directly with the
+`bd` commands above.
 
 ## Out of Scope (v1)
 

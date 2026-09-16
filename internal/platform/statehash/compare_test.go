@@ -421,3 +421,56 @@ func TestTheEmitterAndTheReaderAgreeOnTheFormat(t *testing.T) {
 		t.Fatalf("the first checkpoint is at %s, want 0", got)
 	}
 }
+
+// THE POSITIVE STRADDLE CASE. Two machines that agree, both stepping over the same boundaries
+// because both retire a branch and its delay slot together, must compare EQUAL.
+//
+// This is the requirement the window pairing exists to meet, and it is stated as its own test
+// because "does not report a divergence" is a different claim from "reports a different kind of
+// divergence" - and for most of this package's life only the second was true. A comparison that
+// fired here would fire on every live oracle-versus-port run that was working perfectly, which is
+// the one failure shape worse than missing a real divergence: it teaches people to ignore the
+// instrument.
+//
+// It also fixes WHICH side conforms. The oracle is the reference and the port conforms to it, so
+// the Go emitter must observe only where the oracle can - never between a branch and its delay
+// slot. The alternative, moving the oracle's sampling to the exact boundary, would sample at a
+// point where this hash is INCOMPLETE: the pending branch target and the MIPS16 delay flag are
+// real machine state that the hash does not fold in, so two machines with different pending
+// branches would hash equal there. Covering them would mean widening the hash, which invalidates
+// both emitters, the pinned vectors and the recorded fixture, for a reason unrelated to what the
+// hash measures.
+func TestTwoAgreeingMachinesThatStraddleTheSameBoundariesCompareEqual(t *testing.T) {
+	t.Parallel()
+	// Windows 1 and 3 are straddled by BOTH, exactly as two faithful implementations produce.
+	const body = "0 0x00000001\n1001 0x0000BEEF\n2000 0x00000003\n3001 0x0000AAAA\n4000 0x00000005\n"
+	a := read(t, "go", "GRTV-CHECKPOINTS 1 interval=1000\n"+body+"END 5 4000\n")
+	b := read(t, "oracle", "GRTV-CHECKPOINTS 1 interval=1000\n"+body+"END 5 4000\n")
+
+	// Guard the subject: if nothing here straddles, this test proves nothing.
+	straddles := 0
+	for _, cp := range a.Checkpoints {
+		if cp.ICount%a.Interval != 0 {
+			straddles++
+		}
+	}
+	if straddles != 2 {
+		t.Fatalf("harness failure: %d checkpoints straddle a boundary, want 2", straddles)
+	}
+
+	got, err := statehash.Compare(a, b)
+	if err != nil {
+		t.Fatalf("Compare: %v", err)
+	}
+	if !got.Agreed() {
+		t.Fatalf("two agreeing machines that straddle the same boundaries must compare equal, "+
+			"got: %s", got)
+	}
+	if got.Cadence != 0 {
+		t.Fatalf("%d windows were reported incomparable; both machines sampled every window at "+
+			"the same instruction count", got.Cadence)
+	}
+	if got.Compared != 5 {
+		t.Fatalf("%d windows agreed, want all 5", got.Compared)
+	}
+}

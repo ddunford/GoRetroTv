@@ -63,6 +63,27 @@ func TestTheRecordedOracleStreamIsARealBoot(t *testing.T) {
 		t.Fatalf("the recorded stream reaches instruction %d; a cold boot is about 447,000,000, "+
 			"so this stopped somewhere in the middle of one", reached)
 	}
+	// It must CONTAIN straddled boundaries, or every claim below about straddles being handled
+	// is made against a stream that has none. The oracle's MIPS32 path retires a branch and its
+	// delay slot together and steps over about one boundary in ten; if that ever stops being
+	// true of this fixture, the tests that rely on it are examining nothing.
+	straddles := 0
+	for _, cp := range s.Checkpoints {
+		if cp.ICount%s.Interval != 0 {
+			straddles++
+		}
+	}
+	if straddles == 0 {
+		t.Fatal("harness failure: no checkpoint in the recorded stream straddles a boundary, so " +
+			"every test here that claims to exercise the straddle is examining nothing")
+	}
+	if straddles < len(s.Checkpoints)/20 {
+		t.Fatalf("only %d of %d checkpoints straddle a boundary; the measured rate is about one "+
+			"in ten, so this stream is not the shape the straddle tests assume",
+			straddles, len(s.Checkpoints))
+	}
+	t.Logf("%d of %d checkpoints straddle a boundary", straddles, len(s.Checkpoints))
+
 	// The machine at reset: DRAM zeroed, registers zeroed, PC at the reset vector. If this
 	// changes, either the oracle's hash changed or its reset did, and both are worth knowing.
 	first := s.Checkpoints[0]
@@ -130,9 +151,14 @@ func TestTheComparisonWorksOnARealOracleStream(t *testing.T) {
 		if want := len(s.Checkpoints) - 1; got.Compared != want {
 			t.Fatalf("%d windows agreed, want %d - one short of the whole boot", got.Compared, want)
 		}
+		// THE POSITIVE STRADDLE CASE, on real data. This stream straddles 477 boundaries, and
+		// two machines that agree must compare EQUAL across every one of them rather than
+		// merely fail in a different way. A comparison that fired here would fire on every
+		// live oracle-versus-port run that was working correctly.
 		if got.Cadence != 0 {
-			t.Fatalf("%d windows were not comparable; a stream against a copy of itself samples "+
-				"every window at the same instruction count", got.Cadence)
+			t.Fatalf("%d of the stream's straddled boundaries were reported as incomparable "+
+				"against a machine that sampled them identically; two agreeing machines must "+
+				"compare equal across a straddle", got.Cadence)
 		}
 		t.Logf("caught: %s", got)
 	})

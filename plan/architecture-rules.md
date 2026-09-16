@@ -112,3 +112,8 @@ rule records its actual tool and rationale in `conformance/rules.toml`: Go's AST
 syntax, `go list` for import edges, the real config loader and Docker Compose for binding, Go's
 JSON test stream for device contracts, and a built/exported Docker image for firmware containment.
 No architecture-only package dependency was needed.
+
+Rule changes are recorded by the staged-digest commit guard in
+`scripts/conformance/rule-guard.sh`. It is an audit trail and speed bump. Forge branch protection
+and CODEOWNERS review are not configured here, so this local guard is not an independent approval
+boundary.

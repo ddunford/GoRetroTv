@@ -6,3 +6,7 @@ digest: 1aec2a390bc37f31226d2b812a4e7f527c7b9fb2b4319e08c0bd2ea09c608158
   when: 2026-09-16T21:25:54Z
    why: Bind recorded architecture decisions to checked rules and guard changes to the catalogue, harness, build configuration, CI, and commit hooks
 
+digest: c7454a8868a567de95d7a8c4a14a724e3de5376f36a2380a2cf3ca8be88ee036
+  when: 2026-09-16T21:30:24Z
+   why: Clarify that the local digest guard is an audit trail and forge review is not configured
+

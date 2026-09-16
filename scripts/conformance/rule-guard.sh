@@ -124,7 +124,7 @@ change to them is a change to an agreement, not a refactor. Two ways forward:
 
 This is a speed bump, not a boundary: it can be bypassed, and it is meant to make a
 rule change deliberate and attributable rather than impossible. The boundary is the
-CODEOWNERS review on these paths.
+A stronger boundary requires CODEOWNERS and branch protection on these paths.
 
 MSG
 exit 1

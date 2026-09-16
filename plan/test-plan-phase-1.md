@@ -98,7 +98,10 @@ a file, not read through a pipe). The real firmware is on this machine, so
   cold-boot streams p1-core recorded — run2 is a clean PREFIX of run1 over 4,613 checkpoints /
   461M instructions (run1 was left running to 4,934), every line canonical, both `END` trailers
   self-consistent, 4,934 distinct hashes so the hash is not constant. Automating that needs a
-  browser and belongs to the boot gate (TC-1.7).)
+  browser and belongs to the boot gate (TC-1.7). **Both limits are tracked as `gort-6ar.25`,
+  which blocks gate `gort-6ar.16`; when it lands — a committed oracle `?cp=` stream compared to a
+  Go stream, and the whole-machine vector pinned on both sides — TC-1.5 gets a third look and the
+  limits come off.**)
 
 - [?] **TC-1.6: The comparison localises an injected divergence** (covers: TASK-1.10, TASK-1.12)
   **Steps:** corrupt one register at instruction 4,500,000 in one stream.

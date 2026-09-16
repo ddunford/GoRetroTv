@@ -3,6 +3,7 @@ package bus_test
 import (
 	"encoding/binary"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -769,4 +770,93 @@ func TestValidAccessWidthsDoNotPanic(t *testing.T) {
 			b.Write(asicBase+0x74, size, 0x1234)
 		}()
 	}
+}
+
+// hexToken finds every 0x-prefixed run in a message.
+var hexToken = regexp.MustCompile(`0[xX][0-9a-fA-F]+`)
+
+// assertCanonicalAddresses fails unless every address in msg is in hexfmt's canonical form: 0x
+// followed by eight UPPER-case digits.
+//
+// It asserts its own subject — a message with no address in it cannot vouch for anything, so it
+// says so rather than passing.
+func assertCanonicalAddresses(t *testing.T, what, msg string) {
+	t.Helper()
+	found := hexToken.FindAllString(msg, -1)
+	if len(found) == 0 {
+		t.Fatalf("harness failure: %s produced no address to check, so this proves nothing "+
+			"about it: %q", what, msg)
+	}
+	for _, got := range found {
+		if got[:2] != "0x" {
+			t.Errorf("%s: %q is not 0x-prefixed, in %q", what, got, msg)
+			continue
+		}
+		digits := got[2:]
+		if digits != strings.ToUpper(digits) {
+			t.Errorf("%s: %q is lower case — the record is written upper case by roughly fifty "+
+				"to one, so a reader grepping for it will not find this. Message: %q",
+				what, got, msg)
+		}
+		if len(digits) != 8 {
+			t.Errorf("%s: %q is %d digits, not the canonical 8 — %q and %q are different map "+
+				"keys for one address. Message: %q", what, got, len(digits), "0x4", "0x00000004", msg)
+		}
+	}
+}
+
+// EVERY address this package shows a human must be in hexfmt's canonical form.
+//
+// This is the test whose absence let a lower-case address survive in the invalid-width panic: the
+// casing was invisible until something looked at the message, and nothing did. Fixing that one
+// instance would have left nine siblings in Attach untouched, so this covers the CLASS — drive
+// every refusal the package can produce and check the addresses in all of them.
+//
+// A refusal added later is covered the moment it is exercised here, which is the point: the guard
+// is over the messages, not over a list of nine call sites somebody has to remember to extend.
+func TestEveryAddressShownToAHumanIsCanonical(t *testing.T) {
+	t.Parallel()
+
+	occupied := func() *bus.Bus {
+		b := bus.New()
+		attach(t, b, dramKseg0, dramSize, newProbe("dram"))
+		return b
+	}
+
+	refusals := map[string]func() error{
+		"a nil device":            func() error { return bus.New().Attach(asicBase, asicSize, nil) },
+		"an unnamed device":       func() error { return bus.New().Attach(asicBase, asicSize, newProbe("")) },
+		"a duplicate name":        func() error { return occupied().Attach(asicBase, asicSize, newProbe("dram")) },
+		"a zero size":             func() error { return bus.New().Attach(asicBase, 0, newProbe("p")) },
+		"an address outside KSEG": func() error { return bus.New().Attach(0x00001000, 0x1000, newProbe("p")) },
+		"a region past the end":   func() error { return bus.New().Attach(0xBFFFF000, 0x2000, newProbe("p")) },
+		"an overlapping region":   func() error { return occupied().Attach(dramKseg1, dramSize, newProbe("other")) },
+	}
+	for name, refuse := range refusals {
+		name, refuse := name, refuse
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := refuse()
+			if err == nil {
+				t.Fatalf("harness failure: %s was accepted, so there is no message to check", name)
+			}
+			assertCanonicalAddresses(t, name, err.Error())
+		})
+	}
+
+	// The panics too, so one test owns the whole class in this package.
+	t.Run("the invalid-width panic", func(t *testing.T) {
+		t.Parallel()
+		b := occupied()
+		var got any
+		func() {
+			defer func() { got = recover() }()
+			b.Read(dramKseg0+0x1C, bus.Size(3))
+		}()
+		msg, ok := got.(string)
+		if !ok {
+			t.Fatalf("harness failure: expected a string panic, got %T: %v", got, got)
+		}
+		assertCanonicalAddresses(t, "the invalid-width panic", msg)
+	})
 }

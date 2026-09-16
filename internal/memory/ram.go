@@ -61,7 +61,7 @@ func NewRAM(name string, size uint32) (*RAM, error) {
 		return nil, fmt.Errorf("memory: RAM needs a name: it is the key in a machine snapshot")
 	}
 	if size == 0 || size%DirtyPageLen != 0 {
-		return nil, fmt.Errorf("memory: RAM size %#x must be a non-zero multiple of the %d-byte "+
+		return nil, fmt.Errorf("memory: RAM size %d must be a non-zero multiple of the %d-byte "+
 			"dirty page", size, DirtyPageLen)
 	}
 	return &RAM{

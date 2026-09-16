@@ -154,34 +154,34 @@ func New() *Bus {
 // Attaching the second window separately is therefore an overlap, and is refused.
 func (b *Bus) Attach(base, size uint32, d Device) error {
 	if d == nil {
-		return fmt.Errorf("bus: attach at %#08x: device is nil", base)
+		return fmt.Errorf("bus: attach at %s: device is nil", hexfmt.Addr(base))
 	}
 	name := d.Name()
 	if name == "" {
-		return fmt.Errorf("bus: attach at %#08x: device has no name, and the name is its key in "+
-			"a machine snapshot", base)
+		return fmt.Errorf("bus: attach at %s: device has no name, and the name is its key in "+
+			"a machine snapshot", hexfmt.Addr(base))
 	}
 	if _, taken := b.names[name]; taken {
-		return fmt.Errorf("bus: attach %q at %#08x: a device is already called %q, and a snapshot "+
-			"keyed by name could not tell them apart", name, base, name)
+		return fmt.Errorf("bus: attach %q at %s: a device is already called %q, and a snapshot "+
+			"keyed by name could not tell them apart", name, hexfmt.Addr(base), name)
 	}
 	if size == 0 {
-		return fmt.Errorf("bus: attach %q at %#08x: size is zero", name, base)
+		return fmt.Errorf("bus: attach %q at %s: size is zero", name, hexfmt.Addr(base))
 	}
 	phys, ok := Physical(base)
 	if !ok {
-		return fmt.Errorf("bus: attach %q at %#08x: not in KSEG0 or KSEG1, the only segments this "+
-			"machine addresses without a TLB", name, base)
+		return fmt.Errorf("bus: attach %q at %s: not in KSEG0 or KSEG1, the only segments this "+
+			"machine addresses without a TLB", name, hexfmt.Addr(base))
 	}
 	if uint64(phys)+uint64(size) > physSize {
-		return fmt.Errorf("bus: attach %q at %#08x: %#x bytes runs past the end of physical space "+
-			"at %#08x", name, base, size, uint32(physSize-1))
+		return fmt.Errorf("bus: attach %q at %s: %d bytes runs past the end of physical space "+
+			"at %s", name, hexfmt.Addr(base), size, hexfmt.Addr(physSize-1))
 	}
 	for _, r := range b.regions {
 		if phys < r.base+r.size && r.base < phys+size {
-			return fmt.Errorf("bus: attach %q at %#08x (physical %#08x..%#08x): already mapped by "+
-				"%q at physical %#08x..%#08x", name, base, phys, phys+size-1,
-				r.dev.Name(), r.base, r.base+r.size-1)
+			return fmt.Errorf("bus: attach %q at %s (physical %s): already mapped by %q at "+
+				"physical %s", name, hexfmt.Addr(base), hexfmt.Range(phys, phys+size-1),
+				r.dev.Name(), hexfmt.Range(r.base, r.base+r.size-1))
 		}
 	}
 

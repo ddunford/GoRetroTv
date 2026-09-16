@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 // Check describes how to exercise one bus.Device implementation.
@@ -288,7 +289,7 @@ func walk(path string, a, b reflect.Value) string {
 			for i := range x {
 				if x[i] != y[i] {
 					return at(fmt.Sprintf("%s[%d]", path, i),
-						fmt.Sprintf("%#02x vs %#02x", x[i], y[i]))
+						fmt.Sprintf("%s vs %s", hexfmt.Byte(x[i]), hexfmt.Byte(y[i])))
 				}
 			}
 			return at(path, "bytes differ")

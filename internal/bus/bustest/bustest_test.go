@@ -162,6 +162,18 @@ func TestSnapshotCatchesAForgottenField(t *testing.T) {
 	if !strings.Contains(err.Error(), "seq") {
 		t.Fatalf("the failure must name the forgotten field so it is actionable, got: %v", err)
 	}
+	// It must fail for the RIGHT reason. "err != nil and it mentions seq" is also satisfied by
+	// the coverage harness failure, which fires when the shared mutator stops driving seq - so
+	// this control would go on passing while examining nothing, which is the exact defect it
+	// exists to catch, one level up. Found by a QA audit that degraded the mutator and watched
+	// this test stay green.
+	if strings.Contains(err.Error(), "harness failure") {
+		t.Fatalf("this control must fail on the INCOMPLETE snapshot, not on a refusal to run "+
+			"the check at all: %v", err)
+	}
+	if !strings.Contains(err.Error(), "incomplete") {
+		t.Fatalf("the failure must be the completeness failure, got: %v", err)
+	}
 	t.Logf("caught: %v", err)
 }
 

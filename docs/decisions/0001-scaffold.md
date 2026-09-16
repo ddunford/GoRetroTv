@@ -8,15 +8,29 @@
 `plan/phase-1-foundation.md` TASK-1.1 calls for the module layout, `ctl.sh`, Dockerfile,
 docker-compose and Makefile. Two constraints from outside the plan shaped the result.
 
-**The toolchain is fixed at Go 1.22.2.** `CLAUDE.md` pins "Go 1.22+", the host has 1.22.2, and this
-machine cannot fetch a newer one — building against a `go 1.25` directive fails with
-`download go1.25 for linux/amd64: toolchain not available`. That is not a preference; it is the
-ceiling everything here builds under.
+**The toolchain was believed to be fixed at Go 1.22.2, and that was wrong.** `CLAUDE.md` pins
+"Go 1.22+" and the host's own Go is 1.22.2 (Ubuntu's `golang-1.22-go`). The scaffold concluded a
+newer one could not be fetched, because a test build against a `go 1.25` directive failed with
+`download go1.25 for linux/amd64: toolchain not available`.
 
-**The house scaffold's default dependency set does not fit under that ceiling.** `chi/v5@latest`
-resolves to v5.3.2, which requires Go ≥ 1.23. The same two-major support policy governs the OTel
-SDK, testcontainers-go and sentry-go. Adopting them would mean pinning each to a walked-back version
-and re-walking them on every update.
+**That failure was the test's fault, not the host's.** `go1.25` is not a release — toolchain names
+carry a patch component (`go1.25.0`, `go1.27.1`). Since Go 1.21 toolchains are ordinary modules
+served by `proxy.golang.org`, which this machine reaches, so `GOTOOLCHAIN=go1.27.1 go version`
+downloads and runs fine. Measured afterwards: the whole tree builds, vets and passes `-race` under
+1.27.1 with `go.mod` untouched, and `govulncheck` goes from **29 called standard-library
+vulnerabilities to zero**. The ceiling was never real.
+
+So the Go version is a live choice, tracked as `gort-4sx.15`, and **the decision below stands on
+its second justification only** — which was always the stronger one.
+
+**The house scaffold's default dependency set buys nothing this project's conventions want.**
+`CLAUDE.md` already specifies "Go's own test framework", `plan/module-decisions.md` already records
+"No Sentry" and no database, queue or cache. So testify, the OTel SDK, testcontainers-go and
+sentry-go were rejected on their merits rather than on the toolchain, and that reasoning is
+unaffected by the correction above. `chi` is the one genuine casualty: it was declined partly
+because `chi/v5@latest` needs Go ≥ 1.23, and on a current toolchain that objection disappears —
+leaving a free choice between it and Go 1.22's own method-and-wildcard `ServeMux`, which has so far
+been sufficient.
 
 ## Decision
 
@@ -56,8 +70,20 @@ directive above 1.22 fails at once rather than hanging on a download that cannot
 
 - **Walk every dependency back to a Go 1.22-compatible version.** Rejected: it buys router sugar and
   assertion helpers this project's own conventions say it does not want, and the walk-back has to be
-  repeated by every future agent who runs `go get`.
-- **Upgrade the host's Go.** Not available from inside this environment; `dl.google.com` is
-  unreachable. Worth doing outside it, and it is the trigger above.
+  repeated by every future agent who runs `go get`. Moot now in any case — see below.
+- **Upgrade the host's Go.** Recorded here as "not available from inside this environment, because
+  `dl.google.com` is unreachable", and that was **wrong on both counts**. Toolchains come from the
+  module proxy, not `dl.google.com`, and the proxy is reachable; the original test asked for a
+  version string that does not exist. No upgrade of the *host's* Go is needed at all — a `go`
+  directive plus dropping `GOTOOLCHAIN=local` is the whole change. Tracked as `gort-4sx.15`, a
+  precondition of publishing, because it takes the tree from 29 called standard-library
+  vulnerabilities to zero.
+
+  **The lesson worth keeping is the shape of the mistake, not the fact of it.** A single failed
+  command was read as a property of the environment and written into an architecture record, where
+  it then justified a decision and was repeated to the user twice. The failing command was never
+  re-examined — and its error message, `download go1.25 …: toolchain not available`, names a version
+  that was never going to exist. A constraint discovered once should be re-tested before it becomes
+  a premise, especially when it is load-bearing.
 - **Root layout with a single binary.** Rejected: TASK-1.10's `oraclecmp` is a second binary that
   must share the checkpoint encoding, and two modules would mean two definitions of it.

@@ -11,7 +11,7 @@ due to exist.
 | Rule | Invariant | Source decision | Class | Arming | State |
 |---|---|---|---|---|---|
 | `ARCH-DEV-1` | Developer surfaces bind only to loopback | Deployment and access | STATIC | ARMED | **enforced** |
-| `ARCH-SNAP-1` | Every device state field is captured by Snapshot and Restore | The core patterns | STATIC | SELF-ARMING | pending — gort-87m.3 |
+| `ARCH-SNAP-1` | Every device state field is captured by Snapshot and Restore | The core patterns | STATIC | SELF-ARMING | **enforced** |
 | `ARCH-DET-1` | CPU and devices use instruction time, with no wall clock or goroutine in the instruction loop | The core patterns | STATIC | SELF-ARMING | pending — gort-87m.4 |
 | `ARCH-LAYER-1` | Core and device packages do not import outward transport packages | Application structure | STATIC | SELF-ARMING | pending — gort-87m.5 |
 | `ARCH-FW-1` | Firmware bytes are absent from git and built images | Deployment and access | STATIC | ARMED | pending — gort-87m.6 |

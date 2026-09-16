@@ -40,9 +40,23 @@ invariant = "Every device state field is captured by Snapshot and Restore"
 source = "plan/module-decisions.md § The core patterns"
 classification = "STATIC"
 arming = "SELF-ARMING"
-state = "pending"
-owner_task = "gort-87m.3"
-reason = "The Device contract exists; the checker and its negative control have not been added."
+state = "enforced"
+command = ["conformance/checkers/device_snapshot.py"]
+tooling = "Go AST census finds every production type with the hardware method quartet; Go's JSON test report proves each exact type's bustest.CheckSnapshot test ran and passed."
+subjects = ["internal/bus/device.go", "internal/bus/bustest/bustest.go", "internal/memory", "conformance/checkers/devicecensus/main.go"]
+coverage_detector = "device-census-empty"
+probes = [
+  { name = "snapshot-methods-omitted", detectors = ["device-missing-snapshot"] },
+  { name = "contract-test-omitted", detectors = ["device-missing-contract-test"] },
+  { name = "field-omitted", detectors = ["device-contract-failed"] },
+  { name = "device-census-removed", detectors = ["device-census-empty"] },
+]
+halves = [
+  { half = "the Device contract and census subjects exist and find real devices", held_by = "probe", probe = "device-census-removed", detectors = ["device-census-empty"] },
+  { half = "every hardware-shaped type implements Snapshot and Restore", held_by = "probe", probe = "snapshot-methods-omitted", detectors = ["device-missing-snapshot"] },
+  { half = "every hardware-shaped type has a bustest contract test", held_by = "probe", probe = "contract-test-omitted", detectors = ["device-missing-contract-test"] },
+  { half = "each contract test covers all state fields and passes", held_by = "probe", probe = "field-omitted", detectors = ["device-contract-failed"] },
+]
 
 [[rule]]
 id = "ARCH-DET-1"

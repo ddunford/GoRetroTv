@@ -13,7 +13,7 @@
   **Steps:** probe — bind the gdb stub to `0.0.0.0`.
   **Expected:** ARCH-DEV-1 fails. This is the rule that matters most: the demo host is public.
 
-- [ ] **TC-1a.3: A device missing Snapshot is refused** (covers: TASK-1a.3)
+- [x] **TC-1a.3: A device missing Snapshot is refused** (covers: TASK-1a.3)
   **Steps:** probe — add a device with unexported state and no serialisation.
   **Expected:** ARCH-SNAP-1 fails, naming the type and the field.
 

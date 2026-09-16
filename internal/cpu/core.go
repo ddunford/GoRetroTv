@@ -10,15 +10,17 @@ import (
 
 // Core owns the registers and current instruction address of one deterministic machine.
 type Core struct {
-	GPR [32]uint32
-	PC  uint32
-	HI  uint32
-	LO  uint32
-	ISA bool
+	GPR  [32]uint32
+	PC   uint32
+	HI   uint32
+	LO   uint32
+	ISA  bool
+	COP0 [32]uint32
 
 	delayed        branch
 	reserved       uint32
 	hasReservation bool
+	timerPending   bool
 
 	bus *bus.Bus
 }
@@ -36,6 +38,9 @@ func New(b *bus.Bus, pc uint32) *Core { return &Core{PC: pc, bus: b} }
 // incomplete machine: the branch has retired, but its delay slot has not.
 func (c *Core) HasPendingBranch() bool { return c.delayed.armed }
 
+// TimerPending reports the Count/Compare request until software writes Compare.
+func (c *Core) TimerPending() bool { return c.timerPending }
+
 // Step retires one instruction or returns a visible halt error without advancing PC.
 func (c *Core) Step() error {
 	if c.ISA {
@@ -45,6 +50,10 @@ func (c *Core) Step() error {
 		return fmt.Errorf("cpu: unaligned MIPS32 PC %s", hexfmt.Addr(c.PC))
 	}
 	word := c.bus.Read(c.PC, bus.Word)
+	c.COP0[9]++
+	if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
+		c.timerPending = true
+	}
 	effect, err := c.execute32(word)
 	if err != nil {
 		return fmt.Errorf("cpu: %s at %s: %w", hexfmt.Word(word), hexfmt.Addr(c.PC), err)

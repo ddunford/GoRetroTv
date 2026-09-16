@@ -153,7 +153,17 @@ func (c *Core) execute32(w uint32) (branch, error) {
 		}
 		return branchTo(true), nil
 	case 16:
-		return branch{}, fmt.Errorf("COP0 instruction before COP0 implementation")
+		switch rs {
+		case 0:
+			c.set(rt, c.COP0[rd])
+		case 4:
+			c.COP0[rd] = r[rt]
+			if rd == 11 {
+				c.timerPending = false
+			}
+		default:
+			return branch{}, fmt.Errorf("unsupported COP0 operation %d", rs)
+		}
 	case 32, 33, 35, 36, 37, 40, 41, 43, 48, 56:
 		ea := r[rs] + simm
 		switch op {

@@ -36,6 +36,14 @@ jobs:
       - name: Run architecture conformance
         run: ./ctl.sh conformance --classification STATIC
 
+  firmware-image:
+    name: firmware absent from runtime image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and inspect the runtime image
+        run: ./ctl.sh conformance --classification IMAGE
+
   check:
     name: vet, lint, test, build
     runs-on: ubuntu-latest

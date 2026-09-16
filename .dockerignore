@@ -1,24 +1,11 @@
+# The firmware is mounted at runtime. It must never be part of a build context.
+firmware/*.bin
+.env
+.env.local
+.env.*.local
 .git
-.github
 .beads
-.claude
-.codex
-.agents
-.research
-*.md
-docs/
-plan/
-reference/
-tools/
-web/
-scripts/
-.golangci.yml
-Dockerfile
-.dockerignore
-bin/
-snapshots/
-traces/
-
-# THE FIRMWARE IS NOT REDISTRIBUTABLE. It must never be baked into an image; it is supplied to a
-# running container as a mounted volume. See firmware/MANIFEST.md.
-firmware/
+snapshots
+traces
+bin
+dist

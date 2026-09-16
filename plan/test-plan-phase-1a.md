@@ -26,7 +26,7 @@
   **Steps:** probe — import `internal/web` from a device.
   **Expected:** ARCH-LAYER-1 fails.
 
-- [ ] **TC-1a.6: Firmware in the tree is refused** (covers: TASK-1a.6)
+- [x] **TC-1a.6: Firmware in the tree is refused** (covers: TASK-1a.6)
   **Steps:** probe — commit a file with the flash image's magic.
   **Expected:** ARCH-FW-1 fails. Not redistributable is a licence fact, not a preference.
 

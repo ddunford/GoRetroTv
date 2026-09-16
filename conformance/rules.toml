@@ -6,7 +6,7 @@ task_source = "beads"
 # A closed task can still own a recorded decision. The gate checks that the task exists.
 task_liveness = "exists"
 mirror = "scripts/conformance/mirror-rules-index.py"
-covered_classifications = ["STATIC"]
+covered_classifications = ["STATIC", "IMAGE"]
 
 [[rule]]
 id = "ARCH-DEV-1"
@@ -104,11 +104,23 @@ halves = [
 id = "ARCH-FW-1"
 invariant = "Firmware bytes are absent from git and built images"
 source = "plan/module-decisions.md § Deployment and access"
-classification = "STATIC"
+classification = "IMAGE"
 arming = "ARMED"
-state = "pending"
-owner_task = "gort-87m.6"
-reason = "Git and image checks can be written now, but their detectors and probes have not been added."
+state = "enforced"
+command = ["conformance/checkers/firmware_image.py"]
+tooling = "The checker scans tracked files against manifest digests and the measured U202 magic, then builds and exports the actual runtime image through Docker; source intent alone cannot prove image contents."
+subjects = ["Dockerfile", ".dockerignore", "firmware/MANIFEST.md"]
+coverage_detector = "firmware-subject-missing"
+probes = [
+  { name = "flash-in-repository", detectors = ["firmware-in-repository"] },
+  { name = "flash-in-image", detectors = ["firmware-in-image"] },
+  { name = "dockerfile-removed", detectors = ["firmware-subject-missing"] },
+]
+halves = [
+  { half = "image build and manifest subjects exist", held_by = "probe", probe = "dockerfile-removed", detectors = ["firmware-subject-missing"] },
+  { half = "tracked files carry no firmware image", held_by = "probe", probe = "flash-in-repository", detectors = ["firmware-in-repository"] },
+  { half = "the built runtime image carries no firmware image", held_by = "probe", probe = "flash-in-image", detectors = ["firmware-in-image"] },
+]
 
 [[rule]]
 id = "ARCH-PLATFORM-1"

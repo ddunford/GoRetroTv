@@ -123,6 +123,14 @@ Open work: **beads (`bd`)** — `bd ready` / `bd blocked` are the single source 
 `/team-execute`, stating scope in plain words; any agent can work the same graph directly with the
 `bd` commands above.
 
+**If `bd prime` was not injected for you at session start, RUN IT YOURSELF BEFORE ANYTHING ELSE** —
+then `bd ready`. Claude Code injects it via a `SessionStart` hook. Codex CLI runs the same hook from
+`.codex/hooks.json`, **but only once you have approved it in the startup hooks review**, and never
+in non-interactive `codex exec` — so do not assume it happened. If you have not seen the ready
+frontier and the `bd remember` notes, you have not been primed. Those notes carry most of what this
+project learned the hard way, several findings of which cost a day each. Details and how to re-test
+after a Codex update: `.codex/README.md`.
+
 ## Out of Scope (v1)
 
 MPEG-2 video and the video plane (phase: Video) · listings reconstruction from scanned magazines

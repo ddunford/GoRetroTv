@@ -146,12 +146,41 @@ running while a half-fixed one looks live. Nothing operational referenced this f
 mentions anywhere point at `scripts/check-digibox-boot.mjs`, a path it had not occupied for some time,
 which is its own evidence of how long it had been unmaintained.
 
+## Three assets this repository does not have
+
+`reference/digibox-boot.html` references `digibox/sky-huffman.js`, `digibox/listings.json` and
+`digibox/skyuk.dict`. **None of them is present here.** They are harmless to the boot and fatal to a
+gate: anything that keys on console errors — as the retired gate's "no uncaught page errors" check
+did — goes red for a reason nobody can act on, and a gate that fails for an unactionable reason is
+one people learn to ignore.
+
+Handle it deliberately, and write down which way you chose: serve the three, tolerate their absence
+by name, or do not key on console errors at all. Discovering them later as noise is the outcome to
+avoid. `?si=0` already avoids the broadcast path that wants the listings pair, so the decision is
+mostly about `sky-huffman.js`.
+
+## The recipe that is known to work
+
+Proved while adding the checkpoint emitter (TASK-1.9), so it does not need rediscovering: serve
+`reference/` **together with the two `.bin` images** on a private loopback port and drive it with the
+plugin Playwright MCP, with `?si=0` on the URL. The Node `playwright` package is not resolvable in
+this environment; the plugin MCP is a different thing and does work. Both facts are true at once,
+and conflating them is how someone concludes the browser cannot be driven at all.
+
+**The oracle is deterministic with `?si=0`** — two cold boots produced byte-identical checkpoint
+streams over 461 million instructions. That is what makes a boot gate's numbers stable enough to
+assert on, and it is **not** established with the broadcast on. Do not build a gate that depends on
+a broadcasting box.
+
 ## What a replacement must do
 
 For whoever builds the oracle harness (TASK-1.9's checkpoint emitter needs driving, and TASK-1.11
 needs a boot gate):
 
 - Serve `reference/digibox-boot.html` with the firmware images as siblings, and honour `?si=0`.
+- **Anchor every baseline on a number the record states independently** — `docs/reference/digibox-emulation.md`
+  and the emulator skill — and never on the page's own self-report. A self-reported baseline agrees
+  with itself no matter what changed, which is a gate that cannot fail by construction.
 - Wait on the NVRAM array, not on the Run button; read NVRAM **before** booting.
 - Pick the ceiling from the warm/cold determination, never a single number.
 - Wait for BGLOAD to have run *and then* stopped, tracking the peak — never just a plateau.

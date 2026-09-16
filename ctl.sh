@@ -107,6 +107,14 @@ cmd_health() {
     die "unhealthy: $HEALTH_URL did not answer within ${tries}s"
 }
 
+cmd_gate() {
+    # The boot gate: start the real build on the real firmware and assert it comes up. Unit tests
+    # cannot see a model that runs for ever doing something plausible; only starting it can.
+    # It refuses rather than skips when the firmware is absent, so it can never wear the colour of
+    # a pass without having checked anything.
+    ./tools/boot-gate.sh "$@"
+}
+
 cmd_test() { make test-race; }
 
 # The five hooks git must be running, and the beads hooks each one delegates to.
@@ -209,6 +217,7 @@ Running
   status         Compose state plus a health probe
   logs [n]       Follow the container log (default: last 100 lines)
   health         Probe the health endpoint and print what it says
+  gate           Boot gate: build, verify firmware, listen, /health, graceful stop
 
 Building and checking
   build          Build every binary into bin/
@@ -235,6 +244,7 @@ main() {
         status)  cmd_status "$@" ;;
         logs)    cmd_logs "$@" ;;
         health)  cmd_health "$@" ;;
+        gate)    cmd_gate "$@" ;;
         test)    cmd_test "$@" ;;
         lint)    cmd_lint "$@" ;;
         hooks)   cmd_hooks "$@" ;;

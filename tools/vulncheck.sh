@@ -4,7 +4,7 @@
 # WHY IT IS NOT SIMPLY "govulncheck reports nothing". This project has no external dependencies
 # (docs/decisions/0001-scaffold.md), so the standard library is the whole supply-chain surface --
 # and the toolchain is pinned at Go 1.22 because the host cannot fetch a newer one. Go 1.22 is out
-# of support, and 25 of the 29 vulnerabilities our code currently reaches are fixed only in 1.23 or
+# of support, and 26 of the 32 vulnerabilities our code currently reaches are fixed only in 1.23 or
 # later. A plain `govulncheck` step would therefore be red on every run for ever, with nothing any
 # committer could do about it, and a gate that is permanently red is one people stop reading. That
 # is the same decoration failure as a gate that is permanently green, arrived at from the other

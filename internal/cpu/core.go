@@ -6,6 +6,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
+	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
 
 // Core owns the registers and current instruction address of one deterministic machine.
@@ -44,6 +45,15 @@ func (c *Core) HasPendingBranch() bool { return c.delayed.armed }
 // TimerPending reports the Count/Compare request until software writes Compare.
 func (c *Core) TimerPending() bool { return c.timerPending }
 
+// State returns the register portion of the one shared checkpoint hash.
+func (c *Core) State() statehash.State {
+	isa := uint8(0)
+	if c.ISA {
+		isa = 1
+	}
+	return statehash.State{PC: c.PC, ISA: isa, HI: c.HI, LO: c.LO, GPR: c.GPR, COP0: c.COP0}
+}
+
 // Interrupt raises one external IP line. A device clears its physical line by acknowledging it;
 // this core consumes the requested edge only when Status allows delivery.
 func (c *Core) Interrupt(ip uint8) {
@@ -55,9 +65,13 @@ func (c *Core) Interrupt(ip uint8) {
 
 // Step retires one instruction or returns a visible halt error without advancing PC.
 func (c *Core) Step() error {
-	c.COP0[9]++
-	if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
-		c.timerPending = true
+	// The oracle retires a MIPS32 branch and its slot in one loop iteration and ticks Count
+	// once for that pair. Match that measured behaviour at checkpoints; MIPS16 slots tick twice.
+	if !c.delayed.armed || c.ISA {
+		c.COP0[9]++
+		if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
+			c.timerPending = true
+		}
 	}
 	if !c.delayed.armed {
 		c.serviceInterrupt()

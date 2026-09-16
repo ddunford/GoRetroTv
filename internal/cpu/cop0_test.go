@@ -2,6 +2,28 @@ package cpu_test
 
 import "testing"
 
+func TestCountMatchesOracleMIPS32BranchPair(t *testing.T) {
+	c, _ := machine(t, ri(4, 0, 0, 2), 0, 0, 0)
+	if err := c.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if c.COP0[9] != 1 {
+		t.Fatalf("branch Count=%d", c.COP0[9])
+	}
+	if err := c.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if c.COP0[9] != 1 {
+		t.Fatalf("slot Count=%d; oracle ticks a MIPS32 pair once", c.COP0[9])
+	}
+	if err := c.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if c.COP0[9] != 2 {
+		t.Fatalf("target Count=%d", c.COP0[9])
+	}
+}
+
 func mtc0(rt, rd uint32) uint32 { return 16<<26 | 4<<21 | rt<<16 | rd<<11 }
 func mfc0(rt, rd uint32) uint32 { return 16<<26 | rt<<16 | rd<<11 }
 

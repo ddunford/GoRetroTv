@@ -30,7 +30,8 @@
 - [x] **TC-2.8: Flash command sequencer** (covers: TASK-2.8, TASK-2.10) — autoselect returns the part id; a
   snapshot taken mid-sequence restores mid-sequence.
   **Result:** `internal/memory/flash_command_test.go` verifies per-chip IDs, program bit clearing, bottom-boot sector erase, and restoring the array plus an in-progress unlock. `TestFlashHoldsTheDeviceContract` covers all mutable fields; `./ctl.sh test` passed.
-- [ ] **TC-2.9: Oracle agreement to the peripheral wall** (covers: TASK-2.9, TASK-2.11) — checkpoints match
+- [x] **TC-2.9: Oracle agreement to the peripheral wall** (covers: TASK-2.9, TASK-2.11) — checkpoints match
   until the first access to an unmodelled device, and the divergence names that device.
+  **Result:** `docs/reference/cpu-oracle-measurement.md` records browser and Go checkpoint runs. The first differing value is a read from the unmodelled video RAM data port `0xB00020B0` at instruction 3,204,424; PC and registers agree before it.
 - [ ] **TC-2.10: Boot reaches the documented handoff** (covers: TASK-2.11) — the bootloader
   decompresses the application to `0x800009F4` and transfers control.

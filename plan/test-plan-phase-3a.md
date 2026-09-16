@@ -1,0 +1,14 @@
+# Test Plan: Phase 3a — Demux and section delivery
+
+## Test Cases
+- [ ] **TC-3a.1: Ring geometry** (covers: TASK-3a.1) — filter f's ring is where the firmware expects.
+- [ ] **TC-3a.2: Enable and status semantics** (covers: TASK-3a.2) — write-one-to-set and
+  write-zero-to-clear, each asserted in the direction it actually works. Swapping them must fail.
+- [ ] **TC-3a.3: The LISR handshake completes** (covers: TASK-3a.3) — and a register file that reads
+  back its own writes at `+0x124` must hang, proving the model is the working one.
+- [ ] **TC-3a.4: PID channels and match units are separate index spaces** (covers: TASK-3a.4).
+- [ ] **TC-3a.5: A pushed section is read by the firmware** (covers: TASK-3a.5) — including the
+  appended byte; without it the task walks off the end of each section.
+- [ ] **TC-3a.6: The demux interrupt reaches its handler** (covers: TASK-3a.6).
+- [ ] **TC-3a.7: Oracle agreement through acquisition** (covers: TASK-3a.7) — the box programs the
+  same filters as the oracle: TDT, SDT and NIT, enable `0xFFC00000`.

@@ -88,16 +88,29 @@ underneath it, an emulator you can attach a debugger to.
 
 ### Verification
 
-- **FR-6 — THE ORACLE.** Compare a Go run against the browser emulator instruction-for-instruction
-  from reset: same flash image, same inputs, same PC sequence and register state. *Acceptance: the
-  two agree for a full cold boot to 42 tasks; any divergence is reported with the instruction index
-  and both machine states.* This is the single most important requirement in the document — it is
-  what makes the port verifiable rather than hopeful.
+- **FR-6 — THE ORACLE, in two tiers.** *(Shape set by spike 002; the naive version was
+  impractical — a per-instruction trace of one boot is 1.8–59 GB.)*
+  **Tier 1:** both implementations emit a 32-bit machine-state hash every 1,000 instructions
+  (447,000 checkpoints, 3.6 MB) and the sequences must match across a full cold boot to 42 tasks.
+  **Tier 2:** on the first differing checkpoint, both sides re-run that 1,000-instruction window
+  with full per-instruction tracing, reporting the exact divergent instruction and both states.
+  *Acceptance: tier 1 matches end to end, and tier 2 has been shown to localise a deliberately
+  injected divergence.* This is the single most important requirement in the document — it is what
+  makes the port verifiable rather than hopeful.
+  **Its limit, stated:** where both implementations are wrong in the same way they will agree. The
+  oracle catches porting regressions, not inherited ones; the independent evidence is
+  `docs/reference/digibox-emulation.md`.
 - **FR-7** Deterministic replay: a recorded input trace replays to a byte-identical framebuffer and
   identical instruction count. *Acceptance: two replays of the same trace produce the same hash.*
-- **FR-8** Snapshot and restore the entire machine (CPU, RAM, peripheral state, NVRAM) to a file.
-  *Acceptance: restoring a post-acquisition snapshot reaches a pressable box without re-running the
-  boot or the channel-list rebuild.*
+- **FR-8** Snapshot and restore the entire machine to a file. *(Inventory established by spike 003,
+  read off the reference emulator's own `reset()`: CPU + 32 MB RAM + COP0 + the ISA mode bit, the
+  interrupt and timer state, **both flash chips' command sequencer state**, and every peripheral —
+  CSI, I²C/EEPROM (the NVRAM), VRAM, UART, smartcard, DMA, blitter, display.)*
+  *Acceptance: snapshot at instruction N, restore, run to N+10,000,000, and the state hash equals
+  that of an uninterrupted run to the same point.* "It restores" is not the test — a partial
+  snapshot produces a plausible machine, and every resulting fault reads as a firmware bug.
+  Peripherals are therefore written with serialisable state **from the start**; this is built
+  alongside FR-6, whose checkpoint hash is the acceptance instrument.
 
 ### Broadcast
 
@@ -148,9 +161,9 @@ underneath it, an emulator you can attach a debugger to.
 
 | Property | Target | Why this number |
 |---|---|---|
-| Emulation speed | **≥ 50M instructions/s** | a 447M cold boot in under 10 s, against 135 s today |
+| Emulation speed | **≥ 15M instructions/s** sustained (stretch 40M) | **Measured, spike 001:** a plain switch interpreter in Go does **44.2M/s** against the browser's 3.1M — but that is an upper bound with no MIPS16 decode, COP0, interrupt checks or peripheral dispatch. 15M/s puts a 447M cold boot at ~30 s against 135 s. |
 | Snapshot restore | **< 1 s** | replaces a ~200 s rebuild |
-| Oracle agreement | a **full cold boot** to 42 tasks | anything less leaves the port unverified where it matters |
+| Oracle agreement | state-hash checkpoints every 1,000 instructions across a **full cold boot**, matching end to end | **Measured, spike 002:** a per-instruction trace is 1.8–59 GB per run and unusable; checkpoints are 3.6 MB and run in CI. |
 | Determinism | byte-identical framebuffer across replays | removes the noise that caused a wrong conclusion |
 | Browser latency | interactive on a LAN; 720×576 8bpp at ~10 fps is trivial bandwidth | the OSD is not a video stream |
 | Boot gate | runs in CI and can be shown to fail | a gate nobody can see fail is decoration |
@@ -238,14 +251,22 @@ users**: findings there are real, incidents there are not. Developer surfaces ar
 
 ## 14. Success criteria
 
-1. A cold boot to 42 tasks agrees with the oracle instruction-for-instruction.
-2. That boot takes **under 10 seconds**.
+1. A cold boot to 42 tasks agrees with the oracle: matching state-hash checkpoints end to end, with tier-2 localisation demonstrated against an injected divergence.
+2. That boot takes **under 30 seconds** (spike 001), and a snapshot restore makes it a once-per-session cost rather than a per-experiment one.
 3. A snapshot restores to a pressable, acquired box in under a second.
 4. A visitor at `goretrotv.demosrv.uk` reaches a guide showing correct now-and-next, with no
    explanation and no local install.
 5. The ALL CHANNELS grid lists channels and programmes.
 6. `gdb` attaches and breaks on a firmware address.
 7. The boot gate runs in CI and has been demonstrated failing.
+
+## Spikes run before planning
+
+| Spike | Question | Verdict |
+|---|---|---|
+| `001-go-interpreter-throughput` | Is Go fast enough to justify the port? | **Proven, target revised.** 44.2M/s against the browser's 3.1M — a 14× floor. The first measurement said 83M/s and was measuring a runaway PC executing unmapped zeros; the PC histogram caught it. |
+| `002-oracle-comparison` | Is FR-6 practical? | **Rewritten.** Per-instruction traces are 1.8–59 GB; two-tier checkpoint hashing is 3.6 MB and localises to 1,000 instructions. |
+| `003-snapshot-completeness` | What must a snapshot capture? | **Proven tractable.** The inventory is the reference emulator's `reset()`; the acceptance test must be a state-hash match after restore, not "it restored". |
 
 ## References
 

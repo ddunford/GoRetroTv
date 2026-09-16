@@ -500,3 +500,20 @@ close reason. `sky-02me.18` is answered in `digibox-emulation.md` and retitled.
   ourselves rather than waiting for the 1998 one: <https://olddigibox.github.io/sky-web-epg/>
 - NEC VR4111 User's Manual (not vendored, 2.9 MB):
   <http://bitsavers.trailing-edge.com/components/nec/mips/Vr4111-um_199804.pdf>
+
+---
+
+# PROJECT MOVED — this file is the predecessor's handoff
+
+*16 September 2026.* The emulator is now its own project in Go, at
+`github.com/ddunford/GoRetroTv` (`/opt/workspaces/development/goretrotv.demosrv.uk`). The browser
+emulator this file describes is kept as `reference/digibox-boot.html` and is now the port's
+**correctness oracle**, not a dead end.
+
+**Everything above remains true and is still the specification** for the firmware's behaviour. The
+phase plan references it rather than re-deriving it. What changed is only where the code lives and
+what language it is in.
+
+The predecessor, whole — 610 commits, the FastAPI backend, the listings pipeline, ErsatzTV playout,
+464 tests and the conformance harness — is at
+`/opt/workspaces/development/archive/skytv.demosrv.uk-2026-09-16`.

@@ -139,9 +139,7 @@ func TestDramIsBigEndian(t *testing.T) {
 	}
 }
 
-// TC-1.3's other half: the flash region refuses writes, through either window, and the refusal is
-// counted rather than silent - a flash that swallows a write is indistinguishable from one that
-// took it, and the firmware's answer to that difference is to spin for ever.
+// Arbitrary stores through either window are commands, not direct array writes.
 func TestFlashRefusesWritesThroughBothWindows(t *testing.T) {
 	t.Parallel()
 	b, _, u202, _ := board(t)
@@ -360,15 +358,20 @@ func TestFlashHoldsTheDeviceContract(t *testing.T) {
 		New: func() bus.Device { return newFlash(t, "U202", image(memory.DirtyPageLen, 0xA5)) },
 		Mutate: func(d bus.Device) {
 			d.Write(0x10, bus.Word, 0xFFFFFFFF)
+			unlockFlash(d)
+			d.Write(0xAAA, bus.Half, 0xA0)
+			d.Write(0x20, bus.Byte, 0)
+			unlockFlash(d)
+			d.Write(0xAAA, bus.Half, 0x90)
 		},
 		Disturb: func(d bus.Device) {
-			d.Write(0x20, bus.Word, 0x00000000)
-			d.Write(0x24, bus.Word, 0x00000000)
+			d.Reset()
+			unlockFlash(d)
+			d.Write(0xAAA, bus.Half, 0x80)
+			unlockFlash(d)
+			d.Write(0xAAA, bus.Half, 0x10)
 		},
-		// The image is configuration in this phase, not state: the part is read-only and the
-		// loader verifies it against firmware/MANIFEST.md before the machine starts. TASK-2.8
-		// makes it writable, and this exemption must go when it does.
-		Constant: []string{"name", "bytes"},
+		Constant: []string{"name"},
 	})
 	if err != nil {
 		t.Fatalf("flash must hold the contract every device holds: %v", err)

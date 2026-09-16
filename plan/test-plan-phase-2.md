@@ -27,8 +27,9 @@
 - [x] **TC-2.7: Shift operand order** (covers: TASK-2.7, TASK-2.10) — `sllv $rx,$ry` computes `ry << rx`.
   Reversing it produces a plausible number, so this asserts the value, not the absence of an error.
   **Result:** `TestMIPS16VariableShiftOperandOrder` asserts `5 << 3 == 40` in the destination and preserves the amount register; `./ctl.sh test` passed.
-- [ ] **TC-2.8: Flash command sequencer** (covers: TASK-2.8, TASK-2.10) — autoselect returns the part id; a
+- [x] **TC-2.8: Flash command sequencer** (covers: TASK-2.8, TASK-2.10) — autoselect returns the part id; a
   snapshot taken mid-sequence restores mid-sequence.
+  **Result:** `internal/memory/flash_command_test.go` verifies per-chip IDs, program bit clearing, bottom-boot sector erase, and restoring the array plus an in-progress unlock. `TestFlashHoldsTheDeviceContract` covers all mutable fields; `./ctl.sh test` passed.
 - [ ] **TC-2.9: Oracle agreement to the peripheral wall** (covers: TASK-2.9, TASK-2.11) — checkpoints match
   until the first access to an unmodelled device, and the divergence names that device.
 - [ ] **TC-2.10: Boot reaches the documented handoff** (covers: TASK-2.11) — the bootloader

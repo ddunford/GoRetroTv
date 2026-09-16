@@ -7,30 +7,32 @@ import (
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
 )
 
-// Flash is one of the board's two 2 MB parts, mapped read-only.
-//
-// Read-only is this phase's shape, not the chip's. The real part speaks the AMD command set and
-// the application does program it - its CA task verifies its settings in 256-byte chunks with a
-// 16-bit sum and writes the sum back when it disagrees, and when the predecessor's flash swallowed
-// that program command the task never agreed, never blocked, and starved everything below it for
-// ever. Modelling the command sequencer is TASK-2.8, which REPLACES this device rather than
-// sitting beside it: when it lands, the contents stop being configuration and become state, and
-// this file goes.
-//
-// Until then a write is refused and counted. Counted rather than dropped silently, because the
-// failure above is what a silently-swallowed program write looks like from the outside: not an
-// error, a machine that runs for ever doing something plausible.
+// Flash is one of the board's two 2 MB Fujitsu MBM29LV160B parts. Each part owns its AMD
+// command sequence; the bus supplies the cached and uncached mirrors of the same part.
 type Flash struct {
-	// name and bytes are this device's identity and the ROM image it was built around, not
-	// state. Reset does not touch either - flash is non-volatile, and a reset that wiped the
-	// reset vector would leave the machine with nothing to boot from.
-	name  string
-	bytes []byte
-
+	// The name is identity. Bytes are non-volatile state: Reset leaves them alone, but Snapshot
+	// carries them because program and erase mutate them.
+	name    string
+	bytes   []byte
 	refused uint64
+	command uint8 // mode bit 0, unlock position bits 1-2, program bit 3, erase bit 4
 }
 
-// NewFlash returns a read-only flash part called name holding image.
+func (f *Flash) commandState() (mode, seq uint8, program, erase bool) {
+	return f.command & 1, (f.command >> 1) & 3, f.command&8 != 0, f.command&16 != 0
+}
+
+func (f *Flash) setCommand(mode, seq uint8, program, erase bool) {
+	f.command = mode | (seq << 1)
+	if program {
+		f.command |= 8
+	}
+	if erase {
+		f.command |= 16
+	}
+}
+
+// NewFlash returns a flash part called name holding image.
 //
 // image is copied: the loader reads it from a file whose buffer it may reuse, and a flash chip
 // whose contents change underneath the machine is the kind of fault that reads as a firmware bug.
@@ -55,6 +57,23 @@ func (f *Flash) Size() uint32 { return u32len(f.bytes) }
 // Read returns size bytes at off, big-endian. An access running past the end of the part reads
 // zero beyond it, matching RAM.
 func (f *Flash) Read(off uint32, size bus.Size) uint32 {
+	if f.command&1 != 0 {
+		const manufacturer, device = uint32(0x0004), uint32(0x2249)
+		if size == bus.Word {
+			return manufacturer<<16 | device
+		}
+		id := manufacturer
+		if off>>1&1 != 0 {
+			id = device
+		}
+		if size == bus.Half {
+			return id
+		}
+		if off&1 != 0 {
+			return id & 0xff
+		}
+		return id >> 8
+	}
 	if uint64(off)+uint64(size) <= uint64(len(f.bytes)) {
 		b := f.bytes[off:]
 		// The bus refuses any other width before an access reaches a device, so the default arm
@@ -80,39 +99,105 @@ func (f *Flash) Read(off uint32, size bus.Size) uint32 {
 	return v
 }
 
-// Write refuses, and counts the refusal. See the type comment: a write this device swallows in
-// silence is indistinguishable from one it accepted, and the firmware's response to the difference
-// is to spin for ever rather than to complain.
-func (f *Flash) Write(uint32, bus.Size, uint32) { f.refused++ }
+// Write advances the x16 AMD command protocol. Programming only clears bits; an erase sets them.
+func (f *Flash) Write(off uint32, size bus.Size, value uint32) {
+	mode, seq, program, erase := f.commandState()
+	defer func() { f.setCommand(mode, seq, program, erase) }()
+	word, command := off>>1&0xfff, value&0xff
+	if program {
+		program, seq = false, 0
+		for i := uint32(0); i < uint32(size); i++ {
+			at := off + i
+			if uint64(at) < uint64(len(f.bytes)) {
+				f.bytes[at] &= byte(value >> ((uint32(size) - 1 - i) * 8))
+			}
+		}
+		return
+	}
+	if seq == 2 && erase && command == 0x30 {
+		start, end := flashSector(off)
+		if end > u32len(f.bytes) {
+			end = u32len(f.bytes)
+		}
+		for i := start; i < end; i++ {
+			f.bytes[i] = 0xff
+		}
+		erase, seq = false, 0
+		return
+	}
+	if command == 0xf0 && !erase {
+		mode, seq = 0, 0
+		return
+	}
+	if seq == 0 && command == 0xaa && word == 0x555 {
+		seq = 1
+		return
+	}
+	if seq == 1 && command == 0x55 && word == 0x2aa {
+		seq = 2
+		return
+	}
+	if seq == 2 && word == 0x555 {
+		switch command {
+		case 0x90:
+			mode = 1
+		case 0xa0:
+			program = true
+		case 0x80:
+			erase = true
+		case 0x10:
+			if erase {
+				for i := range f.bytes {
+					f.bytes[i] = 0xff
+				}
+				erase = false
+			}
+		default:
+			f.refused++
+		}
+		seq = 0
+		return
+	}
+	seq = 0
+	f.refused++
+}
+
+func flashSector(off uint32) (uint32, uint32) {
+	switch {
+	case off < 0x4000:
+		return 0, 0x4000
+	case off < 0x6000:
+		return 0x4000, 0x6000
+	case off < 0x8000:
+		return 0x6000, 0x8000
+	case off < 0x10000:
+		return 0x8000, 0x10000
+	default:
+		start := off &^ uint32(0xffff)
+		return start, start + 0x10000
+	}
+}
 
 // Refused is how many writes this part has turned away.
 func (f *Flash) Refused() uint64 { return f.refused }
 
-// Bytes exposes the image for instruments that read it wholesale. It is the live array; nothing
-// in this phase may write through it, because that would make the contents state without making
-// them snapshotted.
+// Bytes exposes the live array to instruments that read it wholesale. Writers use commands.
 func (f *Flash) Bytes() []byte { return f.bytes }
 
-// Reset clears the refusal count and nothing else.
-//
-// Flash is non-volatile: the oracle's own reset leaves both chips' arrays alone and clears only
-// their command-sequencer fields, which is the behaviour every measurement in the record was taken
-// against.
-func (f *Flash) Reset() { f.refused = 0 }
+// Reset clears command state, not non-volatile contents.
+func (f *Flash) Reset() {
+	f.refused, f.command = 0, 0
+}
 
 // flashVersion is this device's snapshot format version.
-const flashVersion = 1
+const flashVersion = 2
 
-// Snapshot writes the refusal count.
-//
-// It does not write the 2 MB image. In this phase the contents cannot change - the part is
-// read-only and the loader verifies the image against firmware/MANIFEST.md before the machine
-// starts - so they are configuration rather than state, and four megabytes of unchanging ROM in
-// every snapshot would be four megabytes that prove nothing. TASK-2.8 makes the contents writable,
-// and when it does they become state and this format changes with it.
+// Snapshot writes the array and every command-sequencer field, including an unlock in progress.
 func (f *Flash) Snapshot() ([]byte, error) {
 	w := snapcodec.NewWriter(f.name, flashVersion)
+	w.Bytes(f.bytes)
 	w.Uint64(f.refused)
+	w.Uint8(f.command)
 	blob, err := w.Blob()
 	if err != nil {
 		return nil, fmt.Errorf("memory: snapshot %s: %w", f.name, err)
@@ -120,7 +205,7 @@ func (f *Flash) Snapshot() ([]byte, error) {
 	return blob, nil
 }
 
-// Restore replaces the refusal count.
+// Restore replaces the array and command state atomically after validating the complete blob.
 func (f *Flash) Restore(state []byte) error {
 	rd, err := snapcodec.Open(state)
 	if err != nil {
@@ -129,10 +214,17 @@ func (f *Flash) Restore(state []byte) error {
 	if err := rd.Expect(f.name, flashVersion, flashVersion); err != nil {
 		return fmt.Errorf("memory: restore %s: %w", f.name, err)
 	}
+	bytes := rd.Bytes()
 	refused := rd.Uint64()
+	command := rd.Uint8()
 	if err := rd.Done(); err != nil {
 		return fmt.Errorf("memory: restore %s: %w", f.name, err)
 	}
+	if len(bytes) != len(f.bytes) || command&^uint8(0x1f) != 0 || (command>>1)&3 > 2 {
+		return fmt.Errorf("memory: restore %s: incompatible flash state", f.name)
+	}
+	copy(f.bytes, bytes)
 	f.refused = refused
+	f.command = command
 	return nil
 }

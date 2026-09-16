@@ -18,7 +18,7 @@ writing the decoder**; they record the traps, each of which cost the predecessor
 - [x] `TASK-2.5` Interrupt delivery and the vector; **an interrupt must not be taken in a branch delay slot** — defer by one instruction (the predecessor lost a night to this) → `/go-engineer` [TC-2.5]
 - [x] `TASK-2.6` MIPS16 decode: the original ASE, not MIPS16e — no `SAVE`/`RESTORE`. The implicit T register, `JALX` mode switching, and the extended forms → `/go-engineer` [TC-2.6]
 - [x] `TASK-2.7` MIPS16 shift operand order — the FIRST printed operand is the shift amount; getting it backwards yields a plausible wrong answer rather than an error → `/go-engineer` [TC-2.7]
-- [ ] `TASK-2.8` Flash device: read paths plus the command sequencer (autoselect, program, erase) with its state, which is real state a snapshot must carry → `/go-engineer` [TC-2.8]
+- [x] `TASK-2.8` Flash device: read paths plus the command sequencer (autoselect, program, erase) with its state, which is real state a snapshot must carry → `/go-engineer` [TC-2.8]
 - [ ] `TASK-2.9` Run the oracle comparison from reset and drive the first divergence to zero, iterating until the two agree as far as missing peripherals permit → `/go-engineer` [TC-2.9]
 - [ ] `TASK-2.10` ⫘ Write the CPU test suite, table-driven per instruction family → `/go-engineer` [TC-2.1, TC-2.2, TC-2.3, TC-2.4, TC-2.5, TC-2.6, TC-2.7, TC-2.8]
 - [ ] `TASK-2.11` ⫘ Write and run the phase's integration check: boot to the documented handoff point → `/qa-test-engineer` [TC-2.9, TC-2.10]

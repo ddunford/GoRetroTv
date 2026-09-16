@@ -737,8 +737,8 @@
   // fifteen seconds, which was the right choice when the memory map WAS the demonstration. It is
   // not any more: the box draws a real, navigable Sky interface, and the only thing between a
   // visitor and it is the boot. At 400,000/frame that is about 31 s on a warm boot and 96 s on a
-  // cold one -- measured by scripts/check-digibox-boot.mjs, which has clicked Max on every run it
-  // has ever made, so this is also the best-tested speed rather than a new one.
+  // cold one -- measured by the boot gate (docs/reference/oracle-boot-gate.md), which has clicked
+  // Max on every run it has ever made, so this is also the best-tested speed rather than a new one.
   //
   // The slower settings stay, and so does the reason for them: "Slow" and "Watch" are how you
   // watch the memset walk 6.8 MB of DRAM, and that is still worth seeing once.
@@ -5207,8 +5207,8 @@
   // A visitor cannot read a task count, and the honest answer changes four times during a
   // boot. THE SETTLING STATE IS THE ONE THAT EARNS ITS PLACE: once the 42nd task exists the
   // box spends the best part of a minute CRC-ing the second flash chip, and a key pressed
-  // inside that window is dropped on the CSI link -- measured, and the reason the gate in
-  // scripts/check-digibox-boot.mjs waits for TASK20 to stop being scheduled before it
+  // inside that window is dropped on the CSI link -- measured, and the reason the boot gate
+  // (docs/reference/oracle-boot-gate.md) waits for TASK20 to stop being scheduled before it
   // presses anything. Saying "ready" there would send somebody to press sky and watch
   // nothing happen, which reads as a broken emulator rather than a busy one.
   //

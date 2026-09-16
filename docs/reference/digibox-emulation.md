@@ -4641,8 +4641,8 @@ The demo page now leads with the framebuffer and a Sky remote, with every instru
 beside them moved into a modal one click away and nothing deleted. That part was layout. The
 part worth recording is what building it found.
 
-**"BGLOAD stopped being scheduled" was satisfied by BGLOAD NOT HAVING STARTED.** Both the gate
-in `scripts/check-digibox-boot.mjs` and, briefly, the page's own readiness readout waited for
+**"BGLOAD stopped being scheduled" was satisfied by BGLOAD NOT HAVING STARTED.** Both the boot
+gate (`docs/reference/oracle-boot-gate.md`) and, briefly, the page's own readiness readout waited for
 `TASK20`'s schedule count to stand still for two consecutive one-second samples, on the reasoning
 that TASK20 *is* the task CRC-ing bank 1 and its stillness therefore means the work is done.
 Sampled properly, every two seconds from the moment the 42nd task appears on a cold boot:

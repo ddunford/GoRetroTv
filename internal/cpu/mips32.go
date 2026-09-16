@@ -161,6 +161,19 @@ func (c *Core) execute32(w uint32) (branch, error) {
 			if rd == 11 {
 				c.timerPending = false
 			}
+		case 16:
+			if w != 0x42000018 {
+				return branch{}, fmt.Errorf("unsupported COP0 operation %d", rs)
+			}
+			status := c.COP0[12]
+			ret := c.COP0[14]
+			if status&4 != 0 {
+				ret = c.COP0[30]
+				c.COP0[12] = status &^ 4
+			} else {
+				c.COP0[12] = status &^ 2
+			}
+			return branch{target: ret &^ 1, isa: ret&1 != 0, immediate: true}, nil
 		default:
 			return branch{}, fmt.Errorf("unsupported COP0 operation %d", rs)
 		}

@@ -26,9 +26,10 @@ type Core struct {
 }
 
 type branch struct {
-	target uint32
-	isa    bool
-	armed  bool
+	target    uint32
+	isa       bool
+	armed     bool
+	immediate bool
 }
 
 // New starts execution at pc on the supplied bus.
@@ -60,7 +61,7 @@ func (c *Core) Step() error {
 	}
 	switch {
 	case c.delayed.armed:
-		if effect.armed {
+		if effect.armed || effect.immediate {
 			return fmt.Errorf("cpu: branch in delay slot at %s", hexfmt.Addr(c.PC))
 		}
 		c.PC, c.ISA = c.delayed.target, c.delayed.isa
@@ -68,6 +69,8 @@ func (c *Core) Step() error {
 	case effect.armed:
 		c.delayed = effect
 		c.PC += 4
+	case effect.immediate:
+		c.PC, c.ISA = effect.target, effect.isa
 	default:
 		c.PC += 4
 		if effect.target == skipSlot {

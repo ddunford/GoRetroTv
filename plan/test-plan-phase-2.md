@@ -11,11 +11,12 @@
 - [x] **TC-2.2: Delay slots** (covers: TASK-2.2, TASK-2.10) — the slot executes before the transfer, for every
   branch and jump form including the likely/AL variants.
   **Result:** `internal/cpu/branch_test.go` drives branch, jump, likely, link and JALX forms and verifies both instruction addresses; a negative control that hid a pending branch failed.
-- [?] **TC-2.3: COP0 survives a context restore** (covers: TASK-2.3, TASK-2.10) — write Status/EPC, restore,
+- [x] **TC-2.3: COP0 survives a context restore** (covers: TASK-2.3, TASK-2.10) — write Status/EPC, restore,
   `ERET`, land where expected. **A stubbed COP0 must fail this.**
-  **Blocked:** COP0 register and timer tests in `internal/cpu/cop0_test.go` pass, and a stubbed read fails the negative control. The end-to-end restore case needs `ERET` from TASK-2.4 before it can be marked passed.
-- [ ] **TC-2.4: ERET picks its register from ERL** (covers: TASK-2.4, TASK-2.10) — both branches, and the ISA
+  **Result:** `internal/cpu/cop0_test.go` proves register writes/readback and Compare's timer request; `internal/cpu/eret_test.go` writes Status/EPC and executes ERET. Stubbed COP0 read and wrong ERET return mutations fail.
+- [x] **TC-2.4: ERET picks its register from ERL** (covers: TASK-2.4, TASK-2.10) — both branches, and the ISA
   bit masked off the address.
+  **Result:** `internal/cpu/eret_test.go` covers EPC, ErrorEPC, ISA bit and no delay slot; wrong-register and wrong-slot mutations fail.
 - [ ] **TC-2.5: No interrupt in a delay slot** (covers: TASK-2.5, TASK-2.10) — raise an interrupt while the slot
   is pending; expect it deferred by one instruction and the jump still taken. This is the one that
   cost a night: EPC in a delay slot returns to an orphaned instruction and the stack drifts.

@@ -16,3 +16,9 @@ node_modules/
 # Machine snapshots and recorded traces: reproducible, often large, and never reviewable
 /snapshots/
 /traces/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
+.beads/proxieddb/

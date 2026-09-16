@@ -1,0 +1,137 @@
+# GoRetroTV
+
+> A Pace 2500N Sky Digibox (1998–2002) running its own firmware, in Go, with a browser for a screen.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Emulator core | Go 1.22+, single binary, no CGo in the core |
+| Browser client | One static page + a small TypeScript module — **no SPA framework** |
+| Transport | WebSocket: framebuffer out, handset keys in |
+| Persistence | Files only — NVRAM image, machine snapshots, recorded traces |
+| Video (later phase) | ffmpeg via CGo or a subprocess — not in v1 |
+
+Scaffolds: `/go-scaffold`. Agent: `/go-engineer`. Standards: `/go-testing`.
+
+## Architecture Decisions
+
+Full record with rationale and rejected alternatives: `plan/module-decisions.md`.
+
+- **One binary, package boundaries inward** — devices know the bus, the bus knows nothing of the web.
+- **Every device implements one interface including `Snapshot`/`Restore`, from the first line
+  written.** Retrofitting serialisation across eight device models is the expensive version, and a
+  partial snapshot does not fail — it produces a plausible machine whose faults read as firmware
+  bugs (spike 003).
+- **The instruction counter is the clock.** Timers, the broadcast carousel and device pumps are all
+  driven off `icount`, never wall time. Wall-clock scheduling is what made the predecessor
+  non-deterministic between runs and caused a wrong conclusion about event counts.
+- **No goroutine in the instruction loop.** Single-threaded and deterministic by construction;
+  concurrency lives at the edges. This is what makes byte-identical replay possible at all.
+- **Errors are values; a bad guest instruction halts visibly.** It must never take the process down
+  or, worse, continue plausibly.
+- **No database, no auth, no tenancy, no queue, no cache** — see the record. Nothing here needs them.
+- **Developer surfaces bind to localhost only.** The gdb stub and instrument endpoints are the one
+  real security control on a public demo host, and they carry a conformance rule.
+
+## Non-Obvious Domain Patterns
+
+*The firmware's own behaviour — six thousand lines of it — is in
+`docs/reference/digibox-emulation.md`, and that file is evidence rather than documentation: it
+records how each thing was measured and which earlier readings were withdrawn. **Read it before
+modelling any device.** This section is only for patterns discovered while building the port.*
+
+- **A hardware model does not fail with a stack trace. It fails by running for ever doing something
+  plausible.** A wrong register model is a boot that stops at 20 tasks; a wrong constant is a link
+  silently running at sixty baud. Every change gets the boot gate afterwards.
+- **Recording what the firmware WRITES is inert; changing what a read RETURNS is not.** Making the
+  demux register file read back its own writes — which sounds like an improvement — stopped the RTOS
+  starting at all. Log writes freely; change reads only with a reason and a boot afterwards.
+- **The oracle proves this port matches the browser emulator, not that either matches a Digibox.**
+  Where both are wrong in the same way they agree. Inherited errors are caught only by the measured
+  record.
+
+## Conventions
+
+- **Firmware** lives in `firmware/`, is gitignored and is not redistributable. See its MANIFEST.
+- **The oracle** is `reference/digibox-boot.html`. It is kept deliberately and must not be deleted:
+  it is the only independent check the port has.
+- **Testing:** Go's own test framework; table-driven where the shape suits. The boot gate and the
+  oracle comparison are the integration-level checks and both run in CI.
+- **Every instrument asserts its own subject.** A census that cannot find the thing it is counting
+  is a harness failure, never a count of zero — this rule is written in blood upstream.
+- **Git hooks:** `.githooks/pre-commit` (credential guard + bd mirror check); `git config
+  core.hooksPath .githooks`.
+- **Naming:** no phase numbers, ticket ids or plan metadata in code.
+
+## Tracker
+
+Open work: **beads (`bd`)** — `bd ready` / `bd blocked` are the single source of truth. No
+`plan/TODO.md`. Claim before building (`bd update --claim`), close with a verification reason
+(`bd close --reason`). Phase-file `[ ]` / `[x]` boxes are a **generated mirror**
+(`scripts/bd-mirror-phases.py`) and are never hand-ticked. Execute with `/team-execute`, stating
+scope in plain words.
+
+## Out of Scope (v1)
+
+MPEG-2 video and the video plane (phase: Video) · listings reconstruction from scanned magazines
+(phase: Listings) · HDMI / Raspberry Pi kiosk (phase: TV client) · ErsatzTV and ffmpeg linear
+playout (archived) · telephone line and modem return path (phase: Interactive) · Box Office and Sky
+Active transactions (phase: Interactive) · teletext, radio channels, per-viewer accounts (rejected —
+the box is shared by design).
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+## Agent Context Profiles
+
+The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
+
+- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
+- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
+- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
+
+## Session Completion
+
+This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
+
+1. **File issues for remaining work** - Create beads for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **Handle git/sync by active profile**:
+   ```bash
+   # Conservative/minimal/default: report status and proposed commands; wait for approval.
+   git status
+
+   # Team-maintainer opt-in only, unless current instructions forbid it:
+   git pull --rebase
+   git push
+   git status
+   ```
+5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
+
+**Critical rules:**
+- Explicit user or orchestrator instructions override this Beads block.
+- Do not commit or push without clear authority from the active profile or the current user request.
+- If a required sync or push is blocked, stop and report the exact command and error.
+<!-- END BEADS INTEGRATION -->

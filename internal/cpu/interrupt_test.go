@@ -22,6 +22,9 @@ func TestInterruptWaitsUntilAfterBranchDelaySlot(t *testing.T) {
 	if c.PC != 0x80000184 || c.COP0[14] != codeBase+12 || c.COP0[12]&2 == 0 || c.COP0[13]&(1<<10) == 0 {
 		t.Fatalf("interrupt PC=%#x EPC=%#x Status=%#x Cause=%#x", c.PC, c.COP0[14], c.COP0[12], c.COP0[13])
 	}
+	if c.COP0[9] != 3 {
+		t.Fatalf("Count=%d; branch/slot tick once and interrupt entry plus vector tick twice", c.COP0[9])
+	}
 }
 
 func TestInterruptRequiresEnableAndSelectsBEVVector(t *testing.T) {

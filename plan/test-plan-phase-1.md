@@ -152,8 +152,8 @@ a file, not read through a pipe). The real firmware is on this machine, so
   port conforms to the oracle** — the Go emitter must observe only where the oracle can, never
   between a branch and its delay slot (sampling mid-pair would hash a state this hash does not
   fully describe: the pending branch target and MIPS16 delay flag are not folded in). That is an
-  obligation on phase 2's CPU/emitter integration (TASK-2.2, TASK-2.9) with no committed
-  enforcement yet; a per-instruction Go sampler will show as `cadence diverged`, exit 1, with the
+  obligation on phase 2's CPU/emitter integration (TASK-2.2, TASK-2.9), now enforced by
+  `internal/cpu/checkpoint_test.go::TestCheckpointLoopSkipsReachableBranchSlot`; a per-instruction Go sampler will show as `cadence diverged`, exit 1, with the
   states still compared — a correct, readable report rather than a stopped instrument. The lead
   should carry it onto phase 2 as a constraint.)
 

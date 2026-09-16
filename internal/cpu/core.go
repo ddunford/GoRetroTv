@@ -54,6 +54,16 @@ func (c *Core) State() statehash.State {
 	return statehash.State{PC: c.PC, ISA: isa, HI: c.HI, LO: c.LO, GPR: c.GPR, COP0: c.COP0}
 }
 
+// ObserveCheckpoint samples only states the browser oracle can reach. Its MIPS32 loop retires
+// a branch and slot atomically, so a Go checkpoint between them would describe no comparable
+// state and would omit the pending target from the hash.
+func (c *Core) ObserveCheckpoint(e *statehash.Emitter, icount uint64) error {
+	if c.delayed.armed {
+		return nil
+	}
+	return e.Observe(icount, c.State())
+}
+
 // Interrupt raises one external IP line. A device clears its physical line by acknowledging it;
 // this core consumes the requested edge only when Status allows delivery.
 func (c *Core) Interrupt(ip uint8) {
@@ -68,13 +78,14 @@ func (c *Core) Step() error {
 	// The oracle retires a MIPS32 branch and its slot in one loop iteration and ticks Count
 	// once for that pair. Match that measured behaviour at checkpoints; MIPS16 slots tick twice.
 	if !c.delayed.armed || c.ISA {
-		c.COP0[9]++
-		if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
-			c.timerPending = true
-		}
+		c.tickCount()
 	}
 	if !c.delayed.armed {
-		c.serviceInterrupt()
+		if c.serviceInterrupt() {
+			// The oracle's interrupt iteration retires nothing; it loops back, ticks Count
+			// again, then executes the first vector instruction at the same icount.
+			c.tickCount()
+		}
 	}
 	var effect branch
 	var length uint32 = 4
@@ -119,6 +130,13 @@ func (c *Core) Step() error {
 	}
 	c.GPR[0] = 0
 	return nil
+}
+
+func (c *Core) tickCount() {
+	c.COP0[9]++
+	if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
+		c.timerPending = true
+	}
 }
 
 func (c *Core) serviceInterrupt() bool {

@@ -23,7 +23,7 @@
   **Result:** `internal/cpu/interrupt_test.go` raises IP2 between branch and slot and checks EPC at the target, vector selection, timer request persistence and Status gates. Mutations permitting slot delivery or ignoring IE/IM fail.
 - [x] **TC-2.6: MIPS16 decode and JALX** (covers: TASK-2.6, TASK-2.10) — mode switches both ways; the T register
   set by `cmpi` and by a bare `move $t8`.
-  **Result:** `internal/cpu/mips16_test.go` executes immediate branches, `cmpi`, MOV32R to T, extended LI, MIPS16 JALX into MIPS32 and rejection of MIPS16e SAVE/RESTORE. `./ctl.sh test` passed.
+  **Result:** `internal/cpu/mips16_test.go` executes immediate branches, `cmpi`, MOV32R to T, extended LI, MIPS16 JALX into MIPS32 and rejection of MIPS16e SAVE/RESTORE. `internal/cpu/mips16_families_test.go` covers arithmetic, T compare, shifts, loads and stores in tables. `internal/cpu/snapshot_test.go` verifies complete CPU state and malformed-state rejection. `./ctl.sh test` passed.
 - [x] **TC-2.7: Shift operand order** (covers: TASK-2.7, TASK-2.10) — `sllv $rx,$ry` computes `ry << rx`.
   Reversing it produces a plausible number, so this asserts the value, not the absence of an error.
   **Result:** `TestMIPS16VariableShiftOperandOrder` asserts `5 << 3 == 40` in the destination and preserves the amount register; `./ctl.sh test` passed.

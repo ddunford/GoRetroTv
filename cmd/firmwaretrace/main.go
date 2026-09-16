@@ -73,10 +73,8 @@ func run() error {
 		if *trace && i >= *traceFrom && i < *traceTo {
 			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
 		}
-		if !core.HasPendingBranch() {
-			if err := emitter.Observe(i, core.State()); err != nil {
-				return err
-			}
+		if err := core.ObserveCheckpoint(emitter, i); err != nil {
+			return err
 		}
 		if err := core.Step(); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)

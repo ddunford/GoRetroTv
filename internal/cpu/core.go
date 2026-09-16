@@ -28,6 +28,7 @@ type Core struct {
 
 type branch struct {
 	target    uint32
+	from      uint32
 	isa       bool
 	armed     bool
 	immediate bool
@@ -61,16 +62,27 @@ func (c *Core) Step() error {
 	if !c.delayed.armed {
 		c.serviceInterrupt()
 	}
+	var effect branch
+	var length uint32 = 4
 	if c.ISA {
-		return fmt.Errorf("cpu: MIPS16 instruction at %s before MIPS16 decoder is available", hexfmt.Addr(c.PC))
-	}
-	if c.PC&3 != 0 {
-		return fmt.Errorf("cpu: unaligned MIPS32 PC %s", hexfmt.Addr(c.PC))
-	}
-	word := c.bus.Read(c.PC, bus.Word)
-	effect, err := c.execute32(word)
-	if err != nil {
-		return fmt.Errorf("cpu: %s at %s: %w", hexfmt.Word(word), hexfmt.Addr(c.PC), err)
+		if c.PC&1 != 0 {
+			return fmt.Errorf("cpu: unaligned MIPS16 PC %s", hexfmt.Addr(c.PC))
+		}
+		var err error
+		effect, length, err = c.execute16()
+		if err != nil {
+			return fmt.Errorf("cpu: MIPS16 at %s: %w", hexfmt.Addr(c.PC), err)
+		}
+	} else {
+		if c.PC&3 != 0 {
+			return fmt.Errorf("cpu: unaligned MIPS32 PC %s", hexfmt.Addr(c.PC))
+		}
+		word := c.bus.Read(c.PC, bus.Word)
+		var err error
+		effect, err = c.execute32(word)
+		if err != nil {
+			return fmt.Errorf("cpu: %s at %s: %w", hexfmt.Word(word), hexfmt.Addr(c.PC), err)
+		}
 	}
 	switch {
 	case c.delayed.armed:
@@ -80,12 +92,13 @@ func (c *Core) Step() error {
 		c.PC, c.ISA = c.delayed.target, c.delayed.isa
 		c.delayed = branch{}
 	case effect.armed:
+		effect.from = c.PC
 		c.delayed = effect
-		c.PC += 4
+		c.PC += length
 	case effect.immediate:
 		c.PC, c.ISA = effect.target, effect.isa
 	default:
-		c.PC += 4
+		c.PC += length
 		if effect.target == skipSlot {
 			c.PC += 4
 		}

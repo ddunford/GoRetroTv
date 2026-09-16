@@ -21,10 +21,12 @@
   is pending; expect it deferred by one instruction and the jump still taken. This is the one that
   cost a night: EPC in a delay slot returns to an orphaned instruction and the stack drifts.
   **Result:** `internal/cpu/interrupt_test.go` raises IP2 between branch and slot and checks EPC at the target, vector selection, timer request persistence and Status gates. Mutations permitting slot delivery or ignoring IE/IM fail.
-- [ ] **TC-2.6: MIPS16 decode and JALX** (covers: TASK-2.6, TASK-2.10) — mode switches both ways; the T register
+- [x] **TC-2.6: MIPS16 decode and JALX** (covers: TASK-2.6, TASK-2.10) — mode switches both ways; the T register
   set by `cmpi` and by a bare `move $t8`.
-- [ ] **TC-2.7: Shift operand order** (covers: TASK-2.7, TASK-2.10) — `sllv $rx,$ry` computes `ry << rx`.
+  **Result:** `internal/cpu/mips16_test.go` executes immediate branches, `cmpi`, MOV32R to T, extended LI, MIPS16 JALX into MIPS32 and rejection of MIPS16e SAVE/RESTORE. `./ctl.sh test` passed.
+- [x] **TC-2.7: Shift operand order** (covers: TASK-2.7, TASK-2.10) — `sllv $rx,$ry` computes `ry << rx`.
   Reversing it produces a plausible number, so this asserts the value, not the absence of an error.
+  **Result:** `TestMIPS16VariableShiftOperandOrder` asserts `5 << 3 == 40` in the destination and preserves the amount register; `./ctl.sh test` passed.
 - [ ] **TC-2.8: Flash command sequencer** (covers: TASK-2.8, TASK-2.10) — autoselect returns the part id; a
   snapshot taken mid-sequence restores mid-sequence.
 - [ ] **TC-2.9: Oracle agreement to the peripheral wall** (covers: TASK-2.9, TASK-2.11) — checkpoints match

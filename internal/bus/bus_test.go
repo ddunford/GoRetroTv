@@ -92,7 +92,7 @@ func (p *probe) Restore(state []byte) error {
 func attach(t *testing.T, b *bus.Bus, base, size uint32, d bus.Device) {
 	t.Helper()
 	if err := b.Attach(base, size, d); err != nil {
-		t.Fatalf("Attach(%#08x, %#x, %s): %v", base, size, d.Name(), err)
+		t.Fatalf("Attach(%s, %d, %s): %v", hexfmt.Addr(base), size, d.Name(), err)
 	}
 }
 
@@ -132,13 +132,13 @@ func TestBothDramAliasesReachTheSameDeviceOffset(t *testing.T) {
 
 	b.Write(dramKseg0+0x10, bus.Word, 0xC0FFEE)
 	if off := dram.lastOff; off != 0x10 {
-		t.Fatalf("cached write reached offset %#x, want %#x", off, 0x10)
+		t.Fatalf("cached write reached offset %d, want %d", off, 0x10)
 	}
 	if got := b.Read(dramKseg1+0x10, bus.Word); got != 0xC0FFEE {
 		t.Fatalf("read through the uncached alias got %#x, want %#x", got, 0xC0FFEE)
 	}
 	if off := dram.lastOff; off != 0x10 {
-		t.Fatalf("uncached read reached offset %#x, want %#x", off, 0x10)
+		t.Fatalf("uncached read reached offset %d, want %d", off, 0x10)
 	}
 
 	b.Write(dramKseg1+0x1C, bus.Word, 0x42)
@@ -161,13 +161,13 @@ func TestBothFlashWindowsReachTheSameDeviceOffset(t *testing.T) {
 		t.Fatalf("read at the reset window got %#x", got)
 	}
 	if off := u202.lastOff; off != 4 {
-		t.Fatalf("reset-window read reached offset %#x, want 4", off)
+		t.Fatalf("reset-window read reached offset %d, want 4", off)
 	}
 	if got := b.Read(flashU202K0+4, bus.Word); got != 0x3C09BFC0 {
 		t.Fatalf("read at the cached mirror got %#x", got)
 	}
 	if off := u202.lastOff; off != 4 {
-		t.Fatalf("cached-mirror read reached offset %#x, want 4", off)
+		t.Fatalf("cached-mirror read reached offset %d, want 4", off)
 	}
 }
 
@@ -181,10 +181,10 @@ func TestPeripheralWindowDecodesOntoTheExternalBus(t *testing.T) {
 
 	b.Read(asicBase+0x14, bus.Word)
 	if off := asic.lastOff; off != 0x14 {
-		t.Fatalf("read reached offset %#x, want %#x", off, 0x14)
+		t.Fatalf("read reached offset %d, want %d", off, 0x14)
 	}
 	if got, ok := bus.Physical(asicBase); !ok || got != 0x10000000 {
-		t.Fatalf("0xB0000000 translates to (%#08x, %v), want (0x10000000, true)", got, ok)
+		t.Fatalf("0xB0000000 translates to (%s, %v), want (0x10000000, true)", hexfmt.Addr(got), ok)
 	}
 }
 
@@ -259,7 +259,7 @@ func TestAttachRefusesAnImpossibleRegion(t *testing.T) {
 			t.Parallel()
 			b := bus.New()
 			if err := b.Attach(tc.base, tc.size, newProbe("p")); err == nil {
-				t.Fatalf("Attach(%#08x, %#x) must be refused", tc.base, tc.size)
+				t.Fatalf("Attach(%s, %d) must be refused", hexfmt.Addr(tc.base), tc.size)
 			} else {
 				t.Logf("caught: %v", err)
 			}
@@ -300,10 +300,10 @@ func TestUnmappedReadAnswersZeroAndIsRecorded(t *testing.T) {
 	}
 	got := sites[0]
 	if got.Virtual != asicBase+0x74 {
-		t.Fatalf("the census recorded virtual %#08x, want %#08x", got.Virtual, asicBase+0x74)
+		t.Fatalf("the census recorded virtual %s, want %s", hexfmt.Addr(got.Virtual), hexfmt.Addr(asicBase+0x74))
 	}
 	if got.Physical != 0x10000074 {
-		t.Fatalf("the census recorded physical %#08x, want 0x10000074", got.Physical)
+		t.Fatalf("the census recorded physical %s, want 0x10000074", hexfmt.Addr(got.Physical))
 	}
 	if got.Kind != bus.NoDevice {
 		t.Fatalf("the census recorded kind %v, want NoDevice", got.Kind)
@@ -329,7 +329,7 @@ func TestAddressOutsideTheUnmappedSegmentsIsRecordedApart(t *testing.T) {
 
 	for _, addr := range []uint32{0x00001000, 0x7FFFFFFC, 0xC0000000, 0xD10D59F0} {
 		if got := b.Read(addr, bus.Word); got != 0 {
-			t.Fatalf("read at %#08x returned %#x, want 0", addr, got)
+			t.Fatalf("read at %s returned %#x, want 0", hexfmt.Addr(addr), got)
 		}
 	}
 	sites := b.Unmapped()
@@ -338,7 +338,7 @@ func TestAddressOutsideTheUnmappedSegmentsIsRecordedApart(t *testing.T) {
 	}
 	for _, s := range sites {
 		if s.Kind != bus.NoSegment {
-			t.Fatalf("%#08x recorded as %v, want NoSegment", s.Virtual, s.Kind)
+			t.Fatalf("%s recorded as %v, want NoSegment", hexfmt.Addr(s.Virtual), s.Kind)
 		}
 	}
 	// Sorted, so a census printed into a report reads in address order rather than map order.
@@ -580,10 +580,10 @@ func TestPhysicalTranslatesTheSegmentsThisMachineUses(t *testing.T) {
 	for _, tc := range cases {
 		got, ok := bus.Physical(tc.virt)
 		if ok != tc.valid {
-			t.Fatalf("Physical(%#08x) reported ok=%v, want %v", tc.virt, ok, tc.valid)
+			t.Fatalf("Physical(%s) reported ok=%v, want %v", hexfmt.Addr(tc.virt), ok, tc.valid)
 		}
 		if tc.valid && got != tc.phys {
-			t.Fatalf("Physical(%#08x) = %#08x, want %#08x", tc.virt, got, tc.phys)
+			t.Fatalf("Physical(%s) = %s, want %s", hexfmt.Addr(tc.virt), hexfmt.Addr(got), hexfmt.Addr(tc.phys))
 		}
 	}
 }

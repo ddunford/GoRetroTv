@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/firmware"
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 // repoManifest is the manifest this repository actually ships. It is committed, unlike the images,
@@ -387,9 +388,9 @@ func TestTheRealFirmwareMatchesTheCommittedManifest(t *testing.T) {
 		{0x10, 0x01000008, "jr $t0"},
 	} {
 		if got := word(want.off); got != want.value {
-			t.Fatalf("U202+%#04x is %#08x, want %#08x (%s) - the image verifies against the "+
+			t.Fatalf("U202+%s is %s, want %s (%s) - the image verifies against the "+
 				"manifest but does not contain this machine's reset path",
-				want.off, got, want.value, want.asm)
+				hexfmt.Byte(uint8(want.off)), hexfmt.Word(got), hexfmt.Word(want.value), want.asm)
 		}
 	}
 }

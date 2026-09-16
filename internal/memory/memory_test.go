@@ -7,6 +7,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/bus/bustest"
 	"github.com/ddunford/goretrotv/internal/memory"
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 // The cached and uncached windows onto the same DRAM, and the two flash chips' mirrors, written
@@ -65,7 +66,7 @@ func board(t *testing.T) (*bus.Bus, *memory.RAM, *memory.Flash, *memory.Flash) {
 		{memory.FlashU203, memory.FlashSize, u203},
 	} {
 		if err := b.Attach(m.base, m.size, m.dev); err != nil {
-			t.Fatalf("Attach %s at %#08x: %v", m.dev.Name(), m.base, err)
+			t.Fatalf("Attach %s at %s: %v", m.dev.Name(), hexfmt.Addr(m.base), err)
 		}
 	}
 	return b, ram, u202, u203
@@ -96,14 +97,14 @@ func TestDramAliasesAgree(t *testing.T) {
 
 			b.Write(dramCached+tc.off, tc.size, tc.value)
 			if got := b.Read(dramUncached+tc.off, tc.size); got != tc.value {
-				t.Fatalf("written cached at %#08x, read uncached: %#x, want %#x",
-					dramCached+tc.off, got, tc.value)
+				t.Fatalf("written cached at %s, read uncached: %#x, want %#x",
+					hexfmt.Addr(dramCached+tc.off), got, tc.value)
 			}
 
 			b.Write(dramUncached+tc.off, tc.size, ^tc.value&mask(tc.size))
 			if got := b.Read(dramCached+tc.off, tc.size); got != ^tc.value&mask(tc.size) {
-				t.Fatalf("written uncached at %#08x, read cached: %#x, want %#x",
-					dramUncached+tc.off, got, ^tc.value&mask(tc.size))
+				t.Fatalf("written uncached at %s, read cached: %#x, want %#x",
+					hexfmt.Addr(dramUncached+tc.off), got, ^tc.value&mask(tc.size))
 			}
 		})
 	}
@@ -172,8 +173,8 @@ func TestFlashMirrorsReadTheSameBytes(t *testing.T) {
 			direct := b.Read(pair[0]+off, bus.Word)
 			mirror := b.Read(pair[1]+off, bus.Word)
 			if direct != mirror {
-				t.Fatalf("%#08x reads %#x and its mirror %#08x reads %#x",
-					pair[0]+off, direct, pair[1]+off, mirror)
+				t.Fatalf("%s reads %#x and its mirror %s reads %#x",
+					hexfmt.Addr(pair[0]+off), direct, hexfmt.Addr(pair[1]+off), mirror)
 			}
 		}
 	}

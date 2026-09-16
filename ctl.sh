@@ -117,6 +117,12 @@ cmd_gate() {
 
 cmd_test() { make test-race; }
 
+cmd_conformance() { python3 conformance/run.py "$@"; }
+
+cmd_conformance_stop_gate() { python3 conformance/stop-gate.py "$@"; }
+
+cmd_conformance_ablate() { python3 conformance/ablate.py "$@"; }
+
 # The five hooks git must be running, and the beads hooks each one delegates to.
 HOOK_NAMES=(pre-commit pre-push post-merge post-checkout prepare-commit-msg)
 
@@ -244,6 +250,9 @@ Running
 Building and checking
   build          Build every binary into bin/
   test           Run the tests under the race detector
+  conformance    Run architecture rules and their probes
+  stop-gate      Neutralise each conformance detector and check probe independence
+  ablate         Remove each rule subject in turn and check its coverage guard
   lint           Hook check, go vet and golangci-lint (fails if the linter is absent)
   hooks          Assert the git hooks are armed and delegating to beads
   agents         Assert AGENTS.md still symlinks to CLAUDE.md (Codex and Claude read one file)
@@ -269,6 +278,9 @@ main() {
         health)  cmd_health "$@" ;;
         gate)    cmd_gate "$@" ;;
         test)    cmd_test "$@" ;;
+        conformance) cmd_conformance "$@" ;;
+        stop-gate) cmd_conformance_stop_gate "$@" ;;
+        ablate) cmd_conformance_ablate "$@" ;;
         lint)    cmd_lint "$@" ;;
         hooks)   cmd_hooks "$@" ;;
         agents)  cmd_agentsdoc "$@" ;;

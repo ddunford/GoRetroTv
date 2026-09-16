@@ -1,0 +1,79 @@
+[harness]
+catalogue = "plan/architecture-rules.md"
+rule_id = "ARCH-[A-Z]+-\\d+"
+probes = "conformance/probes"
+task_source = "beads"
+# A closed task can still own a recorded decision. The gate checks that the task exists.
+task_liveness = "exists"
+mirror = "scripts/conformance/mirror-rules-index.py"
+covered_classifications = ["STATIC"]
+
+[[rule]]
+id = "ARCH-DEV-1"
+invariant = "Developer surfaces bind only to loopback"
+source = "plan/module-decisions.md § Deployment and access"
+classification = "STATIC"
+arming = "SELF-ARMING"
+state = "deferred"
+owner_task = "gort-87m.2"
+reason = "The gdb stub and instrument HTTP endpoints do not exist until later phases; the checker must enrol them when they appear."
+
+[[rule]]
+id = "ARCH-SNAP-1"
+invariant = "Every device state field is captured by Snapshot and Restore"
+source = "plan/module-decisions.md § The core patterns"
+classification = "STATIC"
+arming = "SELF-ARMING"
+state = "pending"
+owner_task = "gort-87m.3"
+reason = "The Device contract exists; the checker and its negative control have not been added."
+
+[[rule]]
+id = "ARCH-DET-1"
+invariant = "CPU and devices use instruction time, with no wall clock or goroutine in the instruction loop"
+source = "plan/module-decisions.md § The core patterns"
+classification = "STATIC"
+arming = "SELF-ARMING"
+state = "pending"
+owner_task = "gort-87m.4"
+reason = "The source boundary can be checked now, but its detector and probes have not been added."
+
+[[rule]]
+id = "ARCH-LAYER-1"
+invariant = "Core and device packages do not import outward transport packages"
+source = "plan/module-decisions.md § Application structure"
+classification = "STATIC"
+arming = "SELF-ARMING"
+state = "pending"
+owner_task = "gort-87m.5"
+reason = "The import boundary can be checked now, but its detector and probe have not been added."
+
+[[rule]]
+id = "ARCH-FW-1"
+invariant = "Firmware bytes are absent from git and built images"
+source = "plan/module-decisions.md § Deployment and access"
+classification = "STATIC"
+arming = "ARMED"
+state = "pending"
+owner_task = "gort-87m.6"
+reason = "Git and image checks can be written now, but their detectors and probes have not been added."
+
+[[rule]]
+id = "ARCH-PLATFORM-1"
+invariant = "The shared platform layer does not import domain packages"
+source = "plan/module-decisions.md § The shared / platform layer"
+classification = "STATIC"
+arming = "ARMED"
+state = "pending"
+owner_task = "gort-87m.9"
+reason = "The platform package exists, but its import detector and probe have not been added."
+
+[[rule]]
+id = "ARCH-MODULE-1"
+invariant = "The Go module graph contains only the project module until a dependency is deliberately approved"
+source = "docs/decisions/0001-scaffold.md § Dependencies"
+classification = "STATIC"
+arming = "ARMED"
+state = "pending"
+owner_task = "gort-87m.11"
+reason = "CI has a single-module assertion; promotion into a probed conformance rule is outstanding."

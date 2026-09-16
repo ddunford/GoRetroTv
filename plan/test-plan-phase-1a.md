@@ -5,7 +5,7 @@
 
 ## Test Cases
 
-- [ ] **TC-1a.1: The gate runs and reports per rule** (covers: TASK-1a.1)
+- [x] **TC-1a.1: The gate runs and reports per rule** (covers: TASK-1a.1)
   **Expected:** each rule reports ARMED / SELF-ARMING / DEFERRED with a reason; a deferred rule names
   the task that owes it.
 

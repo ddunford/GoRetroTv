@@ -24,6 +24,14 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
+  conformance:
+    name: architecture conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run architecture conformance
+        run: ./ctl.sh conformance --classification STATIC
+
   check:
     name: vet, lint, test, build
     runs-on: ubuntu-latest

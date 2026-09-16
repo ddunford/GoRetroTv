@@ -11,7 +11,7 @@ decision bound either to a rule or to an explicit "none, because…", and prove 
 
 ## Tasks (mirror — bd epic `gort-87m` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-1a.1` Install the conformance harness (registry, corpus, probe runner) and wire `ctl.sh conformance` → `/go-engineer` [TC-1a.1]
+- [x] `TASK-1a.1` Install the conformance harness (registry, corpus, probe runner) and wire `ctl.sh conformance` → `/go-engineer` [TC-1a.1]
 - [ ] `TASK-1a.2` `ARCH-DEV-1`: developer surfaces bind to localhost only — the gdb stub and instrument endpoints must never listen on a public interface. **The one real security control on a public demo host** → `/go-engineer` [TC-1a.2]
 - [ ] `TASK-1a.3` `ARCH-SNAP-1`: every type implementing `Device` also implements `Snapshot`/`Restore`, and every exported field is covered. A device added later that forgets is caught here, not by a plausible machine six phases on → `/go-engineer` [TC-1a.3]
 - [ ] `TASK-1a.4` `ARCH-DET-1`: no wall-clock source and no goroutine inside the instruction loop — `time.Now`, `time.Since` and `go` statements are refused in `internal/cpu` and `internal/device` → `/go-engineer` [TC-1a.4]

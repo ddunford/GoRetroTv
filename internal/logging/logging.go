@@ -1,9 +1,9 @@
 // Package logging builds the process logger.
 //
 // Structured JSON by default, because every question asked of this program is "what was the
-// machine doing at instruction N" and that is a query, not a paragraph. The emulator-time field
-// that makes such a query answerable is added by the core (see internal/logging's icount
-// attribution); this file only decides where lines go and how they are encoded.
+// machine doing at instruction N" and that is a query, not a paragraph. This file decides where
+// lines go and how they are encoded; icount.go adds the emulator-time field that makes the query
+// answerable, and a logger built here becomes machine-aware by passing through WithCounter.
 package logging
 
 import (

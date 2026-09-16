@@ -17,9 +17,10 @@
 - [x] **TC-2.4: ERET picks its register from ERL** (covers: TASK-2.4, TASK-2.10) — both branches, and the ISA
   bit masked off the address.
   **Result:** `internal/cpu/eret_test.go` covers EPC, ErrorEPC, ISA bit and no delay slot; wrong-register and wrong-slot mutations fail.
-- [ ] **TC-2.5: No interrupt in a delay slot** (covers: TASK-2.5, TASK-2.10) — raise an interrupt while the slot
+- [x] **TC-2.5: No interrupt in a delay slot** (covers: TASK-2.5, TASK-2.10) — raise an interrupt while the slot
   is pending; expect it deferred by one instruction and the jump still taken. This is the one that
   cost a night: EPC in a delay slot returns to an orphaned instruction and the stack drifts.
+  **Result:** `internal/cpu/interrupt_test.go` raises IP2 between branch and slot and checks EPC at the target, vector selection, timer request persistence and Status gates. Mutations permitting slot delivery or ignoring IE/IM fail.
 - [ ] **TC-2.6: MIPS16 decode and JALX** (covers: TASK-2.6, TASK-2.10) — mode switches both ways; the T register
   set by `cmpi` and by a bare `move $t8`.
 - [ ] **TC-2.7: Shift operand order** (covers: TASK-2.7, TASK-2.10) — `sllv $rx,$ry` computes `ry << rx`.

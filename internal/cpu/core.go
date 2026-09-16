@@ -21,6 +21,7 @@ type Core struct {
 	reserved       uint32
 	hasReservation bool
 	timerPending   bool
+	pendingLines   uint8
 
 	bus *bus.Bus
 }
@@ -42,8 +43,24 @@ func (c *Core) HasPendingBranch() bool { return c.delayed.armed }
 // TimerPending reports the Count/Compare request until software writes Compare.
 func (c *Core) TimerPending() bool { return c.timerPending }
 
+// Interrupt raises one external IP line. A device clears its physical line by acknowledging it;
+// this core consumes the requested edge only when Status allows delivery.
+func (c *Core) Interrupt(ip uint8) {
+	if ip > 7 {
+		panic("cpu: interrupt line must be in 0..7")
+	}
+	c.pendingLines |= 1 << ip
+}
+
 // Step retires one instruction or returns a visible halt error without advancing PC.
 func (c *Core) Step() error {
+	c.COP0[9]++
+	if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
+		c.timerPending = true
+	}
+	if !c.delayed.armed {
+		c.serviceInterrupt()
+	}
 	if c.ISA {
 		return fmt.Errorf("cpu: MIPS16 instruction at %s before MIPS16 decoder is available", hexfmt.Addr(c.PC))
 	}
@@ -51,10 +68,6 @@ func (c *Core) Step() error {
 		return fmt.Errorf("cpu: unaligned MIPS32 PC %s", hexfmt.Addr(c.PC))
 	}
 	word := c.bus.Read(c.PC, bus.Word)
-	c.COP0[9]++
-	if c.COP0[11] != 0 && c.COP0[9] == c.COP0[11] {
-		c.timerPending = true
-	}
 	effect, err := c.execute32(word)
 	if err != nil {
 		return fmt.Errorf("cpu: %s at %s: %w", hexfmt.Word(word), hexfmt.Addr(c.PC), err)
@@ -79,6 +92,35 @@ func (c *Core) Step() error {
 	}
 	c.GPR[0] = 0
 	return nil
+}
+
+func (c *Core) serviceInterrupt() bool {
+	ip := uint32(c.pendingLines) << 8
+	if c.timerPending {
+		ip |= 1 << 15
+	}
+	if ip == 0 {
+		return false
+	}
+	status := c.COP0[12]
+	if status&1 == 0 || status&6 != 0 || status&ip&0xff00 == 0 {
+		return false
+	}
+	c.COP0[13] = c.COP0[13]&^uint32(0xff7c) | ip
+	c.COP0[14] = c.PC
+	if c.ISA {
+		c.COP0[14] |= 1
+	}
+	c.COP0[12] = status | 2
+	if status&(1<<22) != 0 {
+		c.PC = 0xBFC00380
+	} else {
+		c.PC = 0x80000180
+	}
+	c.ISA = false
+	c.pendingLines = 0
+	c.hasReservation = false
+	return true
 }
 
 const skipSlot = ^uint32(0)

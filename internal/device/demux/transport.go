@@ -21,56 +21,66 @@ func (d *Demux) PushTransport(data []byte) error {
 	if d.control140&1 == 0 {
 		return nil
 	}
-	for len(data) >= transportPacketSize {
-		packet := data[:transportPacketSize]
-		data = data[transportPacketSize:]
-		if packet[0] == 0 {
-			continue // DMA may flush a zero-filled descriptor after a transfer.
+	for _, b := range data {
+		if len(d.transportPacket) == 0 && b == 0 {
+			continue // A zero-filled DMA descriptor flushes without a packet.
 		}
-		if packet[0] != 0x47 {
-			return fmt.Errorf("demux: transport sync byte %#x", packet[0])
+		if len(d.transportPacket) == 0 && b != 0x47 {
+			return fmt.Errorf("demux: transport sync byte %#x", b)
 		}
-		if packet[1]&0x80 != 0 {
-			continue
-		} // transport-error indicator
-		pid := uint16(packet[1]&0x1f)<<8 | uint16(packet[2])
-		control := (packet[3] >> 4) & 3
-		if control&1 == 0 {
+		d.transportPacket = append(d.transportPacket, b)
+		if len(d.transportPacket) != transportPacketSize {
 			continue
 		}
-		pos := 4
-		if control&2 != 0 {
-			pos += 1 + int(packet[pos])
-			if pos > transportPacketSize {
-				return fmt.Errorf("demux: invalid adaptation length")
-			}
+		if err := d.pushTransportPacket(d.transportPacket); err != nil {
+			return err
 		}
-		for channel := uint8(0); channel < 2; channel++ {
-			if !d.pidWritten[channel] || d.pidChannels[channel]&0x1fff != uint32(pid) || d.matchWords[channel][8]&(1<<channel) == 0 {
-				continue
+		d.transportPacket = nil
+	}
+	return nil
+}
+
+func (d *Demux) pushTransportPacket(packet []byte) error {
+	if packet[1]&0x80 != 0 {
+		return nil
+	} // transport-error indicator
+	pid := uint16(packet[1]&0x1f)<<8 | uint16(packet[2])
+	control := (packet[3] >> 4) & 3
+	if control&1 == 0 {
+		return nil
+	}
+	pos := 4
+	if control&2 != 0 {
+		pos += 1 + int(packet[pos])
+		if pos > transportPacketSize {
+			return fmt.Errorf("demux: invalid adaptation length")
+		}
+	}
+	for channel := uint8(0); channel < 2; channel++ {
+		if !d.pidWritten[channel] || d.pidChannels[channel]&0x1fff != uint32(pid) || d.matchWords[channel][8]&(1<<channel) == 0 {
+			continue
+		}
+		payload := packet[pos:]
+		if packet[1]&0x40 != 0 {
+			if len(payload) == 0 {
+				return fmt.Errorf("demux: missing section pointer")
 			}
-			payload := packet[pos:]
-			if packet[1]&0x40 != 0 {
-				if len(payload) == 0 {
-					return fmt.Errorf("demux: missing section pointer")
-				}
-				pointer := int(payload[0])
-				payload = payload[1:]
-				if pointer > len(payload) {
-					return fmt.Errorf("demux: section pointer outside packet")
-				}
-				if err := d.continueTransport(channel, payload[:pointer]); err != nil {
-					return err
-				}
-				if len(d.transportPart[channel]) != 0 {
-					d.transportPart[channel] = nil
-				}
-				if err := d.startTransport(channel, payload[pointer:]); err != nil {
-					return err
-				}
-			} else if err := d.continueTransport(channel, payload); err != nil {
+			pointer := int(payload[0])
+			payload = payload[1:]
+			if pointer > len(payload) {
+				return fmt.Errorf("demux: section pointer outside packet")
+			}
+			if err := d.continueTransport(channel, payload[:pointer]); err != nil {
 				return err
 			}
+			if len(d.transportPart[channel]) != 0 {
+				d.transportPart[channel] = nil
+			}
+			if err := d.startTransport(channel, payload[pointer:]); err != nil {
+				return err
+			}
+		} else if err := d.continueTransport(channel, payload); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -136,7 +146,7 @@ func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
 	}
 	start, end := d.indirect[uint32(channel)*4], d.indirect[uint32(channel)*4+3]
 	ptr := d.writePointer[channel]
-	if ptr < start || uint64(ptr)+uint64(len(section))+1 > uint64(end)+1 || uint64(transportRAMOffset)+uint64(ptr)+uint64(len(section))+1 > uint64(d.ram.Size()) {
+	if ptr < start || uint64(ptr)+uint64(len(section))+1 > uint64(end)+1 || uint64(ptr)+uint64(len(section))+1 > 0x1fffff || uint64(transportRAMOffset)+uint64(ptr)+uint64(len(section))+1 > uint64(d.ram.Size()) {
 		return fmt.Errorf("demux: transport section exceeds configured ring")
 	}
 	for i, b := range section {

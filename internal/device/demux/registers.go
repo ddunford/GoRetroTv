@@ -14,7 +14,7 @@ const (
 	MMIOBase = 0xB000A000
 	// MMIOSize is the demux register window attached to the physical bus.
 	MMIOSize             = 0x1000
-	demuxSnapshotVersion = 4
+	demuxSnapshotVersion = 5
 )
 
 // Demux owns the status and enable state of four EMMA interrupt groups.
@@ -36,6 +36,7 @@ type Demux struct {
 	indirectData     uint32
 	indirect         [FilterCount]uint32
 	transportPart    [FilterCount][]byte
+	transportPacket  []byte
 	ram              *memory.RAM
 	interrupt        *irq.Controller
 }
@@ -203,6 +204,7 @@ func (d *Demux) Reset() {
 	d.control140, d.indirectData = 0, 0
 	d.indirect = [FilterCount]uint32{}
 	d.transportPart = [FilterCount][]byte{}
+	d.transportPacket = nil
 	d.updateLine()
 }
 
@@ -226,6 +228,7 @@ func (d *Demux) Snapshot() ([]byte, error) {
 	for _, part := range d.transportPart {
 		w.Bytes(part)
 	}
+	w.Bytes(d.transportPacket)
 	return w.Blob()
 }
 
@@ -263,6 +266,10 @@ func (d *Demux) Restore(blob []byte) error {
 			parts[i] = nil
 		}
 	}
+	packet := r.Bytes()
+	if len(packet) == 0 {
+		packet = nil
+	}
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
@@ -275,6 +282,9 @@ func (d *Demux) Restore(blob []byte) error {
 		if len(part) > 4096 {
 			return fmt.Errorf("demux: restore: oversized transport section")
 		}
+	}
+	if len(packet) >= transportPacketSize || len(packet) > 0 && packet[0] != 0x47 {
+		return fmt.Errorf("demux: restore: invalid transport packet")
 	}
 	for _, pointer := range pointers {
 		if pointer > 0x1fffff {
@@ -293,6 +303,7 @@ func (d *Demux) Restore(blob []byte) error {
 	d.control140, d.indirectData = transportState[0], transportState[1]
 	copy(d.indirect[:], indirect)
 	d.transportPart = parts
+	d.transportPacket = packet
 	d.updateLine()
 	return nil
 }

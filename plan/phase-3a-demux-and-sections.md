@@ -23,8 +23,8 @@ Phase 3c's real guest-driven handoff (TASK-3c.9); they are not inferred from uni
 - [x] `TASK-3a.5` Section injection API, appending the extra byte after each section that the hardware appends (the task advances by `section_length + 4` where DVB's total is `+ 3`) → `/go-engineer` [TC-3a.5]
 - [x] `TASK-3a.6` Demux interrupt wiring and its dispatch row → `/go-engineer` [TC-3a.6]
 - [ ] `TASK-3a.7` Oracle comparison through SI acquisition → `/go-engineer` [TC-3a.7]
-- [ ] `TASK-3a.8` ⫘ Demux unit and bus integration tests → `/go-engineer` [TC-3a.1, TC-3a.2, TC-3a.3, TC-3a.4; hardware portions of TC-3a.5 and TC-3a.6]
-- [ ] `TASK-3a.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
+- [x] `TASK-3a.8` ⫘ Demux unit and bus integration tests → `/go-engineer` [TC-3a.1, TC-3a.2, TC-3a.3, TC-3a.4; hardware portions of TC-3a.5 and TC-3a.6]
+- [x] `TASK-3a.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Custom Feature: the section demux
 

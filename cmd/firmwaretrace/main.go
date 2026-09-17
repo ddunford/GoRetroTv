@@ -41,6 +41,8 @@ func run() error {
 	traceTo := flag.Uint64("trace-to", ^uint64(0), "first instruction excluded from the trace")
 	unmapped := flag.Bool("unmapped", false, "list unmapped access sites at the end")
 	bootState := flag.Bool("boot-state", false, "print bootloader handoff and decompression probes")
+	probe := flag.Uint64("probe", 0, "print one guest word at a virtual address (hex or decimal)")
+	watchWord := flag.Uint64("watch-word", 0, "trace changes to one guest word")
 	stopPC := flag.Uint64("stop-pc", 0, "stop on the first guest PC match (hex or decimal)")
 	tasks := flag.Bool("tasks", false, "print the guest Nucleus task census")
 	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
@@ -58,6 +60,12 @@ func run() error {
 	}
 	if *stopPC > 0xffffffff {
 		return fmt.Errorf("stop PC %#x exceeds 32-bit address space", *stopPC)
+	}
+	if *probe > 0xffffffff {
+		return fmt.Errorf("probe address %#x exceeds 32-bit address space", *probe)
+	}
+	if *watchWord > 0xffffffff {
+		return fmt.Errorf("watch address %#x exceeds 32-bit address space", *watchWord)
 	}
 	images, err := firmware.Load(context.Background(), *dir)
 	if err != nil {
@@ -161,6 +169,10 @@ func run() error {
 	var halt error
 	var retired uint64
 	var previousTask uint32
+	var previousWord uint32
+	if *watchWord != 0 {
+		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
+	} // #nosec G115 -- checked above.
 	for i := uint64(0); i < *steps; i++ {
 		if *scheduler {
 			current := ram.Read(0x83d0, bus.Word)
@@ -189,6 +201,13 @@ func run() error {
 			break
 		}
 		retired = i + 1
+		if *watchWord != 0 {
+			value := busMap.Read(uint32(*watchWord), bus.Word) // #nosec G115 -- checked above.
+			if value != previousWord {
+				fmt.Fprintf(os.Stderr, "watch %d PC=%08X address=%08X before=%08X after=%08X\n", i+1, core.PC, uint32(*watchWord), previousWord, value) // #nosec G115 -- checked above.
+				previousWord = value
+			}
+		}
 		// #nosec G115 -- stopPC was checked against the 32-bit address space.
 		if *stopPC != 0 && core.PC == uint32(*stopPC) {
 			fmt.Fprintf(os.Stderr, "reached PC=%08X after %d guest instructions; Cause=%08X EPC=%08X\n", core.PC, i+1, core.COP0[13], core.COP0[14])
@@ -216,13 +235,17 @@ func run() error {
 		}
 	}
 	if *bootState {
-		fmt.Fprintf(os.Stderr, "boot ready=%08X current=%08X image=%08X entry=%08X dram-main=%08X\n",
+		fmt.Fprintf(os.Stderr, "boot ready=%08X current=%08X handoff-gate=%08X image=%08X entry=%08X dram-main=%08X\n",
 			busMap.Read(0x800083CC, bus.Word), busMap.Read(0x800083D0, bus.Word),
+			busMap.Read(0x800050D0, bus.Word),
 			busMap.Read(0xBFC20000, bus.Word), busMap.Read(0xBFC2002C, bus.Word),
 			busMap.Read(0x800009F4, bus.Word))
 		fmt.Fprintf(os.Stderr, "flash descriptor base=%08X data=%08X step=%08X interrupt pending=%08X enable=%08X\n",
 			busMap.Read(0x800050B0, bus.Word), busMap.Read(0x800050B4, bus.Word),
 			busMap.Read(0x800050BC, bus.Word), interrupts.Read(0x30, bus.Word), interrupts.Read(0x40, bus.Word))
+	}
+	if *probe != 0 {
+		fmt.Fprintf(os.Stderr, "probe %08X=%08X\n", uint32(*probe), busMap.Read(uint32(*probe), bus.Word)) // #nosec G115 -- checked above.
 	}
 	if *tasks {
 		if err := reportTasks(os.Stderr, ram); err != nil {

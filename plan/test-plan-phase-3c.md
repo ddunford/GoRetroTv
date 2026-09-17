@@ -38,5 +38,8 @@
   **Open evidence:** the ROM demux self-test now passes through a guest-driven DMA channel-5
   transport transfer, setting `[0x800081F8]` to zero and flash scan step `[0x800050BC]` to
   `0x10000` without host mutation. BOOTMain then waits for CSI command `0x44`; a diagnostic
-  synthetic peripheral reply reaches scanner PC `0x9FC122B6`, but the application image at
-  `0x800009F4` remains zero through 100 million instructions. See `gort-f3f.10` for trace PCs.
+  synthetic peripheral reply reaches scanner PC `0x9FC122B6`. Both JB image scans and CRCs pass;
+  BOOTMain enters a sleep/service loop and reaches the browser oracle's idle handoff boundary
+  (`ready=0x100`, `current=0`) by 100 million
+  instructions. The guest still never reaches flash entry `0x9FC2048C` or loader `0x9FC20618`,
+  and the application image at `0x800009F4` remains zero. See `gort-f3f.10` for trace PCs.

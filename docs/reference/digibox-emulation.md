@@ -5896,11 +5896,15 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   **normal guest instructions write zero to `[0x800081F8]`** and set `[0x800050BC]` to
   `0x10000`; no host mutation is involved. The bootloader then waits on `SMTAck` for CSI command
   `0x44`. A diagnostic peripheral reply using the oracle's synthetic all-buttons-released frame
-  reaches scanner PC `0x9FC122B6` at instruction 19,193,163. That reply is not a measured
-  physical-controller response, and by 100 million instructions the application image at
-  `0x800009F4` remains zero. The scanner's remaining rejection is under investigation. The
-  browser oracle forces its own host-side handoff when the bootloader is idle; that injection
-  cannot establish that the firmware itself transferred control.
+  reaches scanner PC `0x9FC122B6` at instruction 19,193,163. Both JB images pass their header
+  and payload CRC checks, with the second scan returning success at instruction 64,451,653.
+  BOOTMain calls `0x9FC036F8` at instruction 64,453,227 and enters its sleep/service loop.
+  By 100 million instructions it reaches the browser oracle's declared fiction boundary:
+  `ready=0x100`, `current=0`, still in the bootloader. That reply is not a measured
+  physical-controller response, the guest never reaches the flash entry at `0x9FC2048C` or
+  loader at `0x9FC20618`, and the application image at `0x800009F4` remains zero. The browser
+  oracle then forces its own host-side handoff; that injection cannot establish that the firmware
+  itself transferred control.
 - **Whether the EPG runs without a viewing card.** 54 CA strings, `NDS XSG`, `CA API Glue`.
   Historically a Sky box showed its guide with no card and refused only to decrypt, and the EPG
   carousel was broadcast in the clear — but that is a reason to expect an answer, not evidence for

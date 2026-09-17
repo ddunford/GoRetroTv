@@ -39,6 +39,7 @@ func main() {
 
 func run() error {
 	var hits pcHits
+	var sections sectionInputs
 	dir := flag.String("firmware", "firmware", "verified firmware directory")
 	steps := flag.Uint64("steps", 100000, "maximum retired instructions")
 	interval := flag.Uint64("interval", 1000, "instructions between checkpoints")
@@ -55,6 +56,14 @@ func run() error {
 	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
 	csiWire := flag.Bool("csi-wire", false, "print bytes the guest transmitted on CSI")
 	demodPolls := flag.Bool("demod-polls", false, "count guest I2C reads of the satellite demodulator")
+	demodTraceFrom := flag.Uint64("demod-trace-from", 0, "first instruction included in demodulator read trace (requires -demod-polls)")
+	demodTraceTo := flag.Uint64("demod-trace-to", 0, "first instruction excluded from demodulator read trace (requires -demod-polls)")
+	sectionHex := flag.String("section-hex", "", "hexadecimal DVB section to deliver through an armed PID filter")
+	sectionPID := flag.Uint("section-pid", 0, "PID for the section delivered by -section-hex")
+	sectionAt := flag.Uint64("section-at", 0, "retired instruction count at which to deliver -section-hex")
+	sectionState := flag.Bool("section-state", false, "print guest-programmed SI PID filters and section interrupt state")
+	sectionSamples := flag.Bool("section-samples", false, "sample SI device and guest PC state before each scheduled section batch")
+	flag.Var(&sections, "section", "additional DVB section as instruction:pid:hex (repeatable)")
 	surfaceHash := flag.Bool("surface-hash", false, "print the raw 720x576 OSD RAM hash and distinct byte count")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	ackCode := flag.Int("ack-code", -1, "additional CSI command code to acknowledge (-1 keeps measured default)")
@@ -72,6 +81,9 @@ func run() error {
 	if *ackCode < -1 || *ackCode > 255 {
 		return fmt.Errorf("CSI acknowledgement code %d is outside 0..255", *ackCode)
 	}
+	if (*demodTraceFrom != 0 || *demodTraceTo != 0) && (!*demodPolls || *demodTraceTo <= *demodTraceFrom) {
+		return fmt.Errorf("demod read trace requires -demod-polls and a nonempty instruction range")
+	}
 	if *ackAll && *ackCode >= 0 {
 		return fmt.Errorf("ack-all and ack-code are mutually exclusive")
 	}
@@ -83,6 +95,23 @@ func run() error {
 	}
 	if *watchWord > 0xffffffff {
 		return fmt.Errorf("watch address %#x exceeds 32-bit address space", *watchWord)
+	}
+	if (*sectionHex == "") != (*sectionAt == 0) {
+		return fmt.Errorf("section-hex and nonzero section-at must be supplied together")
+	}
+	if *sectionPID > 0x1fff {
+		return fmt.Errorf("section PID %#x exceeds DVB range", *sectionPID)
+	}
+	if *sectionHex != "" {
+		if err := sections.Set(fmt.Sprintf("%d:%d:%s", *sectionAt, *sectionPID, *sectionHex)); err != nil {
+			return err
+		}
+	}
+	sections.sortByTime()
+	for _, section := range sections {
+		if section.at >= *steps {
+			return fmt.Errorf("section instruction %d must precede steps %d", section.at, *steps)
+		}
 	}
 	images, err := firmware.Load(context.Background(), *dir)
 	if err != nil {
@@ -146,6 +175,7 @@ func run() error {
 	mux := i2c.NewMux()
 	master := i2c.New(store, interrupts)
 	demodModel := demod.New()
+	var instruction uint64
 	var demodReadTotal uint64
 	demodReadCount := make(map[uint16]uint64)
 	demodReadValue := make(map[uint16]uint8)
@@ -154,6 +184,9 @@ func run() error {
 			demodReadTotal++
 			demodReadCount[register]++
 			demodReadValue[register] = value
+			if *demodTraceTo != 0 && instruction >= *demodTraceFrom && instruction < *demodTraceTo {
+				fmt.Fprintf(os.Stderr, "demod-read-at instruction=%d register=%d value=%02X\n", instruction, register, value)
+			}
 		})
 	}
 	master.BindDemod(demodModel)
@@ -213,7 +246,6 @@ func run() error {
 	// iteration, while an accepted interrupt adds an iteration without retiring a
 	// guest instruction. Keep this clock separate from the retired count below.
 	loopClock := clock.New()
-	var instruction uint64
 	const pumpName = "board-pump"
 	var boardPump clock.Handler
 	boardPump = func(now uint64) error {
@@ -248,6 +280,10 @@ func run() error {
 		retired = emulated.Retired
 		instruction = retired
 	}
+	if len(sections) != 0 && sections[0].at < retired {
+		return fmt.Errorf("section instruction %d precedes restored instruction count %d", sections[0].at, retired)
+	}
+	nextSection := 0
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
@@ -266,6 +302,25 @@ func run() error {
 			if err := serial.Key(uint8(*key), 0); err != nil {
 				return err
 			}
+		}
+		for nextSection < len(sections) && i == sections[nextSection].at {
+			if *sectionSamples && (nextSection == 0 || sections[nextSection-1].at != i) {
+				last := func(filter uint8) uint32 {
+					return ram.Read((demux.RecordBase(filter)&0x1fffffff)+12, bus.Word)
+				}
+				fmt.Fprintf(os.Stderr, "section-sample at=%d enable=%08X status=%08X armed-pids=%v last22=%08X last23=%08X last24=%08X demod-reads=%d\n",
+					i, sectionDemux.Read(0xD8, bus.Word), sectionDemux.Read(0xB8, bus.Word),
+					sectionDemux.ArmedPIDs(), last(22), last(23), last(24), demodReadTotal)
+				for _, hit := range hits {
+					fmt.Fprintf(os.Stderr, "section-sample-hit at=%d pc=%08X total=%d\n", i, hit.address, hit.total)
+				}
+			}
+			section := sections[nextSection]
+			if err := sectionDemux.Push(section.pid, section.bytes); err != nil {
+				return fmt.Errorf("section delivery after %d guest instructions: %w", i, err)
+			}
+			fmt.Fprintf(os.Stderr, "section-inject icount=%d pid=%04X bytes=%d\n", i, section.pid, len(section.bytes))
+			nextSection++
 		}
 		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
 		// Go executes them as two Steps, so the delay slot does not advance this phase.
@@ -326,6 +381,9 @@ func run() error {
 	if halt != nil {
 		return halt
 	}
+	if nextSection != len(sections) {
+		return fmt.Errorf("section delivery was not reached before run stopped at %d instructions", retired)
+	}
 	fmt.Fprintf(os.Stderr, "retired %d instructions; PC=%08X ISA=%v; unmapped accesses: %+v\n", retired, core.PC, core.ISA, busMap.UnmappedTotals())
 	if *unmapped {
 		for _, site := range busMap.Unmapped() {
@@ -362,6 +420,26 @@ func run() error {
 		sort.Ints(registers)
 		for _, register := range registers {
 			fmt.Fprintf(os.Stderr, "demod-read register=%d count=%d value=%02X\n", register, demodReadCount[uint16(register)], demodReadValue[uint16(register)]) // #nosec G115 -- register came from uint16 map key.
+		}
+	}
+	if *sectionState {
+		fmt.Fprintf(os.Stderr, "section-state enable=%08X status=%08X armed-pids=%v\n",
+			sectionDemux.Read(0xD8, bus.Word), sectionDemux.Read(0xB8, bus.Word), sectionDemux.ArmedPIDs())
+		for unit := uint8(0); unit < 16; unit++ {
+			table, _ := sectionDemux.Match(unit, 0)
+			if table.Mask == 0 {
+				continue
+			}
+			extHi, _ := sectionDemux.Match(unit, 1)
+			extLo, _ := sectionDemux.Match(unit, 2)
+			fmt.Fprintf(os.Stderr, "section-match unit=%d table=%02X/%02X extension=%02X%02X/%02X%02X\n",
+				unit, table.Value, table.Mask, extHi.Value, extLo.Value, extHi.Mask, extLo.Mask)
+		}
+		for _, channel := range []uint8{21, 22, 23, 24} {
+			record := demux.RecordBase(channel) & 0x1fffffff
+			fmt.Fprintf(os.Stderr, "section-filter channel=%d ring=%08X record-start=%08X record-end=%08X record-current=%08X record-last=%08X context=%08X\n",
+				channel, demux.RingBase(channel), ram.Read(record, bus.Word), ram.Read(record+4, bus.Word),
+				ram.Read(record+8, bus.Word), ram.Read(record+12, bus.Word), ram.Read(record+16, bus.Word))
 		}
 	}
 	for _, hit := range hits {

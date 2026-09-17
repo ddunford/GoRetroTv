@@ -75,7 +75,11 @@ func TestLinkHoldsTheDeviceContract(t *testing.T) {
 		Mutate: func(device bus.Device) {
 			l := device.(*Link)
 			l.control, l.interruptEnable, l.data, l.ready = 0x80, 1, 0x7d, true
-			l.queue, l.transmitted, l.lastByteAt = []byte{1, 2}, []byte{3}, 2100
+			l.queue, l.reply, l.transmitted = []byte{1, 2}, []byte{4}, []byte{3}
+			l.lastByteAt, l.now, l.powerAt = 2100, 2500, 2400000
+			l.cardLive, l.boxBusy, l.txSeen, l.escaped = true, true, true, true
+			l.frame = []byte{3, 1, 0x52}
+			l.AckAll()
 		},
 		Disturb:  func(device bus.Device) { device.Reset() },
 		Constant: []string{"interrupt"},

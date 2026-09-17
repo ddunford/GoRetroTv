@@ -13,8 +13,12 @@
   over a fresh I²C transaction. `internal/device/eeprom/store_test.go` checks the file image
   independently. The I²C test also proves START alone raises no interrupt, while address-byte
   completion does and `+0x50` clears it.
-- [ ] **TC-3c.3: Acknowledgement policy** (covers: TASK-3c.3, TASK-3c.7) — the documented set boots; acking
+- [?] **TC-3c.3: Acknowledgement policy** (covers: TASK-3c.3, TASK-3c.7) — the documented set boots; acking
   everything is shown to change where the boot stops, proving the model is the working one.
+  `internal/device/csi/peripheral_test.go` proves the default set answers only 0x52 and 0x18,
+  echoes the guest's sequence, and that acknowledging everything changes the wire replies.
+  **Blocked:** comparing the resulting 42-task and 19-task guest boots requires the real
+  application handoff and remaining Phase 3c devices. Reopen after TASK-3c.9/3c.6.
 - [ ] **TC-3c.4: CA init proceeds past the card** (covers: TASK-3c.4, TASK-3c.7).
 - [ ] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75 with bits 0x17
   set and register 78 = 0x02, which is what the driver polls.

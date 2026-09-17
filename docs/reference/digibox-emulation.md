@@ -113,8 +113,9 @@ the measured MasterOut ratio.
 
 ## Two programs, and this caused a long detour
 
-**The bootloader** occupies `0x0-0x1FFFF`, is write-protected, and has its own Nucleus with ONE
-task. **The application** is a separate image at flash `0x20000` (`JB` header, length `0x17F62C`,
+**The bootloader** occupies `0x0-0x1FFFF`, is write-protected, and has its own Nucleus. It starts
+with BOOTMain, then creates SMNTask, SMTTask, SMHKTask and EVTTask when the board timer wakes its
+event loop. **The application** is a separate image at flash `0x20000` (`JB` header, length `0x17F62C`,
 manufacturer `0x9F`, version `0x2D`, `SIGN` at `0x19F648`) with its entry at **`0xBFC2048C`**.
 
 Its loader at `0xBFC20618` walks a `(dst, src, len)` table at flash **`0x211DC`**:
@@ -126,8 +127,8 @@ Its loader at `0xBFC20618` walks a `(dst, src, len)` table at flash **`0x211DC`*
     800009f4 <- 9fcd06f0  0xfb418   THE MAIN IMAGE, compressed
 
 `FETask`, `SMHKTask`, `SMNTask`, `SMTTask`, `SCTask`, `EVTTask` are the APPLICATION's tasks. Boot
-the bootloader alone and exactly one Nucleus `TASK` magic exists; enter the application and there
-are **eleven**. Time was lost diagnosing "why are no tasks created" while running the wrong
+the bootloader to its first scheduler turn and one Nucleus `TASK` exists; let its timer run and
+five exist; enter the application and there are **eleven** at the measured checkpoint. Time was lost diagnosing "why are no tasks created" while running the wrong
 program entirely.
 
 ## The inner codec — solved
@@ -5877,19 +5878,22 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   and blitter are emulated and proved — they are what paints the screen you get today — but there
   is no MPEG-2 video decoder in the emulator at all. The reachable next visual milestone is the
   menus and the guide, not a picture behind them.
-- **The bootloader does not hand off to the application, and the reason is now located.** It does
-  not jump to a fixed entry — **it SEARCHES for the image header**. The validator at
+- **The bootloader handoff remains unproved.** Its image validator **SEARCHES for the image header**. The validator at
   `0xBFC122B6` reads a word through the unaligned big-endian reader at `0xBFC12A38`, compares it
   against the `JB` magic `0x4A42A007` (pool literal at `0xBFC12584`), and on a miss advances the
   pointer by a step held at **`0x800050BC`** and loops to a limit. `0xBFC13430` does the same for
   the `SIGN` terminator `0x5349474E`.
-  **`0x800050BC` is zero in our emulation, so the scan never advances.** It is part of a flash
+  **`0x800050BC` is zero in our emulation.** It is part of a flash
   device descriptor: `0x800050B0` = `0xB200A000` and `0x800050B4` = `0xB200A010`, register
-  addresses in the `0xB2000000` block. The bootloader probes the flash chip through those
-  registers and fills in its geometry — the firmware carries the part numbers `MBM29LV160B` and
-  `AT49LV1614`, so this is a JEDEC/CFI device-ID probe. Our emulator answers 0 for those reads,
-  the probe learns nothing, the step stays 0, and the image is never found.
-  **So the blocker is a flash controller model, not anything to do with video or the RTOS.**
+  addresses in the `0xB2000000` block. The earlier conclusion that zero geometry prevents this
+  scan was premature: a 100-million-instruction Go trace never reaches the validator at all and
+  makes no read from that block. A missing board timer at `0xB000D000` was one measured blocker:
+  with its `0x40` interrupt modelled, BOOTMain wakes and the bootloader creates five tasks, but
+  BOOTMain then sleeps in a 100-tick loop. At 100 million instructions the image at `0x800009F4`
+  is still zero and no guest handoff has occurred. The browser oracle forces its own host-side
+  handoff when the bootloader is idle; that injection cannot establish that the firmware itself
+  reached the validator or transferred control. The next measurement is the BOOTMain loop's
+  condition and its inputs.
 - **Whether the EPG runs without a viewing card.** 54 CA strings, `NDS XSG`, `CA API Glue`.
   Historically a Sky box showed its guide with no card and refused only to decrypt, and the EPG
   carousel was broadcast in the clear — but that is a reason to expect an answer, not evidence for

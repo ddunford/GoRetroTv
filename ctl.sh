@@ -91,6 +91,57 @@ cmd_up() {
     cmd_health
 }
 
+public_compose() {
+    docker compose -f docker-compose.yml -f docker-compose.traefik.yml "$@"
+}
+
+public_env() {
+    # The private snapshot is mode 0600 in a 0700 directory. Run as its non-root owner inside
+    # the container rather than making either path world-readable for the distroless UID.
+    GORETROTV_RUNTIME_UID="$(id -u)"
+    GORETROTV_RUNTIME_GID="$(id -g)"
+    [[ "$GORETROTV_RUNTIME_UID" != 0 ]] || die "public container must run as a non-root snapshot owner"
+    GORETROTV_ENV=production
+    export GORETROTV_RUNTIME_UID GORETROTV_RUNTIME_GID GORETROTV_ENV
+}
+
+cmd_public_config() {
+    public_env
+    public_compose config "$@"
+}
+
+cmd_up_public() {
+    require_firmware
+    [[ -f snapshots/post-acquisition.snapshot ]] \
+        || die "missing private post-acquisition snapshot; create it with ./ctl.sh snapshot seed"
+    [[ -r snapshots/post-acquisition.snapshot ]] \
+        || die "post-acquisition snapshot is not readable by the current user"
+    public_env
+    export_build_args
+    public_compose up -d --build
+    cmd_public_health
+}
+
+cmd_down_public() {
+    public_env
+    public_compose down
+}
+
+cmd_public_health() {
+    local domain="${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}"
+    local url="https://${domain}/health"
+    for ((i = 1; i <= 90; i++)); do
+        if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
+            ok "healthy through Traefik: $url"
+            curl -fsS "$url"
+            say ""
+            return 0
+        fi
+        sleep 1
+    done
+    die "public route unhealthy: $url did not answer within 90s"
+}
+
 cmd_down() { docker compose down; }
 
 cmd_restart() { cmd_down; cmd_up; }
@@ -264,11 +315,15 @@ GoRetroTV control script
 Running
   run            Build and run natively (the fast loop -- the emulator gains nothing from a container)
   up             Build and start the compose stack, then wait for health
+  up-public      Build and start the real HTTPS Traefik route with private data mounted read-only
+  config-public  Print the effective public compose configuration
   down           Stop the compose stack
+  down-public    Stop the public compose stack
   restart        down, then up
   status         Compose state plus a health probe
   logs [n]       Follow the container log (default: last 100 lines)
   health         Probe the health endpoint and print what it says
+  health-public  Probe the real HTTPS URL through Traefik
   gate           Boot gate: build, verify firmware, listen, /health, graceful stop
   cpu-gate       Real firmware CPU/oracle gate through the first unmodelled video RAM read
   handoff-gate   Prove declared handoff, guest loader and application entry
@@ -306,11 +361,15 @@ main() {
         image)   cmd_image "$@" ;;
         run)     cmd_run "$@" ;;
         up)      cmd_up "$@" ;;
+        up-public) cmd_up_public "$@" ;;
+        config-public) cmd_public_config "$@" ;;
         down)    cmd_down "$@" ;;
+        down-public) cmd_down_public "$@" ;;
         restart) cmd_restart "$@" ;;
         status)  cmd_status "$@" ;;
         logs)    cmd_logs "$@" ;;
         health)  cmd_health "$@" ;;
+        health-public) cmd_public_health "$@" ;;
         gate)    cmd_gate "$@" ;;
         cpu-gate) cmd_cpu_gate "$@" ;;
         handoff-gate) cmd_handoff_gate "$@" ;;

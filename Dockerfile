@@ -2,6 +2,16 @@
 # not ours (firmware/MANIFEST.md), so a running container is given them as a mounted volume and a
 # published image stays inert without them.
 
+# Build the checked TypeScript source in an isolated stage. No host-generated dist files enter the
+# image, so a stale local `web/dist` cannot silently become the page served in production.
+FROM node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS web-builder
+WORKDIR /src
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+COPY tsconfig.json ./
+COPY web/*.ts ./web/
+RUN npm run build:web
+
 # Linux/amd64 image manifest, resolved from the official Docker Hub registry.
 FROM golang:1.27.1@sha256:b475798fb16158e6c38e8b5ca2d870fbeaa8b7fec0fc8ec64b3dc20966040635 AS builder
 WORKDIR /src
@@ -31,6 +41,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 # Linux/amd64 image manifest from the distroless registry. Debian 13 is the supported runtime line.
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:2293b36c7c9082bf4115aab724b4d2cddec82c8eba39bf27ac0517e159acf150 AS runtime
 COPY --from=builder /out/goretrotv /goretrotv
+COPY web/index.html web/styles.css web/favicon.svg /web/
+COPY --from=web-builder /src/web/dist /web/dist
 # oraclecmp travels with the emulator rather than being a separate developer-only build, because
 # it answers a question about THIS binary: whether the checkpoint stream this build produced
 # matches the browser oracle's (SPEC FR-6). Shipping it here removes the version-skew question -

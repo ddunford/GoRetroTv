@@ -9,3 +9,7 @@ snapshots
 traces
 bin
 dist
+web/dist
+node_modules
+.playwright-mcp
+test-results

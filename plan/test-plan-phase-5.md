@@ -20,10 +20,16 @@
   canvas; `internal/web/transport_test.go` asserts the measured CSI wire frame from a live socket.
 - [?] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
   **Blocked:** Browser wiring and the deployed path are not built yet (TASK-5.4 and TASK-5.5).
-- [?] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
+- [x] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
   `goretrotv.demosrv.uk`, not localhost**, and every asset it fetches is verified to return its own
   content rather than the SPA fallback.
-  **Blocked:** The page is not deployed and the DNS owner gate is open (TASK-5.5, gort-7g2.2).
+  **Result:** `./ctl.sh up-public` built and started the image behind the real Traefik router;
+  `https://goretrotv.demosrv.uk/health` returned 200 over verified TLS. The public page, stylesheet,
+  favicon and three JavaScript modules matched their built files byte for byte; an unknown module
+  returned 404. Browser verification at the real URL showed Ready, 24 enabled buttons and the real
+  firmware's Box Office menu after Sky was pressed. Light, dark and 390 px mobile screenshots were
+  inspected; mobile had no horizontal overflow. `./ctl.sh conformance` passed 7/7 rules and 26/26
+  probes, including the firmware-free image check.
 - [?] **TC-5.6: Developer surfaces are unreachable publicly** (covers: TASK-5.6, TASK-5.7) — the gdb port and
   instrument endpoints refuse from outside. Asserted against the deployed host.
   **Blocked:** The deployed route is not available (TASK-5.5 and owner gates gort-7g2.1/.2).

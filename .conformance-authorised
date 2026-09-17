@@ -74,3 +74,7 @@ digest: e7cc01ab912f3dc8c409805d34b05df590cdc11bff4a5392cc16c569a26dd1e3
   when: 2026-09-17T14:13:13Z
    why: Phase 5 requires a browser WebSocket transport; ADR 0001 explicitly anticipated a later dependency. Permit only coder/websocket v1.8.15, retain rejection probes for every extra module, wrong version and replacement, and preserve firmware-free runtime images.
 
+digest: 82760f54c4d45e4f381443c576043b943a1620b783740dd25105e47dfc84f75d
+  when: 2026-09-17T14:58:12Z
+   why: Phase 5 public browser deployment adds a Node asset build stage, private read-only snapshot mount, and Traefik route while retaining firmware-free images and loopback developer surfaces
+

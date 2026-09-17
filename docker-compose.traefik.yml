@@ -1,0 +1,34 @@
+# Public demo overlay. Apply through `./ctl.sh up-public`; the base compose remains loopback-only.
+# The shared Traefik on this origin owns 80/443 and terminates TLS. Firmware and the private
+# post-acquisition snapshot are read-only host mounts, never copied into the image.
+services:
+  goretrotv:
+    user: "${GORETROTV_RUNTIME_UID:?set by ctl.sh}:${GORETROTV_RUNTIME_GID:?set by ctl.sh}"
+    environment:
+      GORETROTV_ENV: production
+      GORETROTV_WEB_DIR: /web
+      GORETROTV_SNAPSHOT_PATH: /snapshots/post-acquisition.snapshot
+      GORETROTV_ENABLE_PPROF: "false"
+    ports: !reset []
+    volumes:
+      - ./snapshots:/snapshots:ro
+    networks: [default, traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "${TRAEFIK_NETWORK:-traefik_demosrv}"
+      traefik.http.routers.goretrotv-demo.rule: "Host(`${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}`)"
+      traefik.http.routers.goretrotv-demo.entrypoints: "websecure"
+      traefik.http.routers.goretrotv-demo.tls.certresolver: "le"
+      traefik.http.routers.goretrotv-demo.service: "goretrotv-demo"
+      traefik.http.routers.goretrotv-demo.middlewares: "goretrotv-demo-headers"
+      traefik.http.services.goretrotv-demo.loadbalancer.server.port: "8099"
+      traefik.http.middlewares.goretrotv-demo-headers.headers.contentTypeNosniff: "true"
+      traefik.http.middlewares.goretrotv-demo-headers.headers.frameDeny: "true"
+      traefik.http.middlewares.goretrotv-demo-headers.headers.referrerPolicy: "no-referrer"
+      traefik.http.middlewares.goretrotv-demo-headers.headers.stsSeconds: "31536000"
+      traefik.http.middlewares.goretrotv-demo-headers.headers.contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' wss://${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+
+networks:
+  traefik:
+    name: "${TRAEFIK_NETWORK:-traefik_demosrv}"
+    external: true

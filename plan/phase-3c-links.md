@@ -8,7 +8,7 @@ CSI (the handset), I²C and the EEPROM (NVRAM), the smartcard link, and the sate
 
 ## Tasks (mirror — bd epic `gort-f3f` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-3c.1` The CSI link and handset frames; `__key(raw, source)`'s equivalent. The 33 documented raw codes, with **sky = 0x7D, tv guide = 0x80, up = 0x58, down = 0x59, left = 0x5A, right = 0x5B, select = 0x5C** → `/go-engineer` [TC-3c.1]
+- [x] `TASK-3c.1` The CSI link and handset frames; `__key(raw, source)`'s equivalent. The 33 documented raw codes, with **sky = 0x7D, tv guide = 0x80, up = 0x58, down = 0x59, left = 0x5A, right = 0x5B, select = 0x5C** → `/go-engineer` [TC-3c.1]
 - [ ] `TASK-3c.2` I²C plus the EEPROM, persisted to a file. **This is the NVRAM** and its contents are what make a boot warm → `/go-engineer` [TC-3c.2]
 - [ ] `TASK-3c.3` The peripheral micro's command acknowledgements — which commands are answered is load-bearing: acking everything frees the link but stalls the boot elsewhere → `/go-engineer` [TC-3c.3]
 - [ ] `TASK-3c.4` The smartcard link, enough for the CA init to proceed → `/go-engineer` [TC-3c.4]

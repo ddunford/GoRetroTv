@@ -22,6 +22,9 @@
   **Result:** `internal/device/osd/windows_test.go` builds two firmware-owned 100-byte records in
   DRAM, verifies window 0 returns an immediate error with gate zero, reads the visible window's
   depth, indices and background fields without mutation, and rejects an out-of-bounds table.
-- [ ] **TC-3b.5: Bit depths render** (covers: TASK-3b.5, TASK-3b.7) — 2, 4 and 8 bpp against known pixels.
+- [x] **TC-3b.5: Bit depths render** (covers: TASK-3b.5, TASK-3b.7) — 2, 4 and 8 bpp against known pixels.
+  **Result:** `internal/device/osd/compose_test.go` programs field buffers at each depth, checks
+  known pixels in both interlaced fields, decodes a packed CLUT entry, and checks the unprogrammed
+  display returns black. `./ctl.sh test`, lint and nine-anchor CPU gate passed.
 - [ ] **TC-3b.6: The menu matches the oracle** (covers: TASK-3b.6) — press sky; the framebuffer hash
   equals the oracle's for the same instruction count. 62 widgets, 37 colours is the known-good shape.

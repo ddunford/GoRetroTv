@@ -88,7 +88,8 @@ func TestDisplayHoldsTheDeviceContract(t *testing.T) {
 			d.Write(0x200, bus.Word, 0x01013c0c)
 			d.Write(0x204, bus.Word, 0x01583fe8)
 		},
-		Disturb: func(device bus.Device) { device.Reset() },
+		Disturb:  func(device bus.Device) { device.Reset() },
+		Constant: []string{"ram"},
 	})
 	if err != nil {
 		t.Fatal(err)

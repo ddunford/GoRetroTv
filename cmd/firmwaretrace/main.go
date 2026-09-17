@@ -82,7 +82,11 @@ func run() error {
 	if err := busMap.Attach(osd.VideoBase, osd.WindowSize, video); err != nil {
 		return err
 	}
-	if err := busMap.Attach(osd.DisplayBase, osd.WindowSize, osd.NewDisplay()); err != nil {
+	display := osd.NewDisplay()
+	if err := display.BindRAM(ram); err != nil {
+		return err
+	}
+	if err := busMap.Attach(osd.DisplayBase, osd.WindowSize, display); err != nil {
 		return err
 	}
 	graphics := blitter.New(ram)

@@ -4,14 +4,27 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
 )
 
 // Display stores the two measured OSD display-list roots.
-type Display struct{ roots [2]uint32 }
+type Display struct {
+	roots [2]uint32
+	ram   *memory.RAM
+}
 
 // NewDisplay returns an unprogrammed OSD display-list controller.
 func NewDisplay() *Display { return &Display{} }
+
+// BindRAM connects display-list and CLUT reads to the board's existing DRAM.
+func (d *Display) BindRAM(ram *memory.RAM) error {
+	if ram == nil || ram.Size() < memory.DRAMSize {
+		return fmt.Errorf("osd: display needs full board DRAM")
+	}
+	d.ram = ram
+	return nil
+}
 
 // Name is the snapshot key.
 func (*Display) Name() string { return "osd-display" }

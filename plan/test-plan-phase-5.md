@@ -4,9 +4,10 @@
 - [x] **TC-5.1: Frames reach the browser** (covers: TASK-5.1, TASK-5.7) — the canvas matches the core's
   framebuffer hash.
   **Result:** `internal/board/runtime_test.go` pins the verified private snapshot's composed indexed
-  framebuffer hash to `A6A21DC5`. `tests/live/firmware.spec.ts` captures the full frame from the
+  framebuffer hash to `A6A21DC5` and the post-Sky menu to `FE8D1CCC`. `tests/live/firmware.spec.ts` captures the full frame from the
   running Go WebSocket, checks that same hash, expands its real palette into RGBA, and compares a
-  SHA-256 digest against every pixel in the browser canvas before pressing Sky. The live test passes.
+  SHA-256 digest against every pixel in the browser canvas before pressing Sky. It then waits for
+  the exact post-Sky menu hash through the WebSocket. The live test passes.
 - [x] **TC-5.2: The status line tracks real machine state** (covers: TASK-5.2, TASK-5.7) — it must be driven by
   observed state, not a timer. The predecessor's said Ready twenty seconds early because it keyed on
   a task count that plateaus before the work starts.
@@ -19,7 +20,8 @@
   snapshot, clicks the page's Sky button, and waits for the firmware's Box Office menu on the
   canvas; `internal/web/transport_test.go` asserts the measured CSI wire frame from a live socket.
 - [?] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
-  **Blocked:** Browser wiring and the deployed path are not built yet (TASK-5.4 and TASK-5.5).
+  **Blocked:** The real public browser path was walked and showed the Box Office menu, but a
+  committed Playwright test against the deployed URL remains for TASK-5.7.
 - [x] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
   `goretrotv.demosrv.uk`, not localhost**, and every asset it fetches is verified to return its own
   content rather than the SPA fallback.

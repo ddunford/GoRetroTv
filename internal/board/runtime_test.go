@@ -111,7 +111,16 @@ func TestPrivatePostAcquisitionSnapshotRestoresAndRuns(t *testing.T) {
 	if err := r.CSI.Key(0x7D, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Step(); err != nil {
+	for i := 0; i < 20_000_000; i++ {
+		if err := r.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	menu, err := r.Compose()
+	if err != nil {
 		t.Fatal(err)
+	}
+	if got := statehash.HashBytes(menu.Pix); got != 0xFE8D1CCC {
+		t.Fatalf("post-Sky composed framebuffer hash %08X, want FE8D1CCC", got)
 	}
 }

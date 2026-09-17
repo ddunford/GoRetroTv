@@ -26,6 +26,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/machine"
 	"github.com/ddunford/goretrotv/internal/memory"
+	"github.com/ddunford/goretrotv/internal/platform/clock"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
 
@@ -60,6 +61,7 @@ func run() error {
 	ackAll := flag.Bool("ack-all", false, "diagnostic policy: acknowledge every CSI command")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
+	snapshotOut := flag.String("snapshot-out", "", "write a complete machine snapshot after the run")
 	flag.Var(&hits, "pc-hit", "count guest executions of this PC (repeatable, hex or decimal)")
 	flag.Parse()
 	if *key < -1 || *key > 255 {
@@ -205,17 +207,15 @@ func run() error {
 	var previousWord uint32
 	var handoff machine.Handoff
 	skyMenu := machine.NewSkyGates(*skyGates)
-	var handoffPumpPhase uint8 = 1
-	var boardPumpClock uint64
+	// The oracle pumps once per loop iteration. Its MIPS32 branch and slot share one
+	// iteration, while an accepted interrupt adds an iteration without retiring a
+	// guest instruction. Keep this clock separate from the retired count below.
+	loopClock := clock.New()
 	var instruction uint64
-	pumpBoard := func() error {
-		handoffPumpPhase--
-		if handoffPumpPhase != 0 {
-			return nil
-		}
-		handoffPumpPhase = 16
-		boardPumpClock += 16
-		boardTimer.Pump(boardPumpClock)
+	const pumpName = "board-pump"
+	var boardPump clock.Handler
+	boardPump = func(now uint64) error {
+		boardTimer.Pump(now + 15)
 		serial.Pump(instruction, boardTimer.Ticks())
 		modemPort.Pump(boardTimer.Ticks())
 		cardPort.Pump(16)
@@ -226,8 +226,18 @@ func run() error {
 		if applied {
 			fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%08X\n", instruction, core.PC)
 		}
-		return nil
+		_, err = loopClock.At(now+16, pumpName, boardPump)
+		return err
 	}
+	if _, err := loopClock.At(1, pumpName, boardPump); err != nil {
+		return err
+	}
+	emulated, err := machine.New(core, busMap, loopClock, &handoff, skyMenu,
+		map[string]clock.Handler{pumpName: boardPump})
+	if err != nil {
+		return err
+	}
+	pumpBoard := func() error { return loopClock.Advance(1) }
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
@@ -278,6 +288,7 @@ func run() error {
 			break
 		}
 		retired = i + 1
+		emulated.Retired = retired
 		if *watchWord != 0 {
 			value := busMap.Read(uint32(*watchWord), bus.Word) // #nosec G115 -- checked above.
 			if value != previousWord {
@@ -356,6 +367,11 @@ func run() error {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "surface hash=%08X distinct=%d bytes=%d base=%08X sha256=%x\n", hash, distinct, surfaceLength, surfaceBase, sha)
+	}
+	if *snapshotOut != "" {
+		if err := writeSnapshot(*snapshotOut, emulated); err != nil {
+			return err
+		}
 	}
 	return nil
 }

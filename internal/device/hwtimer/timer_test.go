@@ -4,10 +4,28 @@ import (
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/bus/bustest"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 )
 
 func TestTimerHoldsTheDeviceContract(t *testing.T) {
+	if err := bustest.CheckSnapshot(bustest.Check{
+		New: func() bus.Device { return New(nil) },
+		Mutate: func(device bus.Device) {
+			timer := device.(*Timer)
+			for off := uint32(0); off < Size; off += 4 {
+				if off != 0xE0 {
+					timer.Write(off, bus.Word, off+1)
+				}
+			}
+			timer.Pump(PeriodInstructions)
+		},
+		Disturb:  func(device bus.Device) { device.Reset() },
+		Constant: []string{"interrupt"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	interrupts := irq.New(nil)
 	interrupts.Write(0x40, bus.Word, IRQMask)
 	timer := New(interrupts)

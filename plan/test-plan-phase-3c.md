@@ -11,3 +11,6 @@
   set and register 78 = 0x02, which is what the driver polls.
 - [ ] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
   matching end to end. **SPEC success criterion 1.**
+- [ ] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses
+  the application to `0x800009F4` and transfers control by executing guest instructions. The
+  test must fail if a host-side forced PC change or image copy is substituted for the handoff.

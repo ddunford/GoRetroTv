@@ -10,3 +10,7 @@ digest: c7454a8868a567de95d7a8c4a14a724e3de5376f36a2380a2cf3ca8be88ee036
   when: 2026-09-16T21:30:24Z
    why: Clarify that the local digest guard is an audit trail and forge review is not configured
 
+digest: 1706914ef60f1dc6a5606c44b6811b96ced9b62a5e78015f9ad57ad2c409aace
+  when: 2026-09-17T06:28:16Z
+   why: Add a real-firmware Phase 2 CPU gate at the measured VRAM wall; update CI vulnerability count to match the audited baseline, without changing architecture checks.
+

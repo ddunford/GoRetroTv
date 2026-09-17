@@ -131,7 +131,7 @@ jobs:
       - name: Anything newly vulnerable?
         # Not a bare `govulncheck ./...`. This project has no external dependencies, so the
         # standard library is the whole supply-chain surface - and the Go 1.22 line is out of
-        # support, so 25 of the 29 vulnerabilities this tree reaches are fixed only in 1.23 or
+        # support, so 26 of the 32 vulnerabilities this tree reaches are fixed only in 1.23 or
         # later and cannot be fixed here at all. A plain scan would be red on every run for ever,
         # and a permanently red gate is one people stop reading.
         #

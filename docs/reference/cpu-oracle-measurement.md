@@ -23,3 +23,10 @@ The oracle's own port model is documented in `reference/digibox-boot.html` at th
 section; the Go video RAM model belongs to the drawing-device phase. The Go runner's unmapped
 census names the wall instead of silently treating zero as hardware evidence. The CPU comparison
 is therefore proved from reset through the first unmodelled read.
+
+The repeatable Phase 2 integration command is `./ctl.sh cpu-gate`. It builds `firmwaretrace`,
+checks eight oracle checkpoints spanning reset through instruction 3,204,400, and asserts the
+video RAM read and the first divergent sampled state. A deliberately corrupted checkpoint-zero
+anchor failed the gate with exit 1. The full browser-vs-Go interval-100 comparison above remains
+the measurement evidence; the small committed anchor set is the fast regression gate. Phase 3b
+replaces its expected wall with farther agreement when it attaches video RAM.

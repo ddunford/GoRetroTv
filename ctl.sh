@@ -115,6 +115,8 @@ cmd_gate() {
     ./tools/boot-gate.sh "$@"
 }
 
+cmd_cpu_gate() { ./tools/cpu-gate.sh "$@"; }
+
 cmd_test() { make test-race; }
 
 cmd_conformance() { python3 conformance/run.py "$@"; }
@@ -250,6 +252,7 @@ Running
   logs [n]       Follow the container log (default: last 100 lines)
   health         Probe the health endpoint and print what it says
   gate           Boot gate: build, verify firmware, listen, /health, graceful stop
+  cpu-gate       Real firmware CPU/oracle gate through the first unmodelled video RAM read
 
 Building and checking
   build          Build every binary into bin/
@@ -283,6 +286,7 @@ main() {
         logs)    cmd_logs "$@" ;;
         health)  cmd_health "$@" ;;
         gate)    cmd_gate "$@" ;;
+        cpu-gate) cmd_cpu_gate "$@" ;;
         test)    cmd_test "$@" ;;
         conformance) cmd_conformance "$@" ;;
         stop-gate) cmd_conformance_stop_gate "$@" ;;

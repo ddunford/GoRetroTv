@@ -16,6 +16,7 @@ CSI (the handset), I²C and the EEPROM (NVRAM), the smartcard link, and the sate
 - [ ] `TASK-3c.6` **Oracle agreement to a full cold boot — 42 Nucleus tasks.** This is SPEC success criterion 1 → `/go-engineer` [TC-3c.6]
 - [ ] `TASK-3c.7` ⫘ Tests → `/go-engineer` [TC-3c.1, TC-3c.2, TC-3c.3, TC-3c.4, TC-3c.5]
 - [ ] `TASK-3c.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
+- [ ] `TASK-3c.9` ⫘ Prove the real bootloader decompresses the application to `0x800009F4` and transfers control through guest instructions, without copying the browser oracle's injected handoff → `/qa-test-engineer` [TC-3c.7]
 
 ## Key patterns
 - **An asynchronous driver has nobody's stack.** Capturing a call chain at an I²C transaction was
@@ -56,3 +57,4 @@ past CA init without them and will not remember anything without the EEPROM.
 - [ ] NVRAM survives a full restart
 - [ ] The demodulator's polled registers are what the driver actually reads
 - [ ] A cold boot reaches 42 tasks and matches the oracle end to end
+- [ ] The bootloader reaches the application through guest instructions, with the decompressed image at `0x800009F4`

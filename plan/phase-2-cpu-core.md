@@ -21,10 +21,13 @@ writing the decoder**; they record the traps, each of which cost the predecessor
 - [x] `TASK-2.8` Flash device: read paths plus the command sequencer (autoselect, program, erase) with its state, which is real state a snapshot must carry → `/go-engineer` [TC-2.8]
 - [x] `TASK-2.9` Run the oracle comparison from reset and drive the first divergence to zero, iterating until the two agree as far as missing peripherals permit → `/go-engineer` [TC-2.9]
 - [x] `TASK-2.10` ⫘ Write the CPU test suite, table-driven per instruction family → `/go-engineer` [TC-2.1, TC-2.2, TC-2.3, TC-2.4, TC-2.5, TC-2.6, TC-2.7, TC-2.8]
-- [ ] `TASK-2.11` ⫘ Write and run the phase's integration check: boot to the documented handoff point → `/qa-test-engineer` [TC-2.9, TC-2.10]
+- [x] `TASK-2.11` ⫘ Run the built CPU against real firmware through the first unmodelled peripheral: match oracle checkpoints before the video RAM read and identify that read as the wall → `/qa-test-engineer` [TC-2.9, TC-2.10]
 - [x] `TASK-2.12` ⫘ OWASP security audit of phase 2 → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns (from the measured record — do not re-derive)
+- **Application handoff belongs after the peripheral models.** The first missing video RAM read is
+  at instruction 3,204,424; the browser oracle later injects the handoff after an idle wait.
+  Phase 3c's `TASK-3c.9` retains the real guest-driven handoff acceptance.
 - **MAME cannot decode MIPS16 and QEMU has no board.** There is no prior art to borrow; the
   reference is the NEC manual plus the predecessor's findings.
 - **One deliberate inaccuracy is inherited on purpose:** Count advances per instruction, not per

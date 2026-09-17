@@ -133,6 +133,8 @@ cmd_oracle_gate() { ./tools/oracle-cold-boot-gate.sh "$@"; }
 
 cmd_links_gate() { ./tools/links-gate.sh "$@"; }
 
+cmd_snapshot_gate() { ./tools/snapshot-runon-gate.sh "$@"; }
+
 cmd_test() { make test-race; }
 
 cmd_conformance() { python3 conformance/run.py "$@"; }
@@ -272,6 +274,7 @@ Running
   handoff-gate   Prove declared handoff, guest loader and application entry
   oracle-gate    Full 42-task cold boot and 470,000 matching browser checkpoints
   links-gate     Guest handset, card, NVRAM and acknowledgement-policy checks
+  snapshot-gate  Compare a restored real-firmware run with 10 million uninterrupted instructions
 
 Building and checking
   build          Build every binary into bin/
@@ -311,6 +314,7 @@ main() {
         handoff-gate) cmd_handoff_gate "$@" ;;
         oracle-gate) cmd_oracle_gate "$@" ;;
         links-gate) cmd_links_gate "$@" ;;
+        snapshot-gate) cmd_snapshot_gate "$@" ;;
         test)    cmd_test "$@" ;;
         conformance) cmd_conformance "$@" ;;
         stop-gate) cmd_conformance_stop_gate "$@" ;;

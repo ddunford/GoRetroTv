@@ -33,3 +33,11 @@ func writeSnapshot(path string, m *machine.Machine) error {
 	}
 	return nil
 }
+
+func loadSnapshot(path string, m *machine.Machine) error {
+	f, err := os.Open(path) // #nosec G304 -- the developer explicitly names this local snapshot file.
+	if err != nil {
+		return fmt.Errorf("open snapshot %s: %w", path, err)
+	}
+	return errors.Join(m.Restore(f), f.Close())
+}

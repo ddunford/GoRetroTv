@@ -61,7 +61,9 @@ func run() error {
 	ackAll := flag.Bool("ack-all", false, "diagnostic policy: acknowledge every CSI command")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
+	snapshotIn := flag.String("snapshot-in", "", "restore a complete machine snapshot before the run")
 	snapshotOut := flag.String("snapshot-out", "", "write a complete machine snapshot after the run")
+	stateHash := flag.Bool("state-hash", false, "print the exact final CPU and DRAM state hash")
 	flag.Var(&hits, "pc-hit", "count guest executions of this PC (repeatable, hex or decimal)")
 	flag.Parse()
 	if *key < -1 || *key > 255 {
@@ -238,10 +240,18 @@ func run() error {
 		return err
 	}
 	pumpBoard := func() error { return loopClock.Advance(1) }
+	if *snapshotIn != "" {
+		if err := loadSnapshot(*snapshotIn, emulated); err != nil {
+			return err
+		}
+		hasher.Rebuild()
+		retired = emulated.Retired
+		instruction = retired
+	}
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
-	for i := uint64(0); i < *steps; i++ {
+	for i := retired; i < *steps; i++ {
 		instruction = i
 		if *scheduler {
 			current := ram.Read(0x83d0, bus.Word)
@@ -367,6 +377,13 @@ func run() error {
 			return err
 		}
 		fmt.Fprintf(os.Stderr, "surface hash=%08X distinct=%d bytes=%d base=%08X sha256=%x\n", hash, distinct, surfaceLength, surfaceBase, sha)
+	}
+	if *stateHash {
+		value := hasher.Hash(core.State())
+		if err := hasher.Err(); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "state-hash retired=%d hash=%08X\n", retired, value)
 	}
 	if *snapshotOut != "" {
 		if err := writeSnapshot(*snapshotOut, emulated); err != nil {

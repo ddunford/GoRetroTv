@@ -11,9 +11,10 @@ import (
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/clock"
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
+	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
 
-func snapshotMachine(t *testing.T) (*machine.Machine, *memory.RAM) {
+func snapshotMachine(t *testing.T) (*machine.Machine, *memory.RAM, *memory.Flash) {
 	t.Helper()
 	board := bus.New()
 	ram, err := memory.NewRAM("dram", 4096)
@@ -23,6 +24,7 @@ func snapshotMachine(t *testing.T) (*machine.Machine, *memory.RAM) {
 	if err := board.Attach(memory.DRAMBase, 4096, ram); err != nil {
 		t.Fatal(err)
 	}
+	var firstFlash *memory.Flash
 	for _, part := range []struct {
 		name string
 		base uint32
@@ -30,12 +32,15 @@ func snapshotMachine(t *testing.T) (*machine.Machine, *memory.RAM) {
 		{"U202", memory.FlashU202},
 		{"U203", memory.FlashU203},
 	} {
-		flash, err := memory.NewFlash(part.name, make([]byte, 4096))
+		flash, err := memory.NewFlash(part.name, bytes.Repeat([]byte{0xff}, 4096))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if err := board.Attach(part.base, 4096, flash); err != nil {
 			t.Fatal(err)
+		}
+		if part.name == "U202" {
+			firstFlash = flash
 		}
 	}
 	clk := clock.New()
@@ -48,12 +53,12 @@ func snapshotMachine(t *testing.T) (*machine.Machine, *memory.RAM) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return box, ram
+	return box, ram, firstFlash
 }
 
 func TestWholeMachineSnapshotRestoresEveryOwnerAndClockDeadline(t *testing.T) {
 	t.Parallel()
-	box, ram := snapshotMachine(t)
+	box, ram, _ := snapshotMachine(t)
 	box.Core.GPR[3] = 0x12345678
 	box.Retired = 9
 	ram.Write(0x20, bus.Word, 0xdeadbeef)
@@ -105,7 +110,7 @@ func TestWholeMachineSnapshotRestoresEveryOwnerAndClockDeadline(t *testing.T) {
 
 func TestWholeMachineRefusesAnOmittedOwnerWithoutMutation(t *testing.T) {
 	t.Parallel()
-	box, _ := snapshotMachine(t)
+	box, _, _ := snapshotMachine(t)
 	var complete bytes.Buffer
 	if err := box.Snapshot(&complete); err != nil {
 		t.Fatal(err)
@@ -142,7 +147,7 @@ func TestWholeMachineRefusesAnOmittedOwnerWithoutMutation(t *testing.T) {
 
 func TestWholeMachineRollsBackWhenCPURefusesAfterBusRestore(t *testing.T) {
 	t.Parallel()
-	box, ram := snapshotMachine(t)
+	box, ram, _ := snapshotMachine(t)
 	var target bytes.Buffer
 	if err := box.Snapshot(&target); err != nil {
 		t.Fatal(err)
@@ -180,5 +185,49 @@ func TestWholeMachineRollsBackWhenCPURefusesAfterBusRestore(t *testing.T) {
 	}
 	if !bytes.Equal(before.Bytes(), after.Bytes()) {
 		t.Fatal("failed CPU restore left bus or register state mutated")
+	}
+}
+
+func TestFlashCommandSequencerOmissionChangesRunOnStateHash(t *testing.T) {
+	t.Parallel()
+	box, ram, flash := snapshotMachine(t)
+	pristine, err := flash.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	box.Bus.Write(memory.FlashU202+0xaaa, bus.Half, 0xaa) // first unlock command
+	var paused bytes.Buffer
+	if err := box.Snapshot(&paused); err != nil {
+		t.Fatal(err)
+	}
+	finish := func() uint32 {
+		box.Bus.Write(memory.FlashU202+0x554, bus.Half, 0x55)
+		box.Bus.Write(memory.FlashU202+0xaaa, bus.Half, 0xa0)
+		box.Bus.Write(memory.FlashU202+0x100, bus.Byte, 0x56)
+		box.Core.GPR[4] = box.Bus.Read(memory.FlashU202+0x100, bus.Byte)
+		hasher, err := statehash.New(ram)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return hasher.Hash(box.Core.State())
+	}
+	uninterrupted := finish()
+	if box.Core.GPR[4] != 0x56 {
+		t.Fatalf("uninterrupted program result = %#x", box.Core.GPR[4])
+	}
+	if err := box.Restore(bytes.NewReader(paused.Bytes())); err != nil {
+		t.Fatal(err)
+	}
+	if restored := finish(); restored != uninterrupted {
+		t.Fatalf("restored run-on hash = %08X, want %08X", restored, uninterrupted)
+	}
+	if err := box.Restore(bytes.NewReader(paused.Bytes())); err != nil {
+		t.Fatal(err)
+	}
+	if err := flash.Restore(pristine); err != nil { // deliberate omission of the pending unlock
+		t.Fatal(err)
+	}
+	if omitted := finish(); omitted == uninterrupted {
+		t.Fatal("omitting flash command state did not change the run-on hash")
 	}
 }

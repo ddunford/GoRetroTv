@@ -38,3 +38,7 @@ digest: 3ecf653840c4a7f397d4a85134d6e60976a4bea17ca0cb1f4156500b73d7d3cd
   when: 2026-09-17T11:50:22Z
    why: Update ctl help to report the measured 470,000-checkpoint cold oracle gate; architecture checks and controls are unchanged.
 
+digest: fefb36a3ea9f81324e0479e1623ba7387bde660befb068771f57a8dd1231fc63
+  when: 2026-09-17T12:06:43Z
+   why: Add the real-firmware snapshot run-on gate to ctl.sh; architecture controls remain unchanged.
+

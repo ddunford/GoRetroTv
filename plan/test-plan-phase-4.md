@@ -11,9 +11,14 @@
   contract tests check each attached device's full state. `cmd/firmwaretrace -snapshot-out`
   wrote a 38.8 MB private snapshot from the real firmware at 100,000 instructions, and the
   clock-driven runner retained 470,000/470,000 cold-oracle checkpoints and 42 tasks.
-- [ ] **TC-4.2: Restore is indistinguishable from not having stopped** (covers: TASK-4.2, TASK-4.7) — snapshot
+- [x] **TC-4.2: Restore is indistinguishable from not having stopped** (covers: TASK-4.2, TASK-4.7) — snapshot
   at N, restore, run to N+10,000,000; the state hash equals an uninterrupted run's. Omitting the
   flash command-sequencer state must fail this.
+  **Result:** `./ctl.sh snapshot-gate` saves the real machine at one million retired instructions
+  and compares direct versus restored execution at 11 million; both produce the exact state hash
+  `B24C2CD2`. `internal/machine/snapshot_test.go` completes a flash program command after a
+  machine restore, then deliberately replaces the pending unlock state with the pristine flash
+  state and proves the run-on state hash changes.
 - [ ] **TC-4.3: A post-acquisition snapshot reaches a pressable box in under a second** (covers: TASK-4.3, TASK-4.7) — SPEC success criterion 3.
 - [ ] **TC-4.4: Replay is byte-identical** (covers: TASK-4.4, TASK-4.7) — two replays of one recording produce
   identical framebuffer hashes and identical instruction counts.

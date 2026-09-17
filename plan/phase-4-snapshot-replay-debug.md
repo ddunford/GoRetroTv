@@ -11,7 +11,7 @@ Snapshot/restore, deterministic replay and a gdb stub. Every device already impl
 ## Tasks (mirror — bd epic `gort-lbl` is the source of truth; never hand-ticked)
 
 - [x] `TASK-4.1` Snapshot format and writer covering the spike-003 inventory: CPU, 32 MB RAM, COP0, the ISA bit, interrupt/timer state, **both flash chips' command sequencer state**, and every device → `/go-engineer` [TC-4.1]
-- [ ] `TASK-4.2` Restore, and the acceptance test that matters: snapshot at N, restore, run to N+10,000,000, and require the state hash to equal an uninterrupted run. **"It restores" is not the test** → `/go-engineer` [TC-4.2]
+- [x] `TASK-4.2` Restore, and the acceptance test that matters: snapshot at N, restore, run to N+10,000,000, and require the state hash to equal an uninterrupted run. **"It restores" is not the test** → `/go-engineer` [TC-4.2]
 - [ ] `TASK-4.3` A named snapshot library and `ctl.sh` verbs, with a documented "post-acquisition" snapshot every probe can start from → `/go-engineer` [TC-4.3]
 - [ ] `TASK-4.4` Input recording and deterministic replay to a byte-identical framebuffer and identical instruction count → `/go-engineer` [TC-4.4]
 - [ ] `TASK-4.5` gdb remote serial protocol stub: registers, memory, breakpoints, watchpoints, step, continue — **bound to localhost only** (ARCH-DEV-1) → `/go-engineer` [TC-4.5]

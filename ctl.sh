@@ -134,6 +134,7 @@ cmd_oracle_gate() { ./tools/oracle-cold-boot-gate.sh "$@"; }
 cmd_links_gate() { ./tools/links-gate.sh "$@"; }
 
 cmd_snapshot_gate() { ./tools/snapshot-runon-gate.sh "$@"; }
+cmd_replay_gate() { ./tools/input-replay-gate.sh "$@"; }
 
 cmd_snapshot() { ./tools/snapshot-library.sh "$@"; }
 
@@ -274,6 +275,7 @@ Running
   oracle-gate    Full 42-task cold boot and 470,000 matching browser checkpoints
   links-gate     Guest handset, card, NVRAM and acknowledgement-policy checks
   snapshot-gate  Compare a restored real-firmware run with 10 million uninterrupted instructions
+  replay-gate    Record a Sky key and verify two real-firmware framebuffer replays
   snapshot       Save, run, inspect, list or seed named local machine snapshots
 
 Building and checking
@@ -315,6 +317,7 @@ main() {
         oracle-gate) cmd_oracle_gate "$@" ;;
         links-gate) cmd_links_gate "$@" ;;
         snapshot-gate) cmd_snapshot_gate "$@" ;;
+        replay-gate) cmd_replay_gate "$@" ;;
         snapshot) cmd_snapshot "$@" ;;
         test)    cmd_test "$@" ;;
         conformance) cmd_conformance "$@" ;;

@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
@@ -72,9 +73,32 @@ func run() error {
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
 	snapshotIn := flag.String("snapshot-in", "", "restore a complete machine snapshot before the run")
 	snapshotOut := flag.String("snapshot-out", "", "write a complete machine snapshot after the run")
+	recordOut := flag.String("record-out", "", "record timed host inputs and final framebuffer digest")
+	replayIn := flag.String("replay-in", "", "replay and verify a prior input recording")
 	stateHash := flag.Bool("state-hash", false, "print the exact final CPU and DRAM state hash")
 	flag.Var(&hits, "pc-hit", "count guest executions of this PC (repeatable, hex or decimal)")
 	flag.Parse()
+	if *recordOut != "" && *replayIn != "" {
+		return fmt.Errorf("record-out and replay-in are mutually exclusive")
+	}
+	if *recordOut != "" || *replayIn != "" {
+		if *ackAll || *ackCode >= 0 || *nvram != "" {
+			return fmt.Errorf("recording and replay require the default CSI policy and snapshot-contained EEPROM")
+		}
+	}
+	var recording inputRecording
+	if *replayIn != "" {
+		if *key >= 0 || *sectionHex != "" || len(sections) != 0 {
+			return fmt.Errorf("replay-in cannot be combined with live key or section inputs")
+		}
+		var err error
+		recording, err = readRecording(*replayIn)
+		if err != nil {
+			return fmt.Errorf("read input recording: %w", err)
+		}
+		*steps = recording.End
+		*skyGates = recording.SkyGates
+	}
 	if *key < -1 || *key > 255 {
 		return fmt.Errorf("raw handset key %d is outside 0..255", *key)
 	}
@@ -280,10 +304,34 @@ func run() error {
 		retired = emulated.Retired
 		instruction = retired
 	}
+	var recordedEvents []recordedInput
+	if *recordOut != "" || *replayIn != "" {
+		snapshotDigest, err := fileSHA256(*snapshotIn)
+		if err != nil {
+			return fmt.Errorf("hash initial snapshot: %w", err)
+		}
+		if *replayIn != "" {
+			if recording.SnapshotSHA256 != snapshotDigest || recording.Start != retired {
+				return fmt.Errorf("recording initial snapshot or instruction count differs from this machine")
+			}
+			recordedEvents = recording.Events
+		} else {
+			recording = inputRecording{Version: 1, SnapshotSHA256: snapshotDigest, Start: retired, End: *steps, SkyGates: *skyGates}
+			if *key >= 0 {
+				recordedEvents = append(recordedEvents, recordedInput{At: *keyAt, Kind: "key", Key: uint8(*key)}) // #nosec G115 -- validated above.
+			}
+			for _, section := range sections {
+				recordedEvents = append(recordedEvents, recordedInput{At: section.at, Kind: "section", PID: section.pid, Section: hex.EncodeToString(section.bytes)})
+			}
+			sort.SliceStable(recordedEvents, func(i, j int) bool { return recordedEvents[i].At < recordedEvents[j].At })
+			recording.Events = recordedEvents
+		}
+	}
 	if len(sections) != 0 && sections[0].at < retired {
 		return fmt.Errorf("section instruction %d precedes restored instruction count %d", sections[0].at, retired)
 	}
 	nextSection := 0
+	nextRecorded := 0
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
@@ -296,14 +344,33 @@ func run() error {
 				previousTask = current
 			}
 		}
-		if *key >= 0 && i == *keyAt {
+		if *recordOut == "" && *replayIn == "" && *key >= 0 && i == *keyAt {
 			hits.MarkKey()
 			// #nosec G115 -- raw key was checked to be within 0..255 above.
 			if err := serial.Key(uint8(*key), 0); err != nil {
 				return err
 			}
 		}
-		for nextSection < len(sections) && i == sections[nextSection].at {
+		for nextRecorded < len(recordedEvents) && i == recordedEvents[nextRecorded].At {
+			event := recordedEvents[nextRecorded]
+			switch event.Kind {
+			case "key":
+				hits.MarkKey()
+				if err := serial.Key(event.Key, 0); err != nil {
+					return err
+				}
+			case "section":
+				bytes, err := hex.DecodeString(event.Section)
+				if err != nil {
+					return err
+				}
+				if err := sectionDemux.Push(event.PID, bytes); err != nil {
+					return fmt.Errorf("recorded section after %d guest instructions: %w", i, err)
+				}
+			}
+			nextRecorded++
+		}
+		for *recordOut == "" && *replayIn == "" && nextSection < len(sections) && i == sections[nextSection].at {
 			if *sectionSamples && (nextSection == 0 || sections[nextSection-1].at != i) {
 				last := func(filter uint8) uint32 {
 					return ram.Read((demux.RecordBase(filter)&0x1fffffff)+12, bus.Word)
@@ -383,6 +450,28 @@ func run() error {
 	}
 	if nextSection != len(sections) {
 		return fmt.Errorf("section delivery was not reached before run stopped at %d instructions", retired)
+	}
+	if nextRecorded != len(recordedEvents) {
+		return fmt.Errorf("recorded input delivery was not reached before run stopped at %d instructions", retired)
+	}
+	if *recordOut != "" || *replayIn != "" {
+		_, _, surfaceSHA, err := surfaceDigest(ram, surfaceBase, surfaceLength)
+		if err != nil {
+			return err
+		}
+		if *replayIn != "" {
+			if retired != recording.End || hex.EncodeToString(surfaceSHA[:]) != recording.SurfaceSHA256 {
+				return fmt.Errorf("replay diverged: retired=%d surface=%x; recorded retired=%d surface=%s", retired, surfaceSHA, recording.End, recording.SurfaceSHA256)
+			}
+			fmt.Fprintf(os.Stderr, "replay verified retired=%d surface-sha256=%x\n", retired, surfaceSHA)
+		} else {
+			recording.End = retired
+			recording.SurfaceSHA256 = hex.EncodeToString(surfaceSHA[:])
+			if err := writeRecording(*recordOut, recording); err != nil {
+				return fmt.Errorf("write input recording: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "recorded inputs retired=%d surface-sha256=%x\n", retired, surfaceSHA)
+		}
 	}
 	fmt.Fprintf(os.Stderr, "retired %d instructions; PC=%08X ISA=%v; unmapped accesses: %+v\n", retired, core.PC, core.ISA, busMap.UnmappedTotals())
 	if *unmapped {

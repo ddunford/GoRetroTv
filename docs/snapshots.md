@@ -60,3 +60,27 @@ Snapshot format v2 includes the demodulator's indirect pointer and the EEPROM
 contents inside the I²C controller. Older v1 images are refused because they omitted
 those child devices; the old `post-tdt` and `si-registered` files were removed from
 the named library and retained only in private `.artifacts/` for diagnosis.
+
+## Record and replay inputs
+
+`firmwaretrace` can record host inputs at absolute retired-instruction counts and
+replay them from the same initial snapshot. A recording contains a SHA-256 digest
+of that snapshot, ordered handset and DVB section inputs, the final instruction
+count, and a SHA-256 digest of the raw 720×576 framebuffer. Replay refuses a
+different snapshot and fails if the final framebuffer bytes differ. Keep these
+recordings in `.artifacts/` when they contain private broadcast data.
+
+```bash
+./ctl.sh snapshot run post-acquisition -steps 1120000000 \
+  -key 0x7D -key-at 1100000000 \
+  -record-out .artifacts/sky-key.inputs.json -surface-hash
+./ctl.sh snapshot run post-acquisition \
+  -replay-in .artifacts/sky-key.inputs.json -surface-hash
+```
+
+The recording above restores at 1,100,000,000 instructions, presses Sky and ends
+at 1,120,000,000. Its framebuffer SHA-256 is
+`1bffc82b335571138a8c80c8589a0da52a4dcb317b634183311e2c4a7a3f0b74`.
+The same interface records timed `-section` deliveries; repeat that flag for a
+sequence. Record/replay use the default CSI acknowledgement policy, with EEPROM
+state supplied by the snapshot.

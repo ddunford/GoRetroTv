@@ -38,8 +38,16 @@
   `F51114FC`). The seed command refuses an existing name, and both library directory and image
   are private (`0700`/`0600`). Evidence: `.artifacts/si-warm-ready-v2.log`,
   `.artifacts/post-acquisition-named-key.log`, and `docs/snapshots.md`.
-- [ ] **TC-4.4: Replay is byte-identical** (covers: TASK-4.4, TASK-4.7) — two replays of one recording produce
+- [x] **TC-4.4: Replay is byte-identical** (covers: TASK-4.4, TASK-4.7) — two replays of one recording produce
   identical framebuffer hashes and identical instruction counts.
+  **Result:** `./ctl.sh replay-gate` records a Sky key from the real post-acquisition
+  snapshot, then replays the trace twice. All three runs retire exactly
+  1,120,000,000 guest instructions and produce the same 414,720-byte framebuffer
+  (SHA-256 `1bffc82b335571138a8c80c8589a0da52a4dcb317b634183311e2c4a7a3f0b74`,
+  raw hash `F3634409`, 37 distinct bytes) and state hash `F51114FC`. A recording
+  with an altered expected framebuffer digest fails replay; the decoder also
+  rejects malformed input events and trailing JSON. Evidence:
+  `.artifacts/sky-key-record.log` and `.artifacts/sky-key-replay-{a,b}.log`.
 - [ ] **TC-4.5: gdb attaches and breaks** (covers: TASK-4.5, TASK-4.7) — break on a firmware address, read
   registers, step, continue. And it must **refuse a non-localhost bind**.
 - [ ] **TC-4.6: An instrument refuses to report on a wrong state** (covers: TASK-4.6, TASK-4.7) — a census

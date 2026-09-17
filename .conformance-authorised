@@ -62,3 +62,7 @@ digest: c08655cece701a5ca3e6b8a168b1e834e4852c9ee0d6de35fbffe3eab1c7acce
   when: 2026-09-17T13:12:53Z
    why: Seed and verify a private post-acquisition snapshot
 
+digest: 9c3db11c9bffa31b6b002cc552c0f8733a007d9be24203a1b21b9ba6c2ff908c
+  when: 2026-09-17T13:21:10Z
+   why: Add the real-firmware input replay gate as a ctl.sh quality command; no architecture rule behavior changed.
+

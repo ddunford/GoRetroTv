@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
 )
@@ -29,6 +30,7 @@ type Demux struct {
 	matchValue     uint32
 	matchUnits     [16][16]MatchByte
 	ram            *memory.RAM
+	interrupt      *irq.Controller
 }
 
 // MatchByte is one byte of a section match unit's value and mask.
@@ -72,9 +74,11 @@ func (d *Demux) Write(off uint32, size bus.Size, value uint32) {
 	case reg >= 0xB0 && reg <= 0xBC:
 		i := (reg - 0xB0) / 4
 		d.status[i] &= ^mask | bits
+		d.updateLine()
 	case reg >= 0xD0 && reg <= 0xDC:
 		i := (reg - 0xD0) / 4
 		d.enable[i] |= bits
+		d.updateLine()
 	case reg == 0 && value&1 != 0:
 		d.Reset()
 	case reg == 0x124:
@@ -139,7 +143,27 @@ func laneShift(off uint32, size bus.Size) uint32 {
 	return 0
 }
 
-func (d *Demux) complete(filter uint8) { d.status[2] |= 1 << filter }
+func (d *Demux) complete(filter uint8) {
+	d.status[2] |= 1 << filter
+	d.updateLine()
+}
+
+// BindIRQ connects the demux completion line to dispatch row zero of the board controller.
+func (d *Demux) BindIRQ(controller *irq.Controller) {
+	d.interrupt = controller
+	d.updateLine()
+}
+
+func (d *Demux) updateLine() {
+	if d.interrupt == nil {
+		return
+	}
+	var active uint32
+	for i := range d.status {
+		active |= d.status[i] & d.enable[i]
+	}
+	d.interrupt.SetLine(irq.DemuxMask, active != 0)
+}
 
 // Reset clears all device state after a block reset or machine reset.
 func (d *Demux) Reset() {
@@ -150,6 +174,7 @@ func (d *Demux) Reset() {
 	d.pidWritten = [FilterCount]bool{}
 	d.matchValue = 0
 	d.matchUnits = [16][16]MatchByte{}
+	d.updateLine()
 }
 
 // Snapshot captures every register bit that can affect subsequent firmware reads.
@@ -221,5 +246,6 @@ func (d *Demux) Restore(blob []byte) error {
 	d.pidWritten = written
 	d.matchValue = matchValue[0]
 	d.matchUnits = matches
+	d.updateLine()
 	return nil
 }

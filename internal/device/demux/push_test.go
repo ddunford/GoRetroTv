@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/memory"
 )
 
@@ -45,6 +46,38 @@ func TestPushWritesSectionAndHardwareByteToBoardDRAM(t *testing.T) {
 	}
 	if got := b.Read(base+uint32(len(section))+1, bus.Byte); got != uint32(section[0]) { // #nosec G115 -- small fixture
 		t.Fatalf("second section did not start after the appended byte: %#x", got)
+	}
+}
+
+func TestSectionCompletionDrivesDispatchRowAndAcknowledges(t *testing.T) {
+	t.Parallel()
+	ram, err := memory.NewRAM("dram", memory.DRAMSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var interrupts []uint8
+	controller := irq.New(func(ip uint8) { interrupts = append(interrupts, ip) })
+	d := New()
+	if err := d.BindRAM(ram); err != nil {
+		t.Fatal(err)
+	}
+	d.BindIRQ(controller)
+	controller.Write(0x40, bus.Word, irq.DemuxMask)
+	d.Write(0xD8, bus.Word, 1<<22)
+	d.Write(0x14+4*22, bus.Word, 0x14014)
+	section := []byte{0x70, 0x70, 0x05, 0xc3, 0x50, 0, 0, 0}
+	if err := d.Push(0x14, section); err != nil {
+		t.Fatal(err)
+	}
+	if got := controller.Read(0x30, bus.Word); got != irq.DemuxMask {
+		t.Fatalf("dispatch pending = %#x", got)
+	}
+	if len(interrupts) != 1 || interrupts[0] != 2 {
+		t.Fatalf("demux IP lines = %v", interrupts)
+	}
+	d.Write(0xB8, bus.Word, ^uint32(1<<22))
+	if got := controller.Read(0x30, bus.Word); got != 0 {
+		t.Fatalf("acknowledged dispatch pending = %#x", got)
 	}
 }
 

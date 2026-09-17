@@ -9,6 +9,8 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/cpu"
+	"github.com/ddunford/goretrotv/internal/device/demux"
+	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
@@ -61,6 +63,18 @@ func run() error {
 		}
 	}
 	core := cpu.New(busMap, memory.FlashU202)
+	interrupts := irq.New(core.Interrupt)
+	if err := busMap.Attach(irq.Base, irq.Size, interrupts); err != nil {
+		return err
+	}
+	sectionDemux := demux.New()
+	if err := sectionDemux.BindRAM(ram); err != nil {
+		return err
+	}
+	sectionDemux.BindIRQ(interrupts)
+	if err := busMap.Attach(demux.MMIOBase, demux.MMIOSize, sectionDemux); err != nil {
+		return err
+	}
 	hasher, err := statehash.New(ram)
 	if err != nil {
 		return err

@@ -6,14 +6,27 @@ normalised to the first sample before comparison; device registers and ring poin
 """
 
 import argparse
+import hashlib
 import json
 import re
 from pathlib import Path
 
 
+ORACLE_PAGE = Path(__file__).resolve().parents[1] / "reference/digibox-boot.html"
+
+
 def require(condition, message):
     if not condition:
         raise SystemExit(f"SI comparison failed: {message}")
+
+
+def verify_oracle_source(report, page):
+    recorded = report.get("oracleSha256")
+    require(isinstance(recorded, str) and re.fullmatch(r"[0-9a-f]{64}", recorded),
+            "oracle evidence has no valid oracleSha256")
+    current = hashlib.sha256(page.read_bytes()).hexdigest()
+    require(recorded == current,
+            f"oracle source changed: evidence SHA-256 {recorded}, {page} SHA-256 {current}")
 
 
 def parse_go(path):
@@ -152,13 +165,17 @@ def compare(oracle, go, acquired, go_demod_baseline=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--oracle", type=Path, required=True)
+    parser.add_argument("--oracle-page", type=Path, default=ORACLE_PAGE,
+                        help="oracle HTML to verify (defaults to the repository reference page)")
     parser.add_argument("--go-log", type=Path, required=True)
     parser.add_argument("--go-baseline-log", type=Path,
                         help="demod histogram at the first sample for an uninterrupted Go run")
     parser.add_argument("--require-acquired", action="store_true")
     args = parser.parse_args()
+    oracle = json.loads(args.oracle.read_text())
+    verify_oracle_source(oracle, args.oracle_page)
     go_baseline = read_demod_baseline(args.go_baseline_log) if args.go_baseline_log else None
-    counts = compare(json.loads(args.oracle.read_text()), parse_go(args.go_log),
+    counts = compare(oracle, parse_go(args.go_log),
                      args.require_acquired, go_baseline)
     print(f"SI comparison passed: {counts[0]} samples, {counts[1]} guest PCs, "
           f"{counts[2]} match units; oracle and Go agree")

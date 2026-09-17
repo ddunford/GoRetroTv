@@ -67,3 +67,10 @@
   canonical formatter internally while preserving the comparator's uppercase wire fields.
   A fresh restored 650M→680M SI run in `.artifacts/go-si-hexfmt-680m.log` passed the
   unchanged comparator at six samples, nine guest PCs and four match units.
+  The comparator now checks the artifact's `oracleSha256` against the current immutable
+  `reference/digibox-boot.html` before reading the Go trace. The recorded and current SHA-256
+  are both `9d57489d7a65bf325315a0cd80564d254b18d56e31c20197421901f1204f61b5`.
+  `python3 -m unittest tools/test_compare_si_acquisition.py` proves that changing one byte
+  of a temporary page copy is rejected before comparison, and that missing provenance is
+  rejected. The real artifact comparison still passes with six samples, nine PCs and four
+  match units.

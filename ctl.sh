@@ -127,6 +127,12 @@ cmd_down_public() {
     public_compose down
 }
 
+cmd_restart_public() {
+    public_env
+    public_compose restart goretrotv
+    cmd_public_health
+}
+
 cmd_public_health() {
     local domain="${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}"
     local url="https://${domain}/health"
@@ -319,6 +325,7 @@ Running
   config-public  Print the effective public compose configuration
   down           Stop the compose stack
   down-public    Stop the public compose stack
+  restart-public Restart the published box from its private snapshot, then wait for HTTPS health
   restart        down, then up
   status         Compose state plus a health probe
   logs [n]       Follow the container log (default: last 100 lines)
@@ -365,6 +372,7 @@ main() {
         config-public) cmd_public_config "$@" ;;
         down)    cmd_down "$@" ;;
         down-public) cmd_down_public "$@" ;;
+        restart-public) cmd_restart_public "$@" ;;
         restart) cmd_restart "$@" ;;
         status)  cmd_status "$@" ;;
         logs)    cmd_logs "$@" ;;

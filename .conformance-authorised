@@ -78,3 +78,7 @@ digest: 82760f54c4d45e4f381443c576043b943a1620b783740dd25105e47dfc84f75d
   when: 2026-09-17T14:58:12Z
    why: Phase 5 public browser deployment adds a Node asset build stage, private read-only snapshot mount, and Traefik route while retaining firmware-free images and loopback developer surfaces
 
+digest: b7511b274d6e0f8944563131b355c2210f6f3b03668d87320d32454b088086e8
+  when: 2026-09-17T15:07:26Z
+   why: Phase 5 public acceptance needs a repeatable restart through the project control script so Playwright can verify the real firmware screen and Sky menu from a known private snapshot
+

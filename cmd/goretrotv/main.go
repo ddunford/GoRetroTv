@@ -189,8 +189,14 @@ func runMachine(ctx context.Context, box *board.Runtime, transport *web.Transpor
 				return
 			}
 		}
-		if !ready && count%stateInterval == 0 && box.Machine.Handoff.Done() {
-			if err := transport.PushState("channel-list", "The firmware is rebuilding its channel list."); err != nil {
+		if !ready && count%stateInterval == 0 {
+			evidence, err := readBootEvidence(box)
+			if err != nil {
+				haltMachine(transport, logger, err)
+				return
+			}
+			phase, reason := coldStatus(evidence)
+			if err := transport.PushState(phase, reason); err != nil {
 				haltMachine(transport, logger, err)
 				return
 			}

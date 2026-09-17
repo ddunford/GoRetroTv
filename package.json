@@ -9,6 +9,7 @@
     "test:wire": "npm run build:web && node --test tests/wire.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:live": "npm run build:web && playwright test --config=playwright.live.config.ts",
+    "test:e2e:public": "npm run build:web && ./ctl.sh restart-public && playwright test --config=playwright.public.config.ts",
     "lint:css": "stylelint web/styles.css"
   },
   "devDependencies": {

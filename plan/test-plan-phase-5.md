@@ -12,16 +12,25 @@
   observed state, not a timer. The predecessor's said Ready twenty seconds early because it keyed on
   a task count that plateaus before the work starts.
   **Result:** The server sends Ready only after restoring the exact post-acquisition snapshot
-  (`retired=1.1B`, completed handoff/Sky gates, state hash `04E99A24`); cold runs observe the
-  application handoff and cannot claim Ready without measured acquisition. The live Playwright
-  test asserts Ready before enabling the handset and again after a real firmware menu transition.
+  (`retired=1.1B`, completed handoff/Sky gates, state hash `04E99A24`). Cold runs remain Booting
+  through handoff and TASK20's initial one-schedule plateau; active TASK20 bank validation reports
+  Flash check; the channel-list label requires TASK20's event wait after running and all three
+  firmware-programmed SI PIDs (`0x14`, `0x11`, `0x10`). Its text says the box is *waiting* for the
+  list because the demux request alone does not prove rebuilding has begun. `cmd/goretrotv/status_test.go`
+  rejects premature transitions, and `internal/board/task_state_test.go` proves task status comes
+  from the live guest list rather than a stale TASK signature. The live Playwright test asserts
+  Ready from the verified snapshot before enabling the handset and after a real menu transition.
 - [x] **TC-5.3: A key press from the page reaches the firmware** (covers: TASK-5.3, TASK-5.7).
   **Result:** `tests/live/firmware.spec.ts` starts the real Go server with private firmware and
   snapshot, clicks the page's Sky button, and waits for the firmware's Box Office menu on the
   canvas; `internal/web/transport_test.go` asserts the measured CSI wire frame from a live socket.
-- [?] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
-  **Blocked:** The real public browser path was walked and showed the Box Office menu, but a
-  committed Playwright test against the deployed URL remains for TASK-5.7.
+- [x] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
+  **Result:** `npm run test:e2e:public` restarts the public container from the private snapshot,
+  opens `https://goretrotv.demosrv.uk/` in Chromium, captures the real `wss://` frame and checks
+  its indexed hash `A6A21DC5` against the entire browser canvas. A click on Sky sends raw
+  `0x7D` over that WebSocket and yields the exact composed Box Office menu hash `FE8D1CCC`.
+  The spec passed twice, including after an explicit public restart; it saves light, dark and
+  mobile screenshots under `.artifacts/playwright-public-results/`.
 - [x] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
   `goretrotv.demosrv.uk`, not localhost**, and every asset it fetches is verified to return its own
   content rather than the SPA fallback.

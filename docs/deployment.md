@@ -30,6 +30,10 @@ Check `https://goretrotv.demosrv.uk/` in a browser, including the actual `/style
 index HTML. Press **sky** and observe the firmware's menu. WebSocket uses the same origin at
 `wss://goretrotv.demosrv.uk/ws`.
 
+`npm run test:e2e:public` runs the committed browser acceptance against this HTTPS route. It
+briefly restarts the public container from the private snapshot first, so the Sky-to-menu test
+starts from a known screen; run it when a short interruption is acceptable.
+
 ## Check the public developer boundary
 
 Run these checks while the public stack is up. The live `/health` request is the positive control;

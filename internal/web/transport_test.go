@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/ddunford/goretrotv/internal/device/csi"
+	"github.com/ddunford/goretrotv/internal/wire"
 )
 
 func testFrame() *image.Paletted {
@@ -143,5 +145,97 @@ func TestSlowClientCannotBlockPublisher(t *testing.T) {
 	}
 	if latest := <-slow.latest; latest.seq != 1 {
 		t.Fatalf("queued sequence = %d, want newest sequence 1", latest.seq)
+	}
+}
+
+func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
+	transport := NewTransport()
+	server := httptest.NewServer(transport)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":1,"raw":125,"source":0}`)); err != nil {
+		t.Fatal(err)
+	}
+	link := csi.New(nil)
+	deadline := time.After(2 * time.Second)
+	for link.Pending() == 0 {
+		if err := transport.DrainKeys(link.Key); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-deadline:
+			t.Fatal("socket key never reached CSI link")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	if link.Pending() != len(csi.Encode([]byte{5, 0x80, 2, 0, 7, 0xd0})) {
+		t.Fatalf("queued wire bytes = %d", link.Pending())
+	}
+	if err := transport.DrainKeys(link.Key); err != nil || link.Pending() != 8 {
+		t.Fatalf("duplicate key delivery: pending=%d err=%v", link.Pending(), err)
+	}
+}
+
+func TestTransportRejectsInvalidHandsetMessages(t *testing.T) {
+	cases := []string{
+		`{"type":"frame","version":1,"raw":125,"source":0}`,
+		`{"type":"key","version":2,"raw":125,"source":0}`,
+		`{"type":"key","version":1,"raw":125,"source":2}`,
+		`{"type":"key","version":1,"raw":99,"source":0}`,
+		`{"type":"key","version":1,"raw":256,"source":0}`,
+		`{"type":"key","version":1,"raw":125,"source":0,"other":1}`,
+		`{"type":"key","version":1,"raw":125,"source":0}{}`,
+	}
+	for _, payload := range cases {
+		var key wire.KeyMessage
+		if err := decodeKey([]byte(payload), &key); err == nil {
+			t.Errorf("accepted %s", payload)
+		}
+	}
+	for _, raw := range []uint8{0, 9, 0x3c, 0x58, 0x5c, 0x6d, 0x70, 0x7d, 0x80, 0xcc, 0xf5} {
+		data, err := json.Marshal(wire.KeyMessage{Type: "key", Version: wire.Version, Raw: raw, Source: 0})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var key wire.KeyMessage
+		if err := decodeKey(data, &key); err != nil {
+			t.Errorf("documented raw %02x rejected: %v", raw, err)
+		}
+	}
+}
+
+func TestTransportClosesSocketOnInvalidKey(t *testing.T) {
+	transport := NewTransport()
+	server := httptest.NewServer(transport)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":1,"raw":125,"source":2}`)); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = conn.Read(ctx)
+	if websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("invalid handset source close status = %v, want policy violation", err)
+	}
+	if len(transport.keys) != 0 {
+		t.Fatal("rejected key entered input queue")
 	}
 }

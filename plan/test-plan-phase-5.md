@@ -10,7 +10,8 @@
   a task count that plateaus before the work starts.
   **Blocked:** The page and machine-state source are not built yet (TASK-5.2 and TASK-5.4).
 - [?] **TC-5.3: A key press from the page reaches the firmware** (covers: TASK-5.3, TASK-5.7).
-  **Blocked:** The page and key-input wiring are not built yet (TASK-5.2 and TASK-5.3).
+  **Blocked:** A live WebSocket key reaches the real CSI link with the measured Sky frame, but the
+  instruction loop and browser are not connected yet (TASK-5.4); firmware receipt needs that path.
 - [?] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
   **Blocked:** Browser wiring and the deployed path are not built yet (TASK-5.4 and TASK-5.5).
 - [?] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
@@ -24,10 +25,15 @@
   projection. A hand-authored fixture passes while the wire differs, which is the failure mode where
   the contract test exists, is green, and still ships the bug.
   **Proof:** `internal/web/wire_capture_test.go` captures palette and dirty-frame JSON from an HTTP-upgraded Go WebSocket transport and compares it byte for byte with `tests/fixtures/wire.jsonl`; `tests/wire.test.mjs` decodes the captured bytes and checks colour and pixel projection. `go test -race ./internal/web ./internal/wire`, `npm run wire:check`, and `npm run test:wire` pass.
-- [?] **TC-5.8: The page survives losing the box** (covers: TASK-5.10, TASK-5.7) — kill the socket
+- [x] **TC-5.8: The page survives losing the box** (covers: TASK-5.10, TASK-5.7) — kill the socket
   mid-session: the page says so, reconnects, and resumes. Halt the machine: a readable reason, not a
   frozen canvas. Press a key while disconnected: refused visibly, never swallowed.
-  **Blocked:** The browser page and failure states are not built yet (TASK-5.2 and TASK-5.10).
+  **Proof:** `tests/e2e/handset.spec.ts` closes a live routed WebSocket, checks the visible
+  disconnect and disabled handset, confirms no key was sent, and verifies that the old canvas
+  pixel stays drawn. A new socket supplies a full palette/frame and ready state; the new pixels
+  appear and the handset sends a key. A second rapid drop waits at least 450 ms before reconnect,
+  proving backoff. A separate halted-state test checks the guest reason, disabled input, and
+  zero outbound keys. Browser screenshots were inspected in light, dark, and mobile views.
 - [x] **TC-5.9: The handset acknowledges input and is operable by keyboard** (covers: TASK-5.2, TASK-5.7) — every button shows a pressed state, is reachable by **a real `Tab` press** (programmatic
   focus matches `:focus` but not reliably `:focus-visible`, so it measures the browser's heuristic
   rather than the stylesheet), shows a visible focus ring asserted **by colour** rather than by the

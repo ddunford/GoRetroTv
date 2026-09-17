@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -20,10 +21,11 @@ import (
 // FrameWidth and FrameHeight are the Digibox display raster from the shared
 // browser wire schema.
 const (
-	FrameWidth  = wire.FrameWidth
-	FrameHeight = wire.FrameHeight
-	framePeriod = 100 * time.Millisecond
-	writeLimit  = 10 * time.Second
+	FrameWidth    = wire.FrameWidth
+	FrameHeight   = wire.FrameHeight
+	framePeriod   = 100 * time.Millisecond
+	writeLimit    = 10 * time.Second
+	keyQueueLimit = 64
 )
 
 type frameData struct {
@@ -42,10 +44,28 @@ type Transport struct {
 	mu      sync.Mutex
 	clients map[*client]struct{}
 	latest  *frameData
+	keys    chan wire.KeyMessage
 }
 
 // NewTransport creates a framebuffer broadcaster.
-func NewTransport() *Transport { return &Transport{clients: make(map[*client]struct{})} }
+func NewTransport() *Transport {
+	return &Transport{clients: make(map[*client]struct{}), keys: make(chan wire.KeyMessage, keyQueueLimit)}
+}
+
+// DrainKeys hands queued browser input to the caller's instruction loop. The
+// socket reader never mutates a guest device, and FIFO order is preserved.
+func (t *Transport) DrainKeys(send func(raw, source uint8) error) error {
+	for {
+		select {
+		case key := <-t.keys:
+			if err := send(key.Raw, key.Source); err != nil {
+				return fmt.Errorf("web: deliver key: %w", err)
+			}
+		default:
+			return nil
+		}
+	}
+}
 
 // PushFrame copies one full compositor image and makes it available to clients.
 // Callers retain ownership of image memory and may change it immediately after
@@ -131,11 +151,26 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	disconnected := make(chan struct{})
 	go func(ctx context.Context) {
 		defer close(disconnected)
-		// Key messages are introduced with the handset input task. A
-		// display-only transport rejects data instead of silently eating it.
-		_, _, err := conn.Read(ctx)
-		if err == nil {
-			_ = conn.Close(websocket.StatusUnsupportedData, "input unavailable")
+		for {
+			typ, data, err := conn.Read(ctx)
+			if err != nil {
+				return
+			}
+			if typ != websocket.MessageText {
+				_ = conn.Close(websocket.StatusUnsupportedData, "key must be text")
+				return
+			}
+			var key wire.KeyMessage
+			if err := decodeKey(data, &key); err != nil {
+				_ = conn.Close(websocket.StatusPolicyViolation, "invalid key")
+				return
+			}
+			select {
+			case t.keys <- key:
+			default:
+				_ = conn.Close(websocket.StatusPolicyViolation, "key queue full")
+				return
+			}
 		}
 	}(sessionCtx)
 	var last *frameData
@@ -162,6 +197,35 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+func decodeKey(data []byte, key *wire.KeyMessage) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(key); err != nil {
+		return err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); err == nil {
+		return fmt.Errorf("multiple JSON values")
+	} else if err != io.EOF {
+		return err
+	}
+	if key.Type != "key" || key.Version != wire.Version || key.Source != 0 || !handsetRaw(key.Raw) {
+		return fmt.Errorf("unsupported handset key")
+	}
+	return nil
+}
+
+func handsetRaw(raw uint8) bool {
+	if raw <= 9 || raw >= 0x6d && raw <= 0x70 {
+		return true
+	}
+	switch raw {
+	case 0x3c, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x7d, 0x80, 0xcc, 0xf5:
+		return true
+	}
+	return false
 }
 
 func writeFrame(ctx context.Context, conn *websocket.Conn, previous, current *frameData) error {

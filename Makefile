@@ -41,7 +41,7 @@ vet: ## Run go vet
 	go vet ./...
 
 lint: ## Run golangci-lint
-	golangci-lint run
+	golangci-lint run ./cmd/... ./internal/... ./conformance/...
 
 fmt: ## Format the tree
 	gofmt -w ./cmd ./internal

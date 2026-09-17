@@ -11,7 +11,7 @@ Framebuffer transport, handset input, the page, and a real deployment.
 
 - [x] `TASK-5.1` WebSocket framebuffer transport — dirty-region updates at ~10 fps; 720×576 at 8 bpp is trivial bandwidth and must not be sent as video → `/go-engineer` [TC-5.1]
 - [x] `TASK-5.2` The page: a canvas at the raster's own aspect, a Sky-shaped handset, and a status line saying **in words** what the box is doing (booting / checking its flash / rebuilding the channel list / ready). **Every handset button ships its interaction states as part of this task** — pressed, disabled-while-disconnected, keyboard-operable and focus-visible — not as a later polish task → `/go-engineer` [TC-5.2, TC-5.9]
-- [ ] `TASK-5.3` Key input from the page to the CSI link, with the documented raw codes → `/go-engineer` [TC-5.3]
+- [x] `TASK-5.3` Key input from the page to the CSI link, with the documented raw codes → `/go-engineer` [TC-5.3]
 - [ ] `TASK-5.4` Wiring task — verify the page's canvas renders frames the core produced, a key press reaches the input layer, and the status line reflects real machine state rather than a timer → `/go-engineer` [TC-5.4]
 - [ ] `TASK-5.5` Production Dockerfile, compose overlay, Traefik labels and TLS at `goretrotv.demosrv.uk` → `/devops-deployment-engineer` [TC-5.5]
 - [ ] `TASK-5.6` **Developer surfaces must not be published** — the gdb stub and instrument endpoints bind to localhost; assert it against the deployed host, not only in config → `/devops-deployment-engineer` [TC-5.6]

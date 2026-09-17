@@ -145,7 +145,7 @@ func TestWholeMachineRefusesAnOmittedOwnerWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestWholeMachineRollsBackWhenCPURefusesAfterBusRestore(t *testing.T) {
+func TestWholeMachineRefusesCorruptCPUWithoutMutation(t *testing.T) {
 	t.Parallel()
 	box, ram, _ := snapshotMachine(t)
 	var target bytes.Buffer
@@ -185,6 +185,49 @@ func TestWholeMachineRollsBackWhenCPURefusesAfterBusRestore(t *testing.T) {
 	}
 	if !bytes.Equal(before.Bytes(), after.Bytes()) {
 		t.Fatal("failed CPU restore left bus or register state mutated")
+	}
+}
+
+func TestWholeMachineRollsBackCPUWhenBusRefuses(t *testing.T) {
+	t.Parallel()
+	box, ram, _ := snapshotMachine(t)
+	var target bytes.Buffer
+	if err := box.Snapshot(&target); err != nil {
+		t.Fatal(err)
+	}
+	set, err := snapcodec.OpenSet(target.Bytes(), "goretrotv-machine", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := snapcodec.NewSetWriter("goretrotv-machine", 1)
+	for _, name := range set.Names() {
+		blob, _ := set.Member(name)
+		if name == "bus" {
+			blob = blob[:len(blob)-1]
+		}
+		if err := w.Add(name, blob); err != nil {
+			t.Fatal(err)
+		}
+	}
+	broken, err := w.Blob()
+	if err != nil {
+		t.Fatal(err)
+	}
+	box.Core.GPR[3] = 0xaabbccdd
+	ram.Write(0x20, bus.Word, 0xfeedface)
+	var before bytes.Buffer
+	if err := box.Snapshot(&before); err != nil {
+		t.Fatal(err)
+	}
+	if err := box.Restore(bytes.NewReader(broken)); err == nil {
+		t.Fatal("truncated bus state was accepted")
+	}
+	var after bytes.Buffer
+	if err := box.Snapshot(&after); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before.Bytes(), after.Bytes()) {
+		t.Fatal("failed bus restore left CPU or memory mutated")
 	}
 }
 

@@ -135,6 +135,8 @@ cmd_links_gate() { ./tools/links-gate.sh "$@"; }
 
 cmd_snapshot_gate() { ./tools/snapshot-runon-gate.sh "$@"; }
 
+cmd_snapshot() { ./tools/snapshot-library.sh "$@"; }
+
 cmd_test() { make test-race; }
 
 cmd_conformance() { python3 conformance/run.py "$@"; }
@@ -240,10 +242,7 @@ cmd_lint() {
 cmd_fmt() { make fmt; }
 
 cmd_vuln() {
-    # The gate, not a bare scan. With no external dependencies the standard library is the whole
-    # supply-chain surface, and the Go 1.22 line is out of support -- so "govulncheck reports
-    # nothing" can never be true here and would be a permanently red gate. tools/vulncheck.sh
-    # asks the answerable question instead: is there anything NEW?
+    # Run the checked vulnerability gate against the current Go toolchain.
     ./tools/vulncheck.sh "$@"
 }
 
@@ -275,6 +274,7 @@ Running
   oracle-gate    Full 42-task cold boot and 470,000 matching browser checkpoints
   links-gate     Guest handset, card, NVRAM and acknowledgement-policy checks
   snapshot-gate  Compare a restored real-firmware run with 10 million uninterrupted instructions
+  snapshot       Save, run or list named local machine snapshots
 
 Building and checking
   build          Build every binary into bin/
@@ -315,6 +315,7 @@ main() {
         oracle-gate) cmd_oracle_gate "$@" ;;
         links-gate) cmd_links_gate "$@" ;;
         snapshot-gate) cmd_snapshot_gate "$@" ;;
+        snapshot) cmd_snapshot "$@" ;;
         test)    cmd_test "$@" ;;
         conformance) cmd_conformance "$@" ;;
         stop-gate) cmd_conformance_stop_gate "$@" ;;

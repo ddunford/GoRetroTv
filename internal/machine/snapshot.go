@@ -1,7 +1,6 @@
 package machine
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -118,17 +117,13 @@ func (m *Machine) Restore(r io.Reader) error {
 	if err := set.Require(machineMembers); err != nil {
 		return fmt.Errorf("machine: restore: %w", err)
 	}
-	var before bytes.Buffer
-	if err := m.Snapshot(&before); err != nil {
-		return fmt.Errorf("machine: restore: save rollback image: %w", err)
+	before, err := m.saveNonBusState()
+	if err != nil {
+		return fmt.Errorf("machine: restore: save rollback state: %w", err)
 	}
 	if err := m.restoreSet(set); err != nil {
-		rollback, openErr := snapcodec.OpenSet(before.Bytes(), machineSnapshotName, machineSnapshotVersion, machineSnapshotVersion)
-		if openErr == nil {
-			openErr = m.restoreSet(rollback)
-		}
-		if openErr != nil {
-			m.unknownState = fmt.Errorf("machine state is unknown after failed rollback: %w", openErr)
+		if undo := m.restoreNonBusState(before); undo != nil {
+			m.unknownState = fmt.Errorf("machine state is unknown after failed rollback: %w", undo)
 			return errors.Join(err, m.unknownState)
 		}
 		return err
@@ -141,12 +136,14 @@ func (m *Machine) restoreSet(set *snapcodec.Set) error {
 		name    string
 		restore func([]byte) error
 	}{
-		{"bus", m.Bus.Restore},
 		{"cpu", m.Core.Restore},
 		{"handoff", m.Handoff.Restore},
 		{"retired", m.restoreRetired},
 		{"sky-gates", m.SkyGates.Restore},
 		{"clock", func(blob []byte) error { return m.Clock.Restore(blob, m.clockHandlers) }},
+		// Bus.Restore is atomic by itself. Keep it last: if another owner refuses its
+		// blob, the 32 MB RAM and both flash chips have never been touched.
+		{"bus", m.Bus.Restore},
 	}
 	for _, owner := range owners {
 		blob, ok := set.Member(owner.name)
@@ -158,6 +155,48 @@ func (m *Machine) restoreSet(set *snapcodec.Set) error {
 		}
 	}
 	return nil
+}
+
+type nonBusState struct {
+	cpu, clock, handoff, sky []byte
+	retired                  uint64
+}
+
+func (m *Machine) saveNonBusState() (nonBusState, error) {
+	var state nonBusState
+	var err error
+	if state.cpu, err = m.Core.Snapshot(); err != nil {
+		return state, err
+	}
+	if state.clock, err = m.Clock.Snapshot(); err != nil {
+		return state, err
+	}
+	if state.handoff, err = m.Handoff.Snapshot(); err != nil {
+		return state, err
+	}
+	if state.sky, err = m.SkyGates.Snapshot(); err != nil {
+		return state, err
+	}
+	state.retired = m.Retired
+	return state, nil
+}
+
+func (m *Machine) restoreNonBusState(state nonBusState) error {
+	var failures []error
+	if err := m.Core.Restore(state.cpu); err != nil {
+		failures = append(failures, fmt.Errorf("cpu: %w", err))
+	}
+	if err := m.Handoff.Restore(state.handoff); err != nil {
+		failures = append(failures, fmt.Errorf("handoff: %w", err))
+	}
+	if err := m.SkyGates.Restore(state.sky); err != nil {
+		failures = append(failures, fmt.Errorf("sky gates: %w", err))
+	}
+	if err := m.Clock.Restore(state.clock, m.clockHandlers); err != nil {
+		failures = append(failures, fmt.Errorf("clock: %w", err))
+	}
+	m.Retired = state.retired
+	return errors.Join(failures...)
 }
 
 func (m *Machine) snapshotRetired() ([]byte, error) {

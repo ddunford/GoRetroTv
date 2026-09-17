@@ -42,3 +42,11 @@ digest: fefb36a3ea9f81324e0479e1623ba7387bde660befb068771f57a8dd1231fc63
   when: 2026-09-17T12:06:43Z
    why: Add the real-firmware snapshot run-on gate to ctl.sh; architecture controls remain unchanged.
 
+digest: 6e1b27f1863673e4f10254fbee6ecbb833aa91dbff74da21506a7631b0bad28e
+  when: 2026-09-17T12:14:09Z
+   why: Add named local snapshot save, run, inspect and list controls; architecture rules are unchanged.
+
+digest: 2a8e9054ebb9f0c7e82ed869d45cb6632751093764322a0ed0c9f137010c0f60
+  when: 2026-09-17T12:17:17Z
+   why: Add private named snapshot verbs and update vulnerability gate description
+

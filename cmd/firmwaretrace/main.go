@@ -160,6 +160,7 @@ func run() error {
 		return err
 	}
 	dmaController := dma.New(ram, graphics, video, interrupts)
+	dmaController.BindTransport(flash0, sectionDemux)
 	if err := busMap.Attach(dma.Base, dma.Size, dmaController); err != nil {
 		return err
 	}

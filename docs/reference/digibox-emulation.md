@@ -5883,26 +5883,24 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   against the `JB` magic `0x4A42A007` (pool literal at `0xBFC12584`), and on a miss advances the
   pointer by a step held at **`0x800050BC`** and loops to a limit. `0xBFC13430` does the same for
   the `SIGN` terminator `0x5349474E`.
-  **`0x800050BC` is zero in our emulation.** It is part of a flash
-  device descriptor: `0x800050B0` = `0xB200A000` and `0x800050B4` = `0xB200A010`, register
-  addresses in the `0xB2000000` block. The earlier conclusion that zero geometry prevents this
-  scan was premature: a 100-million-instruction Go trace never reaches the validator at all and
-  makes no read from that block. A missing board timer at `0xB000D000` was one measured blocker:
-  with its `0x40` interrupt modelled, BOOTMain wakes and the bootloader creates five tasks, but
-  BOOTMain then sleeps first for 100 ticks and repeatedly for 500. Its branch at `0xBFC012C6`
-  checks `[0x800081F8]` once. A guest write at PC `0xBFC00500` sets that word from zero to one
-  at instruction 3,262,648; the nonzero branch enters the unconditional service loop. The
-  earlier identification of `[0x800050D0]` as this branch's input was a disassembly error:
-  reset does copy `0xA0001FE0` there from ROM offset `0x1C8C0`, but zeroing it in a temporary
-  run did not change the branch. In another temporary run, forcing the actual gate to zero
-  selected the other path; it set flash-descriptor step `[0x800050BC]` to `0x10000` but then
-  polled unmapped modem-UART status `0xB2001050` for bit `0x40`. By 100 million instructions
-  it had not visited the image scanner or reached the application. These host-mutated runs do
-  not prove a real handoff. In a normal run at 100 million instructions the image at
-  `0x800009F4` is still zero and no guest handoff has occurred. The browser oracle forces its
-  own host-side handoff when the bootloader is idle; that injection cannot establish that the
-  firmware itself reached the validator or transferred control. The hardware condition behind
-  the gate-setting guest write remains to be established.
+  `[0x800050BC]` is the flash descriptor's scan step. The earlier zero-step diagnosis was
+  premature: the old 100-million-instruction run never reached the scanner. The first measured
+  blocker was a missing board timer at `0xB000D000`; its `0x40` IRQ wakes BOOTMain. The next
+  blocker was ROM's demux self-test, whose result is stored at `[0x800081F8]` by `0xBFC00500`
+  and checked once at `0xBFC012C6`. This is a hardware-test result, **not** the copied pointer
+  at `[0x800050D0]` as an earlier disassembly reading claimed. ROM sends six embedded transport
+  packets through DMA channel 5, then tests the demux write pointers at indirect indices 0 and
+  4 and compares the section RAM bytes. The old DMA channel-5 model signalled completion without
+  moving those bytes, so the test returned one and BOOTMain entered a service loop. With the
+  transfer, indirect match-word readback, section assembly and MPEG CRC filtering modelled,
+  **normal guest instructions write zero to `[0x800081F8]`** and set `[0x800050BC]` to
+  `0x10000`; no host mutation is involved. The bootloader then waits on `SMTAck` for CSI command
+  `0x44`. A diagnostic peripheral reply using the oracle's synthetic all-buttons-released frame
+  reaches scanner PC `0x9FC122B6` at instruction 19,193,163. That reply is not a measured
+  physical-controller response, and by 100 million instructions the application image at
+  `0x800009F4` remains zero. The scanner's remaining rejection is under investigation. The
+  browser oracle forces its own host-side handoff when the bootloader is idle; that injection
+  cannot establish that the firmware itself transferred control.
 - **Whether the EPG runs without a viewing card.** 54 CA strings, `NDS XSG`, `CA API Glue`.
   Historically a Sky box showed its guide with no card and refused only to decrypt, and the EPG
   carousel was broadcast in the clear — but that is a reason to expect an answer, not evidence for

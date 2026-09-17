@@ -50,16 +50,15 @@ func TestDemuxHoldsTheDeviceContract(t *testing.T) {
 			d.Write(0x6c, bus.Word, 0x14014)
 			d.Write(0x148, bus.Word, 0x4aff)
 			d.Write(0x144, bus.Word, 0xc000)
+			d.Write(0x140, bus.Word, 1)
+			d.Write(0x128, bus.Word, 0x2000)
+			d.Write(0x124, bus.Word, 0xc001)
+			d.Write(0x124, bus.Word, 0x4000|(22<<2))
+			d.Write(0x144, bus.Word, 0xc021)
+			d.transportPart[0] = []byte{0, 0xb0, 0x20}
 		},
 		Disturb: func(device bus.Device) {
-			d := device.(*Demux)
-			d.Write(0xD8, bus.Word, 0x00800000)
-			d.complete(23)
-			d.writePointer[22] = 0x45c30
-			d.Write(0x124, bus.Word, 0x4000|(23<<2))
-			d.Write(0x70, bus.Word, 0x14011)
-			d.Write(0x148, bus.Word, 0x4bff)
-			d.Write(0x144, bus.Word, 0xc000)
+			device.Reset()
 		},
 		Constant: []string{"name", "ram", "interrupt"},
 	})
@@ -96,6 +95,25 @@ func TestPIDChannelsAndMatchUnitsAreIndependent(t *testing.T) {
 	d.Write(0x14+4*23, bus.Word, 0x1fff)
 	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x14}) {
 		t.Fatalf("disabled channel still armed: %v", got)
+	}
+}
+
+func TestPackedMatchWordPreservesBothMatchBanks(t *testing.T) {
+	t.Parallel()
+	d := New()
+	d.Write(0x148, bus.Word, 0x000001ff)
+	d.Write(0x144, bus.Word, 0xc020)
+	d.Write(0x144, bus.Word, 0x4020)
+	if got := d.Read(0x148, bus.Word); got != 0x000001ff {
+		t.Fatalf("indirect match read = %#x", got)
+	}
+	d.Write(0x148, bus.Word, d.Read(0x148, bus.Word)|0x00ff0000)
+	d.Write(0x144, bus.Word, 0xc020)
+	if got := d.Read(0x148, bus.Word); got != 0x00ff01ff {
+		t.Fatalf("read-modify-write lost a match bank: %#x", got)
+	}
+	if got, _ := d.Match(0, 2); got != (MatchByte{Value: 1, Mask: 0xff}) {
+		t.Fatalf("low match bank = %+v", got)
 	}
 }
 

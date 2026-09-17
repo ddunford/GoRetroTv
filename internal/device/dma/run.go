@@ -69,6 +69,30 @@ func (d *Controller) Run(channel uint8) error {
 		}
 	}
 	switch channel {
+	case 5:
+		if d.transport == nil || d.flash == nil {
+			return fmt.Errorf("channel 5 transport path is not bound")
+		}
+		if length > 1<<20 {
+			return fmt.Errorf("channel 5 transfer exceeds 1 MiB")
+		}
+		data := make([]byte, int(length)) // #nosec G115 -- capped at 1 MiB above
+		const flashPhysical = memory.FlashU202 & 0x1fffffff
+		if src >= flashPhysical && uint64(src-flashPhysical)+length <= uint64(d.flash.Size()) {
+			for i := range data {
+				data[i] = byte(d.flash.Read(src-flashPhysical+uint32(i), bus.Byte)) // #nosec G115 -- transfer capped above
+			}
+		} else {
+			if _, err := d.dramRange(src, length); err != nil {
+				return fmt.Errorf("channel 5 source: %w", err)
+			}
+			for i := range data {
+				data[i] = byte(d.ram.Read((src&0x1fffffff)+uint32(i), bus.Byte)) // #nosec G115 -- DRAM range checked above
+			}
+		}
+		if err := d.transport.PushTransport(data); err != nil {
+			return fmt.Errorf("channel 5 transport: %w", err)
+		}
 	case 12:
 		if d.blitter == nil {
 			return fmt.Errorf("channel 12 blitter is not bound")

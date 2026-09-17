@@ -35,9 +35,8 @@
 - [ ] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses
   the application to `0x800009F4` and transfers control by executing guest instructions. The
   test must fail if a host-side forced PC change or image copy is substituted for the handoff.
-  **Open evidence:** the real bootloader reaches BOOTMain, but a guest write at `0xBFC00500`
-  sets `[0x800081F8]` to one; its nonzero branch enters an unconditional service loop before
-  the image scanner. The board timer wakes the event loop, but 100 million normal guest
-  instructions leave the application image untouched. A temporary zero-gate experiment reaches
-  an unmapped modem-UART poll, not the application. See `gort-f3f.10` for instruction watches
-  and branch PCs.
+  **Open evidence:** the ROM demux self-test now passes through a guest-driven DMA channel-5
+  transport transfer, setting `[0x800081F8]` to zero and flash scan step `[0x800050BC]` to
+  `0x10000` without host mutation. BOOTMain then waits for CSI command `0x44`; a diagnostic
+  synthetic peripheral reply reaches scanner PC `0x9FC122B6`, but the application image at
+  `0x800009F4` remains zero through 100 million instructions. See `gort-f3f.10` for trace PCs.

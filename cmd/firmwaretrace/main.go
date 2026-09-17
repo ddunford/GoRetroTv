@@ -17,6 +17,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/i2c"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/device/osd"
+	"github.com/ddunford/goretrotv/internal/device/smartcard"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
@@ -83,6 +84,10 @@ func run() error {
 	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
 		return err
 	}
+	cardPort := smartcard.New(interrupts)
+	if err := busMap.Attach(smartcard.Base, smartcard.Size, cardPort); err != nil {
+		return err
+	}
 	store := eeprom.New()
 	mux := i2c.NewMux()
 	master := i2c.New(store, mux, interrupts)
@@ -141,6 +146,7 @@ func run() error {
 			}
 		}
 		serial.Pump(i)
+		cardPort.Pump(i)
 		if *trace && i >= *traceFrom && i < *traceTo {
 			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
 		}

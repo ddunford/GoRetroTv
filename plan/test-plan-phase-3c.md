@@ -19,7 +19,11 @@
   echoes the guest's sequence, and that acknowledging everything changes the wire replies.
   **Blocked:** comparing the resulting 42-task and 19-task guest boots requires the real
   application handoff and remaining Phase 3c devices. Reopen after TASK-3c.9/3c.6.
-- [ ] **TC-3c.4: CA init proceeds past the card** (covers: TASK-3c.4, TASK-3c.7).
+- [?] **TC-3c.4: CA init proceeds past the card** (covers: TASK-3c.4, TASK-3c.7).
+  `internal/device/smartcard/port_test.go` drives the real six-byte boot command through six
+  separate TX completion interrupts, checks interrupt acknowledgement and the paced six-byte
+  empty-slot response. **Blocked:** proving that guest CA init advances requires the real
+  application handoff and complete Phase 3c boot; reopen after TASK-3c.9/3c.6.
 - [ ] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75 with bits 0x17
   set and register 78 = 0x02, which is what the driver polls.
 - [ ] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints

@@ -67,4 +67,5 @@
   1.1B→1.12B firmware run exercised PC histogram/range, read and write watches, call trace and
   o-code trace; counts and reproduction command are in `docs/instruments.md`. The same snapshot
   with zero guest steps rejects the histogram, and a one-step wrong-address watch rejects its
-  absent subject. The instrumented run is captured in `.artifacts/instruments-real-1120m.log`.
+  absent subject. The instrumented run is captured in `.artifacts/instruments-real-1120m.log`
+  and `.artifacts/instruments-real-1120m.stderr`.

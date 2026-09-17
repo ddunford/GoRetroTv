@@ -32,9 +32,17 @@
   firmware's Box Office menu after Sky was pressed. Light, dark and 390 px mobile screenshots were
   inspected; mobile had no horizontal overflow. `./ctl.sh conformance` passed 7/7 rules and 26/26
   probes, including the firmware-free image check.
-- [?] **TC-5.6: Developer surfaces are unreachable publicly** (covers: TASK-5.6, TASK-5.7) — the gdb port and
+- [x] **TC-5.6: Developer surfaces are unreachable publicly** (covers: TASK-5.6, TASK-5.7) — the gdb port and
   instrument endpoints refuse from outside. Asserted against the deployed host.
-  **Blocked:** The deployed route is not available (TASK-5.5 and owner gates gort-7g2.1/.2).
+  **Result:** With `https://goretrotv.demosrv.uk/health` returning 200, TCP connections to
+  `goretrotv.demosrv.uk:23457` (GDB test port) and `:8099` timed out; direct connections to the
+  origin LAN address `192.168.1.12` on both ports were refused. Public requests for
+  `/debug/pprof/`, `/debug/pprof/profile`, `/debug/pprof/cmdline`, `/instruments`, `/metrics`,
+  and `/trace` all returned 404. The merged public compose config has no host ports and forces
+  `GORETROTV_ENABLE_PPROF=false` even when the caller exports `true`. `internal/app` also refuses
+  to start a pprof-enabled server outside explicit development mode, so bypassing the overlay
+  cannot put pprof on the public mux. `./ctl.sh test` passed under the race detector, including
+  the production refusal test; repeatable network commands are in `docs/deployment.md`.
 - [x] **TC-5.7: The TS decoder is pinned to the Go encoder's actual bytes** (covers: TASK-5.7, TASK-5.9) — feed the decoder a fixture **captured from the running server** and assert the
   projection. A hand-authored fixture passes while the wire differs, which is the failure mode where
   the contract test exists, is green, and still ships the bug.

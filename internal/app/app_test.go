@@ -87,3 +87,14 @@ func TestMissingBuiltAssetPreventsServerStart(t *testing.T) {
 		t.Fatalf("missing built page accepted: %v", err)
 	}
 }
+
+func TestProfilingRefusedOutsideDevelopment(t *testing.T) {
+	for _, env := range []string{"production", "staging", ""} {
+		t.Run(env, func(t *testing.T) {
+			_, err := app.New(&config.Config{Env: env, EnablePprof: true, WebDir: t.TempDir()}, slog.Default(), web.NewTransport())
+			if err == nil || !strings.Contains(err.Error(), "GORETROTV_ENABLE_PPROF requires GORETROTV_ENV=development") {
+				t.Fatalf("%q environment accepted public profiler or missed the guard: %v", env, err)
+			}
+		})
+	}
+}

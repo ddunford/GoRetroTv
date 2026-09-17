@@ -22,6 +22,9 @@ func New(cfg *config.Config, logger *slog.Logger, transport *web.Transport) (htt
 	if transport == nil {
 		return nil, fmt.Errorf("app: browser transport is nil")
 	}
+	if cfg.EnablePprof && cfg.Env != "development" {
+		return nil, fmt.Errorf("app: GORETROTV_ENABLE_PPROF requires GORETROTV_ENV=development")
+	}
 	assets := os.DirFS(cfg.WebDir)
 	for _, name := range []string{"index.html", "styles.css", "favicon.svg", "dist/app.js", "dist/wire.js", "dist/wire_generated.js"} {
 		if _, err := fs.Stat(assets, name); err != nil {

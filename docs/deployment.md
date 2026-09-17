@@ -19,7 +19,9 @@ From the repository owner account, with the private firmware files and
 
 `up-public` starts the container under the caller's non-root UID/GID so it can read the private
 snapshot without widening its `0600` file mode or its directory's `0700` mode. It sets production
-mode, disables pprof, and validates the public `/health` route. The firmware is checked against its
+mode, disables pprof, and validates the public `/health` route. The app itself refuses to start
+with pprof enabled outside explicit development mode, including a direct production run that
+bypasses this overlay. The firmware is checked against its
 manifest before the listener opens; the restored snapshot must pass the exact post-acquisition
 state check before the page is served.
 
@@ -27,6 +29,46 @@ Check `https://goretrotv.demosrv.uk/` in a browser, including the actual `/style
 `/favicon.svg`, and `/dist/*.js` requests. The server must return 404 for unknown assets, not
 index HTML. Press **sky** and observe the firmware's menu. WebSocket uses the same origin at
 `wss://goretrotv.demosrv.uk/ws`.
+
+## Check the public developer boundary
+
+Run these checks while the public stack is up. The live `/health` request is the positive control;
+each developer route must answer 404. `config-public` prints the merged configuration, including
+the fixed `GORETROTV_ENABLE_PPROF=false` value even if an operator exports `true` in the shell.
+
+```sh
+./ctl.sh health-public
+GORETROTV_ENABLE_PPROF=true ./ctl.sh config-public --format json
+for path in /debug/pprof/ /debug/pprof/profile /debug/pprof/cmdline /instruments /metrics /trace; do
+  curl -sS -o /dev/null -w "$path %{http_code}\n" "https://goretrotv.demosrv.uk$path"
+done
+```
+
+From this origin, TCP attempts to `goretrotv.demosrv.uk:23457` (the GDB test port) and `:8099`
+(the app port) must fail. Repeat against the host's LAN address to rule out a direct port bypass
+around Cloudflare:
+
+```sh
+python3 - <<'PY'
+import socket
+import subprocess
+
+route = subprocess.check_output(['ip', '-4', 'route', 'get', '1.1.1.1'], text=True).split()
+lan = route[route.index('src') + 1]
+for host in ('goretrotv.demosrv.uk', lan):
+    for port in (23457, 8099):
+        try:
+            connection = socket.create_connection((host, port), timeout=3)
+        except OSError as error:
+            print(f'{host}:{port}: blocked ({type(error).__name__})')
+        else:
+            connection.close()
+            raise SystemExit(f'developer port exposed: {host}:{port}')
+PY
+```
+
+The public overlay publishes no host port, and the runtime image contains only `goretrotv` and
+`oraclecmp`, not the separate `firmwaretrace` executable that can start a GDB stub.
 
 ## Stop or roll back
 

@@ -18,6 +18,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/hwtimer"
 	"github.com/ddunford/goretrotv/internal/device/i2c"
 	"github.com/ddunford/goretrotv/internal/device/irq"
+	"github.com/ddunford/goretrotv/internal/device/modem"
 	"github.com/ddunford/goretrotv/internal/device/osd"
 	"github.com/ddunford/goretrotv/internal/device/smartcard"
 	"github.com/ddunford/goretrotv/internal/firmware"
@@ -110,6 +111,10 @@ func run() error {
 		serial.SetAckPolicy([]uint8{0x52, 0x18, uint8(*ackCode)}) // #nosec G115 -- checked above.
 	}
 	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
+		return err
+	}
+	modemPort := modem.New(interrupts)
+	if err := busMap.Attach(modem.Base, modem.Size, modemPort); err != nil {
 		return err
 	}
 	cardPort := smartcard.New(interrupts)

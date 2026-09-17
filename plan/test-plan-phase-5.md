@@ -28,8 +28,14 @@
   mid-session: the page says so, reconnects, and resumes. Halt the machine: a readable reason, not a
   frozen canvas. Press a key while disconnected: refused visibly, never swallowed.
   **Blocked:** The browser page and failure states are not built yet (TASK-5.2 and TASK-5.10).
-- [?] **TC-5.9: The handset acknowledges input and is operable by keyboard** (covers: TASK-5.2, TASK-5.7) — every button shows a pressed state, is reachable by **a real `Tab` press** (programmatic
+- [x] **TC-5.9: The handset acknowledges input and is operable by keyboard** (covers: TASK-5.2, TASK-5.7) — every button shows a pressed state, is reachable by **a real `Tab` press** (programmatic
   focus matches `:focus` but not reliably `:focus-visible`, so it measures the browser's heuristic
   rather than the stylesheet), shows a visible focus ring asserted **by colour** rather than by the
   presence of an outline, and is operable by touch at a usable target size.
-  **Blocked:** The browser handset is not built yet (TASK-5.2).
+  **Result:** `tests/e2e/handset.spec.ts` drove all handset buttons with real Tab navigation
+  and checked each visible focus colour, 3 px outline and 44 px touch target. It exercised
+  keyboard and pointer pressed states, confirmed a Sky press sends raw `0x7D`, verified the
+  acknowledgement text, and tapped Sky in a mobile touch context. It also checked the
+  disconnected disabled state and reduced-motion duration. The browser suite passed
+  seven cases, including its dedicated reduced-motion project; the focus-colour assertion
+  failed under a deliberately wrong expected colour before restoration.

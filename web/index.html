@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>GoRetroTV — Sky Digibox</title>
+  <meta name="description" content="A Pace 2500N Sky Digibox running its own firmware in your browser.">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/dist/app.js"></script>
+</head>
+<body>
+  <div class="site-shell">
+    <header class="site-header">
+      <div class="brand" aria-label="GoRetroTV">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>GoRetro<span class="brand-accent">TV</span></span>
+      </div>
+      <span class="era-tag">Pace 2500N · 1998–2002</span>
+    </header>
+
+    <main class="experience">
+      <section class="viewer" aria-labelledby="viewer-title">
+        <div class="intro">
+          <p class="eyebrow">THE ORIGINAL FIRMWARE, LIVE</p>
+          <h1 id="viewer-title">A Sky Digibox<br>in your browser.</h1>
+          <p class="intro-copy">Give the box a moment to find its feet. Then press <strong>sky</strong> on the handset to open the real menu.</p>
+        </div>
+
+        <div class="television" aria-label="Digibox television display">
+          <div class="television-topline"><span class="signal-light" id="signal-light" aria-hidden="true"></span><span>DIGITAL SATELLITE</span><span class="topline-model">2500N</span></div>
+          <div class="screen-well">
+            <canvas id="screen" width="720" height="576" role="img" aria-label="Sky Digibox screen" aria-describedby="box-status"></canvas>
+          </div>
+          <div class="television-footer"><span>PACE</span><span>SKY DIGIBOX</span></div>
+        </div>
+
+        <div class="status-panel" role="status" aria-live="polite" aria-atomic="true">
+          <span class="status-icon" aria-hidden="true"></span>
+          <p id="box-status">Connecting to the Digibox…</p>
+        </div>
+        <p class="screen-help">The screen above is the box’s own framebuffer. The handset sends key presses to its firmware.</p>
+      </section>
+
+      <aside class="controls" aria-labelledby="handset-heading">
+        <div class="controls-heading"><div><p class="eyebrow">CONTROL THE BOX</p><h2 id="handset-heading">The handset</h2></div><span class="controls-caption">Use a mouse, touch, or keyboard</span></div>
+        <div class="remote" role="group" aria-label="Sky Digibox handset" id="handset">
+          <div class="remote-head"><span class="remote-logo">sky</span><button class="key power" type="button" data-raw="0xCC" aria-label="Standby" disabled><span aria-hidden="true">⏻</span></button></div>
+          <div class="remote-section remote-primary">
+            <button class="key sky" type="button" data-raw="0x7D" disabled>sky</button>
+            <button class="key" type="button" data-raw="0x80" disabled>tv guide</button>
+            <button class="key" type="button" data-raw="0xF5" disabled>interactive</button>
+          </div>
+          <div class="remote-nav" aria-label="Navigation">
+            <button class="key nav up" type="button" data-raw="0x58" aria-label="Up" disabled><span aria-hidden="true">▲</span></button>
+            <button class="key nav left" type="button" data-raw="0x5A" aria-label="Left" disabled><span aria-hidden="true">◀</span></button>
+            <button class="key select" type="button" data-raw="0x5C" disabled>select</button>
+            <button class="key nav right" type="button" data-raw="0x5B" aria-label="Right" disabled><span aria-hidden="true">▶</span></button>
+            <button class="key nav down" type="button" data-raw="0x59" aria-label="Down" disabled><span aria-hidden="true">▼</span></button>
+          </div>
+          <div class="remote-secondary"><button class="key back" type="button" data-raw="0x3C" disabled>back up</button></div>
+          <div class="colour-row" aria-label="Colour keys">
+            <button class="key colour-key red" type="button" data-raw="0x6D" aria-label="Red key" disabled></button>
+            <button class="key colour-key green" type="button" data-raw="0x6E" aria-label="Green key" disabled></button>
+            <button class="key colour-key yellow" type="button" data-raw="0x6F" aria-label="Yellow key" disabled></button>
+            <button class="key colour-key blue" type="button" data-raw="0x70" aria-label="Blue key" disabled></button>
+          </div>
+          <div class="number-pad" aria-label="Number keys">
+            <button class="key" type="button" data-raw="0x01" disabled>1</button><button class="key" type="button" data-raw="0x02" disabled>2</button><button class="key" type="button" data-raw="0x03" disabled>3</button>
+            <button class="key" type="button" data-raw="0x04" disabled>4</button><button class="key" type="button" data-raw="0x05" disabled>5</button><button class="key" type="button" data-raw="0x06" disabled>6</button>
+            <button class="key" type="button" data-raw="0x07" disabled>7</button><button class="key" type="button" data-raw="0x08" disabled>8</button><button class="key" type="button" data-raw="0x09" disabled>9</button>
+            <span class="number-spacer" aria-hidden="true"></span><button class="key" type="button" data-raw="0x00" disabled>0</button><span class="number-spacer" aria-hidden="true"></span>
+          </div>
+          <div class="remote-bottom" aria-hidden="true"><span></span><span></span><span></span></div>
+        </div>
+        <p class="key-feedback" id="key-feedback" role="status" aria-live="polite">The handset will wake when the box connects.</p>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

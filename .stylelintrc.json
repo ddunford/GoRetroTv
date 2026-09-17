@@ -1,0 +1,20 @@
+{
+  "plugins": ["stylelint-high-performance-animation", "stylelint-declaration-strict-value"],
+  "rules": {
+    "plugin/no-low-performance-animation-properties": [true, {
+      "ignoreProperties": ["color", "background-color", "display", "overlay"]
+    }],
+    "scale-unlimited/declaration-strict-value": [
+      ["/^transition/", "/^animation/"],
+      {
+        "ignoreFunctions": false,
+        "ignoreKeywords": ["inherit", "initial", "none"],
+        "ignoreValues": [
+          "/var\\(/",
+          "/^(opacity|transform|translate|rotate|scale|display|overlay|color|background-color)$/",
+          "/^allow-discrete,?$/"
+        ]
+      }
+    ]
+  }
+}

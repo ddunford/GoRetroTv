@@ -7,10 +7,14 @@
     "typecheck": "tsc --noEmit",
     "build:web": "tsc",
     "test:wire": "npm run build:web && node --test tests/wire.test.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint:css": "stylelint web/styles.css"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "stylelint": "17.15.0",
+    "stylelint-declaration-strict-value": "1.12.1",
+    "stylelint-high-performance-animation": "2.0.0",
     "typescript": "5.9.3"
   }
 }

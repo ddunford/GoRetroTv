@@ -21,7 +21,7 @@ start without claiming the menu was seen.
 - [x] `TASK-3b.4` The plane/window model: the 100-byte records at `*0x80105E9C`, the produce/consume indices at `+0x50`/`+0x54`, the background flag and colour. **Window 0 is a trap** — the validator errors when the id is 0 while the gate reads 0, and the error handler does not return → `/go-engineer` [TC-3b.4]
 - [x] `TASK-3b.5` Palette/CLUT and bit depth (2, 4 or 8 bpp per window) → `/go-engineer` [TC-3b.5]
 - [ ] `TASK-3b.6` Oracle comparison to a drawn menu; then compare the **framebuffer** itself, not just checkpoints → `/go-engineer` [TC-3b.6]
-- [ ] `TASK-3b.7` ⫘ Drawing hardware integration tests → `/go-engineer` [TC-3b.1, TC-3b.2, TC-3b.3, TC-3b.4, TC-3b.5]
+- [x] `TASK-3b.7` ⫘ Drawing hardware integration tests → `/go-engineer` [TC-3b.1, TC-3b.2, TC-3b.3, TC-3b.4, TC-3b.5]
 - [ ] `TASK-3b.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns

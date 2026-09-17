@@ -17,7 +17,7 @@ Snapshot/restore, deterministic replay and a gdb stub. Every device already impl
 - [x] `TASK-4.5` gdb remote serial protocol stub: registers, memory, breakpoints, watchpoints, step, continue — **bound to localhost only** (ARCH-DEV-1) → `/go-engineer` [TC-4.5]
 - [x] `TASK-4.6` Port the instrument suite: PC histograms, range/read/write watches, call tracing, section injection, and the o-code trace — **each asserting its own subject**, so a census that cannot find what it counts is a harness failure and never a zero → `/go-engineer` [TC-4.6]
 - [x] `TASK-4.7` ⫘ Tests → `/go-engineer` [TC-4.1, TC-4.2, TC-4.3, TC-4.4, TC-4.5, TC-4.6]
-- [ ] `TASK-4.8` ⫘ Security audit — especially that the stub and instruments cannot be reached from outside → `/security-reviewer` [no-test: audit produces its own report]
+- [x] `TASK-4.8` ⫘ Security audit — especially that the stub and instruments cannot be reached from outside → `/security-reviewer` [no-test: audit produces its own report]
 
 **Reconcile carry-over for TASK-4.1:** the Phase 3 diagnostic runner currently counts its own
 16-instruction device-pump phase. When the central machine and snapshot writer are assembled,

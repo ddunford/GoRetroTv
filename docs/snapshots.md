@@ -24,3 +24,13 @@ For a different private library directory, set `GORETROTV_SNAPSHOT_DIR` when cal
 The supplied firmware in `firmware/` must match the image's machine; the loader verifies it
 before constructing the bus. A mismatched or incomplete snapshot is refused rather than loaded
 partially.
+
+## Verified TDT handoff
+
+The private `post-tdt` image was saved at instruction 470,000,000 after the guest
+armed PID 20, 17 and 16 filters and consumed an eight-byte TDT section on PID 20.
+The browser oracle and Go both recorded one demux interrupt, one section-task entry,
+two length-reader entries, a nine-byte ring advance and cleared interrupt status.
+The image's restored state hash is `C918AA06`; `./ctl.sh snapshot inspect post-tdt`
+reports it without running any instructions. The image is an intermediate SI state;
+NIT and SDT acquisition still need their own guest proof.

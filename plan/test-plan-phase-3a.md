@@ -3,8 +3,10 @@
 ## Test Cases
 - [x] **TC-3a.1: Ring geometry** (covers: TASK-3a.1, TASK-3a.8) — filter f's ring is where the firmware expects.
   **Result:** `internal/device/demux/section_test.go` asserts first, middle and last ring and five-word record addresses, bus aliasing, reset and snapshot restore; `./ctl.sh test` passed.
-- [ ] **TC-3a.2: Enable and status semantics** (covers: TASK-3a.2, TASK-3a.8) — write-one-to-set and
+- [x] **TC-3a.2: Enable and status semantics** (covers: TASK-3a.2, TASK-3a.8) — write-one-to-set and
   write-zero-to-clear, each asserted in the direction it actually works. Swapping them must fail.
+  **Result:** `internal/device/demux/registers_test.go` verifies cumulative enable bits, complement
+  acknowledgement, reset and snapshot restore; `./ctl.sh test` passed.
 - [ ] **TC-3a.3: The LISR handshake completes** (covers: TASK-3a.3, TASK-3a.8) — and a register file that reads
   back its own writes at `+0x124` must hang, proving the model is the working one.
 - [ ] **TC-3a.4: PID channels and match units are separate index spaces** (covers: TASK-3a.4, TASK-3a.8).

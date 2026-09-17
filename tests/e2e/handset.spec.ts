@@ -177,6 +177,7 @@ test('phone keeps the screen visible while handset keys receive focus', async ({
   await page.routeWebSocket('**/ws', ws => sendReady(ws));
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   const keys = page.locator('#handset button[data-raw]');
   for (let index = 0; index < await keys.count(); index++) {
     await page.keyboard.press('Tab');

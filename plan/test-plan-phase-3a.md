@@ -20,3 +20,9 @@
 - [ ] **TC-3a.6: The demux interrupt reaches its handler** (covers: TASK-3a.6, TASK-3a.8).
 - [ ] **TC-3a.7: Oracle agreement through acquisition** (covers: TASK-3a.7) — the box programs the
   same filters as the oracle: TDT, SDT and NIT, enable `0xFFC00000`.
+
+**Guest acceptance dependency:** TC-3a.5–3a.7 remain open until the real application handoff in
+TASK-3c.9. The hardware boundary already has committed tests in
+`internal/device/demux/push_test.go` and `internal/device/irq/controller_test.go`; the CPU gate
+matches eight oracle anchors through instruction 3,204,400 and identifies the video RAM read at
+3,204,424 as the current wall. Those results do not prove guest section consumption or handler entry.

@@ -8,16 +8,22 @@ recognisably Digibox-shaped.
 Thirty-two section rings, the filter records, the LISR handshake and the interrupt. Every fact here
 is measured; `docs/reference/digibox-emulation.md` Part 5 is the specification.
 
+**Execution dependency discovered 2026-09-17:** the Go CPU reaches an unmodelled video RAM read at
+instruction 3,204,424, before the application programs section filters. Phase 3a's hardware model,
+unit tests and security review can finish first, allowing Phase 3b to model video RAM. Guest firmware
+consumption, handler entry and SI oracle comparison stay in TASK-3a.7/TC-3a.5–3a.7 and depend on
+Phase 3c's real guest-driven handoff (TASK-3c.9); they are not inferred from unit tests.
+
 ## Tasks (mirror — bd epic `gort-l14` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-3a.1` Section RAM: thirty-two 12 KB rings, filter `f` at `0xA07A0000 + f*0x3000`, and the records at `0x80142D34 + f*20` = `{start, end, current, last-read, context}` → `/go-engineer` [TC-3a.1]
-- [ ] `TASK-3a.2` The enable at `+0xD8` is **write-one-to-set**; the status at `+0xB8` is **write-zero-to-clear**. They were modelled the other way round for months — do not re-derive → `/go-engineer` [TC-3a.2]
-- [ ] `TASK-3a.3` The LISR handshake: write `0x4000|(f<<2)` to `+0x124`, spin until bit 14 clears, read a 21-bit byte offset from `+0x128`. **`+0x124` must NOT read back its own writes** — making it do so stopped the RTOS starting → `/go-engineer` [TC-3a.3]
-- [ ] `TASK-3a.4` PID channel programming (`0x14 + 4*ch`) and the match units. **16 match units against 32 PID channels — never join them by index**; doing so produced a confident artefact → `/go-engineer` [TC-3a.4]
-- [ ] `TASK-3a.5` Section injection API, appending the extra byte after each section that the hardware appends (the task advances by `section_length + 4` where DVB's total is `+ 3`) → `/go-engineer` [TC-3a.5]
-- [ ] `TASK-3a.6` Demux interrupt wiring and its dispatch row → `/go-engineer` [TC-3a.6]
+- [x] `TASK-3a.1` Section RAM: thirty-two 12 KB rings, filter `f` at `0xA07A0000 + f*0x3000`, and the records at `0x80142D34 + f*20` = `{start, end, current, last-read, context}` → `/go-engineer` [TC-3a.1]
+- [x] `TASK-3a.2` The enable at `+0xD8` is **write-one-to-set**; the status at `+0xB8` is **write-zero-to-clear**. They were modelled the other way round for months — do not re-derive → `/go-engineer` [TC-3a.2]
+- [x] `TASK-3a.3` The LISR handshake: write `0x4000|(f<<2)` to `+0x124`, spin until bit 14 clears, read a 21-bit byte offset from `+0x128`. **`+0x124` must NOT read back its own writes** — making it do so stopped the RTOS starting → `/go-engineer` [TC-3a.3]
+- [x] `TASK-3a.4` PID channel programming (`0x14 + 4*ch`) and the match units. **16 match units against 32 PID channels — never join them by index**; doing so produced a confident artefact → `/go-engineer` [TC-3a.4]
+- [x] `TASK-3a.5` Section injection API, appending the extra byte after each section that the hardware appends (the task advances by `section_length + 4` where DVB's total is `+ 3`) → `/go-engineer` [TC-3a.5]
+- [x] `TASK-3a.6` Demux interrupt wiring and its dispatch row → `/go-engineer` [TC-3a.6]
 - [ ] `TASK-3a.7` Oracle comparison through SI acquisition → `/go-engineer` [TC-3a.7]
-- [ ] `TASK-3a.8` ⫘ Tests → `/go-engineer` [TC-3a.1, TC-3a.2, TC-3a.3, TC-3a.4, TC-3a.5, TC-3a.6]
+- [ ] `TASK-3a.8` ⫘ Demux unit and bus integration tests → `/go-engineer` [TC-3a.1, TC-3a.2, TC-3a.3, TC-3a.4; hardware portions of TC-3a.5 and TC-3a.6]
 - [ ] `TASK-3a.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Custom Feature: the section demux

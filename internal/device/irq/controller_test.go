@@ -29,7 +29,7 @@ func TestPendingAndEnableSignalIP2(t *testing.T) {
 	}
 }
 
-func TestControllerSnapshot(t *testing.T) {
+func TestControllerHoldsTheDeviceContract(t *testing.T) {
 	t.Parallel()
 	err := bustest.CheckSnapshot(bustest.Check{
 		New: func() bus.Device { return New(nil) },

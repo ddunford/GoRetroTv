@@ -14,7 +14,7 @@ finding: it breaks the page's main interaction on phones.
 
 The fix keeps the television visible at the top of a phone viewport while the handset scrolls
 under it. Keyboard scrolling reserves room for the display, so focused keys stay below it. Sticky
-positioning is disabled in short portrait viewports. Short landscape views place the display and
+positioning is disabled in portrait viewports shorter than 400 px. Short landscape views place the display and
 handset side by side, with a sticky display in its own column. Desktop layout and the single
 original canvas remain the same.
 

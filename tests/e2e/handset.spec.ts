@@ -205,6 +205,17 @@ test('phone keeps the screen visible while handset keys receive focus', async ({
   expect(tablet.screenTop).toBeGreaterThanOrEqual(0);
   expect(tablet.screenBottom).toBeLessThan(tablet.selectTop);
   expect(tablet.selectTop).toBeLessThan(tablet.viewport);
+
+  await page.setViewportSize({ width: 320, height: 500 });
+  await page.getByRole('button', { name: 'select', exact: true }).scrollIntoViewIfNeeded();
+  const compact = await page.evaluate(() => {
+    const screen = document.querySelector('#screen')!.getBoundingClientRect();
+    const select = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'select')!.getBoundingClientRect();
+    return { screenTop: screen.top, screenBottom: screen.bottom, selectTop: select.top, selectBottom: select.bottom };
+  });
+  expect(compact.screenTop).toBeGreaterThanOrEqual(0);
+  expect(compact.screenBottom).toBeLessThan(compact.selectTop);
+  expect(compact.selectBottom).toBeLessThan(500);
 });
 
 test('touch activates a handset key at mobile width', async ({ browser }) => {

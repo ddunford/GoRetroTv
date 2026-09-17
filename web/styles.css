@@ -138,7 +138,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   .controls-heading { max-width: 338px; margin-inline: auto; }
   .remote { width: min(100%, 338px); }
 }
-@media (max-width: 760px) and (max-height: 600px) {
+@media (max-width: 760px) and (max-height: 400px) {
   .television { position: static; }
 }
 @media (max-width: 760px) and (max-height: 600px) and (orientation: landscape) {

@@ -16,7 +16,7 @@ Framebuffer transport, handset input, the page, and a real deployment.
 - [ ] `TASK-5.5` Production Dockerfile, compose overlay, Traefik labels and TLS at `goretrotv.demosrv.uk` → `/devops-deployment-engineer` [TC-5.5]
 - [ ] `TASK-5.6` **Developer surfaces must not be published** — the gdb stub and instrument endpoints bind to localhost; assert it against the deployed host, not only in config → `/devops-deployment-engineer` [TC-5.6]
 - [x] `TASK-5.9` The wire contract: one versioned schema for the framebuffer and key messages, generated or shared rather than written twice, with the TS decoder's fixture **captured from the running server** — a hand-written fixture matches the author's mental model, not the wire → `/go-engineer` [TC-5.7]
-- [ ] `TASK-5.10` Failure states on the page: the socket drops and reconnects with backoff, the box halting shows a readable reason rather than a frozen canvas, and the keypad refuses input while disconnected instead of swallowing it → `/go-engineer` [TC-5.8]
+- [x] `TASK-5.10` Failure states on the page: the socket drops and reconnects with backoff, the box halting shows a readable reason rather than a frozen canvas, and the keypad refuses input while disconnected instead of swallowing it → `/go-engineer` [TC-5.8]
 - [ ] `TASK-5.7` ⫘ Playwright specs driving the deployed page → `/qa-test-engineer` [TC-5.1, TC-5.2, TC-5.3, TC-5.4, TC-5.5, TC-5.6, TC-5.7, TC-5.8, TC-5.9]
 - [ ] `TASK-5.8` ⫘ Security audit of the public surface → `/security-reviewer` [no-test: audit produces its own report]
 

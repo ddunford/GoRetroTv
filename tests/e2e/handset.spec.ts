@@ -1,10 +1,24 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type WebSocketRoute } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 const capturedWire = readFileSync('tests/fixtures/wire.jsonl', 'utf8').trim().split('\n');
 
+function sendFullScreen(ws: WebSocketRoute, litPixel: number): void {
+  const pixels = Buffer.alloc(720 * 576);
+  pixels[litPixel] = 1;
+  ws.send(capturedWire[0]);
+  ws.send(JSON.stringify({ type: 'frame', version: 1, seq: 1, epoch: 1,
+    x: 0, y: 0, w: 720, h: 576, pixels: pixels.toString('base64') }));
+}
+
+function sendReady(ws: WebSocketRoute): void {
+  sendFullScreen(ws, 7 * 720 + 5);
+  ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: 'The box is ready. Press sky.' }));
+}
+
 test('canvas paints pixels from a captured Go WebSocket frame', async ({ page }) => {
   await page.routeWebSocket('**/ws', ws => {
+    sendFullScreen(ws, 0);
     for (const message of capturedWire) ws.send(message);
   });
   await page.goto('/');
@@ -13,18 +27,70 @@ test('canvas paints pixels from a captured Go WebSocket frame', async ({ page })
   })).toEqual([255, 255, 255, 255]);
 });
 
-test('handset explains disconnection and refuses input', async ({ page }) => {
+test('handset preserves the screen, refuses input during a socket loss, and resumes after reconnect', async ({ page }, testInfo) => {
+  const sockets: WebSocketRoute[] = [];
+  const sent: string[] = [];
+  await page.routeWebSocket('**/ws', ws => {
+    sockets.push(ws);
+    ws.onMessage(message => sent.push(String(message)));
+    if (sockets.length === 1) sendReady(ws);
+  });
   await page.goto('/');
+  const sky = page.getByRole('button', { name: 'sky', exact: true });
+  await expect(sky).toBeEnabled();
+  const pixel = () => page.locator('#screen').evaluate((element: HTMLCanvasElement) =>
+    [...element.getContext('2d')!.getImageData(5, 7, 1, 1).data]);
+  await expect.poll(pixel).toEqual([255, 255, 255, 255]);
+  await sockets[0].close();
   await expect(page.locator('#box-status')).toContainText('connection to the box was lost');
-  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeDisabled();
+  await expect(sky).toBeDisabled();
   await expect(page.locator('#key-feedback')).toContainText('unavailable while disconnected');
+  await page.screenshot({ path: testInfo.outputPath('disconnected-light.png'), fullPage: true, animations: 'disabled' });
+  await sky.evaluate((element: HTMLButtonElement) => element.click());
+  expect(sent).toHaveLength(0);
+  await expect.poll(pixel).toEqual([255, 255, 255, 255]);
+  await expect.poll(() => sockets.length).toBe(2);
+  await expect(sky).toBeDisabled();
+  sendFullScreen(sockets[1], 7 * 720 + 6);
+  sockets[1].send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: '' }));
+  await expect(sky).toBeEnabled();
+  await expect.poll(pixel).toEqual([0, 0, 0, 255]);
+  await expect.poll(() => page.locator('#screen').evaluate((element: HTMLCanvasElement) =>
+    [...element.getContext('2d')!.getImageData(6, 7, 1, 1).data])).toEqual([255, 255, 255, 255]);
+  await sky.click();
+  await expect.poll(() => sent.length).toBe(1);
+  const secondClosedAt = Date.now();
+  await sockets[1].close();
+  await expect.poll(() => sockets.length).toBe(3);
+  expect(Date.now() - secondClosedAt).toBeGreaterThanOrEqual(450);
+});
+
+test('a guest halt states its reason and refuses handset input', async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  let socket: WebSocketRoute;
+  const sent: string[] = [];
+  await page.routeWebSocket('**/ws', ws => {
+    socket = ws;
+    ws.onMessage(message => sent.push(String(message)));
+    sendReady(ws);
+  });
+  await page.goto('/');
+  const sky = page.getByRole('button', { name: 'sky', exact: true });
+  await expect(sky).toBeEnabled();
+  socket!.send(JSON.stringify({ type: 'state', version: 1, phase: 'halted', reason: 'invalid guest instruction at 0x80001234' }));
+  await expect(page.locator('#box-status')).toContainText('invalid guest instruction at 0x80001234');
+  await expect(sky).toBeDisabled();
+  await expect(page.locator('#key-feedback')).toContainText('unavailable while the box is stopped');
+  await page.screenshot({ path: testInfo.outputPath('halted-dark.png'), fullPage: true, animations: 'disabled' });
+  await sky.evaluate((element: HTMLButtonElement) => element.click());
+  expect(sent).toHaveLength(0);
 });
 
 test('handset has visible keyboard, pointer, acknowledgement and reduced-motion states @motion', async ({ page }, testInfo) => {
   const sent: string[] = [];
   await page.routeWebSocket('**/ws', ws => {
     ws.onMessage(message => sent.push(String(message)));
-    ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: 'The box is ready. Press sky.' }));
+    sendReady(ws);
   });
   await page.goto('/');
   const sky = page.getByRole('button', { name: 'sky', exact: true });
@@ -73,7 +139,7 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
 
 test('every handset key has a visible Tab focus and a usable touch target', async ({ page }) => {
   await page.routeWebSocket('**/ws', ws => {
-    ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: '' }));
+    sendReady(ws);
   });
   await page.goto('/');
   const keys = page.locator('#handset button[data-raw]');
@@ -96,13 +162,14 @@ test('every handset key has a visible Tab focus and a usable touch target', asyn
   }
 });
 
-test('mobile handset stays within the viewport', async ({ page }) => {
+test('mobile handset stays within the viewport', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
   const widths = await page.evaluate(() => ({ viewport: innerWidth, page: document.documentElement.scrollWidth }));
   expect(widths.page).toBe(widths.viewport);
   await expect(page.locator('.remote')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('mobile-dark.png'), fullPage: true, animations: 'disabled' });
 });
 
 test('touch activates a handset key at mobile width', async ({ browser }) => {
@@ -111,7 +178,7 @@ test('touch activates a handset key at mobile width', async ({ browser }) => {
   const sent: string[] = [];
   await page.routeWebSocket('**/ws', ws => {
     ws.onMessage(message => sent.push(String(message)));
-    ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: '' }));
+    sendReady(ws);
   });
   await page.goto('http://127.0.0.1:8766/');
   const sky = page.getByRole('button', { name: 'sky', exact: true });

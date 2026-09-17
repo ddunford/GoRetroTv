@@ -24,6 +24,11 @@ let paletteEpoch = 0;
 let socket: WebSocket | null = null;
 let connected = false;
 let ready = false;
+let machineReady = false;
+let awaitingFullFrame = true;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempts = 0;
+let haltReason = '';
 
 function setKeysEnabled(enabled: boolean): void {
   for (const key of keys) key.disabled = !enabled;
@@ -33,6 +38,17 @@ function showStatus(state: string, message: string): void {
   document.body.dataset.state = state;
   statusLine.textContent = message;
   canvas.setAttribute('aria-label', `Sky Digibox screen. ${message}`);
+}
+
+function updateKeys(): void {
+  ready = connected && machineReady && !awaitingFullFrame;
+  setKeysEnabled(ready);
+}
+
+function reconnectDelay(): number {
+  const delay = Math.min(5000, 250 * 2 ** Math.min(reconnectAttempts, 5));
+  reconnectAttempts++;
+  return delay;
 }
 
 function paint(x: number, y: number, w: number, h: number): void {
@@ -54,6 +70,11 @@ function paint(x: number, y: number, w: number, h: number): void {
 function handleMessage(payload: string): void {
   const message = decodeServerMessage(payload);
   if (message.type === 'palette') {
+    if (message.epoch !== paletteEpoch) {
+      awaitingFullFrame = true;
+      updateKeys();
+      if (machineReady) keyFeedback.textContent = 'Waiting for the box to send its screen.';
+    }
     palette = new Uint8Array(message.rgb);
     paletteEpoch = message.epoch;
     return;
@@ -64,17 +85,26 @@ function handleMessage(payload: string): void {
         message.pixels.length !== message.w * message.h) {
       throw new Error('The box sent a frame that does not match its screen or palette');
     }
+    if (awaitingFullFrame && (message.x !== 0 || message.y !== 0 || message.w !== width || message.h !== height)) {
+      throw new Error('The box did not send a complete screen after connecting');
+    }
     for (let row = 0; row < message.h; row++) {
       framebuffer.set(message.pixels.subarray(row * message.w, (row + 1) * message.w),
         (message.y + row) * width + message.x);
     }
     paint(message.x, message.y, message.w, message.h);
+    if (awaitingFullFrame) {
+      awaitingFullFrame = false;
+      updateKeys();
+      if (ready) keyFeedback.textContent = 'The handset is ready.';
+    }
     return;
   }
   if (message.phase === 'halted') {
-    ready = false;
-    setKeysEnabled(false);
-    showStatus('halted', `The box stopped: ${message.reason || 'the firmware halted.'}`);
+    machineReady = false;
+    updateKeys();
+    haltReason = message.reason || 'the firmware halted';
+    showStatus('halted', `The box stopped: ${haltReason}.`);
     keyFeedback.textContent = 'The handset is unavailable while the box is stopped.';
     return;
   }
@@ -84,39 +114,60 @@ function handleMessage(payload: string): void {
     'channel-list': 'The box is rebuilding its channel list…',
     ready: 'The box is ready. Press sky on the handset.',
   };
-  ready = message.phase === 'ready';
-  setKeysEnabled(connected && ready);
+  haltReason = '';
+  machineReady = message.phase === 'ready';
+  updateKeys();
   showStatus(message.phase, message.reason || phaseText[message.phase] || 'The box is working…');
-  keyFeedback.textContent = ready ? 'The handset is ready.' : 'The handset will wake when the box is ready.';
+  keyFeedback.textContent = ready ? 'The handset is ready.' :
+    machineReady ? 'Waiting for the box to send its screen.' : 'The handset will wake when the box is ready.';
 }
 
 function connect(): void {
+  if (reconnectTimer !== null) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const next = new WebSocket(`${scheme}//${window.location.host}/ws`);
+  let openedAt = 0;
   socket = next;
-  showStatus('connecting', 'Connecting to the Digibox…');
-  setKeysEnabled(false);
+  connected = false;
+  machineReady = false;
+  awaitingFullFrame = true;
+  paletteEpoch = -1;
+  updateKeys();
+  showStatus('connecting', reconnectAttempts ? 'Reconnecting to the Digibox…' : 'Connecting to the Digibox…');
+  keyFeedback.textContent = 'The handset is unavailable while disconnected.';
   next.addEventListener('open', () => {
+    if (socket !== next) return;
     connected = true;
+    openedAt = Date.now();
     showStatus('booting', 'Connected. Waiting for the box to report its state…');
   });
   next.addEventListener('message', (event: MessageEvent<string>) => {
+    if (socket !== next) return;
     try {
       handleMessage(event.data);
     } catch (error) {
-      ready = false;
-      setKeysEnabled(false);
-      showStatus('halted', error instanceof Error ? error.message : 'The display data could not be read.');
+      machineReady = false;
+      updateKeys();
+      haltReason = error instanceof Error ? error.message : 'The display data could not be read';
+      showStatus('halted', `The box stopped: ${haltReason}.`);
       next.close();
     }
   });
   next.addEventListener('close', () => {
     if (socket !== next) return;
+    socket = null;
     connected = false;
-    ready = false;
-    setKeysEnabled(false);
-    if (document.body.dataset.state !== 'halted') showStatus('disconnected', 'The connection to the box was lost.');
+    machineReady = false;
+    updateKeys();
+    if (openedAt && Date.now() - openedAt >= 10_000) reconnectAttempts = 0;
+    const delay = reconnectDelay();
+    if (haltReason) showStatus('halted', `The box stopped: ${haltReason}. Reconnecting…`);
+    else showStatus('disconnected', `The connection to the box was lost. Reconnecting in ${Math.ceil(delay / 1000)} second${delay > 1000 ? 's' : ''}…`);
     keyFeedback.textContent = 'The handset is unavailable while disconnected.';
+    reconnectTimer = setTimeout(connect, delay);
   });
 }
 

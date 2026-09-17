@@ -76,3 +76,9 @@
   disconnected disabled state and reduced-motion duration. The browser suite passed
   seven cases, including its dedicated reduced-motion project; the focus-colour assertion
   failed under a deliberately wrong expected colour before restoration.
+- [x] **TC-5.10: The screen remains visible while using the handset on a phone** (covers: gort-4sx.19) — handset presses need visible firmware feedback at 320 px without covering focused keys.
+  **Result:** `tests/e2e/handset.spec.ts` tabs through every handset button at 320 × 700 and
+  asserts that the canvas remains in the viewport above the focused button. It taps Sky and Select
+  in a mobile touch context and checks the screen stays above Select. The screenshot of
+  the final key shows the screen and key together. Playwright passed 9/9; the public mobile view
+  is inspected after deployment.

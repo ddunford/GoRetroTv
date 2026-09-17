@@ -172,8 +172,31 @@ test('mobile handset stays within the viewport', async ({ page }, testInfo) => {
   await page.screenshot({ path: testInfo.outputPath('mobile-dark.png'), fullPage: true, animations: 'disabled' });
 });
 
+test('phone keeps the screen visible while handset keys receive focus', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.routeWebSocket('**/ws', ws => sendReady(ws));
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
+  const keys = page.locator('#handset button[data-raw]');
+  for (let index = 0; index < await keys.count(); index++) {
+    await page.keyboard.press('Tab');
+    await expect(keys.nth(index)).toBeFocused();
+    const positions = await page.evaluate(() => {
+      const television = document.querySelector('.television')!.getBoundingClientRect();
+      const screen = document.querySelector('#screen')!.getBoundingClientRect();
+      const key = document.activeElement!.getBoundingClientRect();
+      return { televisionTop: television.top, televisionBottom: television.bottom,
+        screenTop: screen.top, screenBottom: screen.bottom, keyTop: key.top, viewport: innerHeight };
+    });
+    expect(positions.screenTop).toBeGreaterThanOrEqual(0);
+    expect(positions.screenBottom).toBeLessThan(positions.viewport);
+    expect(positions.keyTop).toBeGreaterThanOrEqual(positions.televisionBottom);
+  }
+  await page.screenshot({ path: testInfo.outputPath('phone-screen-and-handset.png'), animations: 'disabled' });
+});
+
 test('touch activates a handset key at mobile width', async ({ browser }) => {
-  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
+  const context = await browser.newContext({ viewport: { width: 320, height: 700 }, hasTouch: true, isMobile: true });
   const page = await context.newPage();
   const sent: string[] = [];
   await page.routeWebSocket('**/ws', ws => {
@@ -186,5 +209,13 @@ test('touch activates a handset key at mobile width', async ({ browser }) => {
   await expect.poll(() => sent.length).toBe(1);
   expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', raw: 125, source: 0 });
   await expect(page.locator('#key-feedback')).toContainText('sky sent to the box');
+  await page.getByRole('button', { name: 'select', exact: true }).tap();
+  await expect.poll(() => sent.length).toBe(2);
+  const screen = await page.locator('#screen').boundingBox();
+  const select = await page.getByRole('button', { name: 'select', exact: true }).boundingBox();
+  expect(screen).not.toBeNull();
+  expect(select).not.toBeNull();
+  expect(screen!.y).toBeGreaterThanOrEqual(0);
+  expect(screen!.y + screen!.height).toBeLessThan(select!.y);
   await context.close();
 });

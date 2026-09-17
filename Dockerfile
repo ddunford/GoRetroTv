@@ -6,9 +6,9 @@
 FROM golang:1.27.1@sha256:b475798fb16158e6c38e8b5ca2d870fbeaa8b7fec0fc8ec64b3dc20966040635 AS builder
 WORKDIR /src
 
-# The module has no external dependencies, so there is nothing to pre-download; copying go.mod
-# first still keeps the module graph in its own cache layer.
-COPY go.mod ./
+# Keep the approved WebSocket dependency in its own cache layer and verify it
+# against the committed module checksums before compiling the binary.
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY cmd ./cmd

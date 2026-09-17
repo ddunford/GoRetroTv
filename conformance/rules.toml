@@ -148,20 +148,26 @@ halves = [
 
 [[rule]]
 id = "ARCH-MODULE-1"
-invariant = "The Go module graph contains only the project module until a dependency is deliberately approved"
-source = "docs/decisions/0001-scaffold.md § Dependencies"
+invariant = "The Go module declares only the approved WebSocket module and version"
+source = "docs/decisions/0001-scaffold.md § Phase 5 transport decision"
 classification = "STATIC"
 arming = "ARMED"
 state = "enforced"
 command = ["conformance/checkers/module_graph.py"]
-tooling = "go mod edit -json parses the module declaration without fetching packages; any nonempty require set changes the single-module graph and fails deterministically."
+tooling = "go mod edit -json parses the module declaration without fetching packages; only github.com/coder/websocket@v1.8.15 is approved, and replacements are forbidden."
 subjects = ["go.mod"]
 coverage_detector = "module-file-missing"
 probes = [
   { name = "dependency-added", detectors = ["external-module"] },
+  { name = "approved-module-removed", detectors = ["approved-module-missing"] },
+  { name = "version-changed", detectors = ["unapproved-version"] },
+  { name = "module-replaced", detectors = ["module-replaced"] },
   { name = "module-file-removed", detectors = ["module-file-missing"] },
 ]
 halves = [
   { half = "the module declaration exists", held_by = "probe", probe = "module-file-removed", detectors = ["module-file-missing"] },
-  { half = "the module declares no external requirements", held_by = "probe", probe = "dependency-added", detectors = ["external-module"] },
+  { half = "the approved WebSocket module is required", held_by = "probe", probe = "approved-module-removed", detectors = ["approved-module-missing"] },
+  { half = "the approved WebSocket version is pinned", held_by = "probe", probe = "version-changed", detectors = ["unapproved-version"] },
+  { half = "other modules are absent", held_by = "probe", probe = "dependency-added", detectors = ["external-module"] },
+  { half = "the approved module is not replaced", held_by = "probe", probe = "module-replaced", detectors = ["module-replaced"] },
 ]

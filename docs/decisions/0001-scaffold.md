@@ -1,4 +1,4 @@
-# ADR 0001: The scaffold — one module, no external dependencies
+# ADR 0001: The scaffold — one Go module, dependencies by decision
 
 **Status:** accepted
 **Date:** 2026-09-16
@@ -39,7 +39,7 @@ remote), with binaries under `cmd/` sharing `internal/`. The `cmd/` shape rather
 because the phase already names a second binary: `oraclecmp` (TASK-1.10) shares the checkpoint
 format with the emulator and must not re-declare it.
 
-**No external dependencies.** The standard library covers every recorded requirement:
+**No scaffold dependencies.** The standard library covers every foundation requirement:
 
 | Scaffold default | Replaced by | Why that is sufficient here |
 |---|---|---|
@@ -55,16 +55,29 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 ## Consequences
 
-- A clone builds with nothing but a Go toolchain: `go.sum` does not exist, `go mod download` has
-  nothing to fetch, and CI needs no module cache. Supply-chain surface for the emulator core is the
-  standard library alone.
-- `govulncheck` still matters — it reports standard-library vulnerabilities, which is now the only
-  category we can have. `./ctl.sh vuln` runs it.
+- The foundation built with nothing but a Go toolchain. The phase 5 transport decision below adds
+  one dependency; the emulator core still imports only the standard library.
+- `govulncheck` remains required for the standard library and the approved transport module.
+  `./ctl.sh vuln` runs it.
 - **This is a floor, not a vow.** A later phase that genuinely needs a dependency should take one:
   the WebSocket transport (phase 5) and ffmpeg bindings (Video) are the expected candidates. What
   this decision rules out is acquiring dependencies *by default*, before a requirement names them.
 - The host can run current Go through the module proxy. If routing requirements grow, `chi` is a
   choice on its own merits rather than a toolchain constraint.
+
+## Phase 5 transport decision (2026-09-17)
+
+The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
+Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt
+`github.com/coder/websocket@v1.8.15` for this boundary. Its [tagged module file](https://github.com/coder/websocket/blob/v1.8.15/go.mod)
+has no `require` directives; the package's [repository](https://github.com/coder/websocket)
+documents an actively maintained WebSocket implementation. This is the dependency anticipated in
+the original consequences above. The module is confined to the outward transport layer; no
+WebSocket code enters the emulator core.
+
+`ARCH-MODULE-1` accepts exactly this module at this version and rejects any other `require` or
+`replace` directive. A version change or new dependency needs another recorded decision and an
+updated conformance rule. Last web-verified: 2026-09.
 
 ## Alternatives rejected
 

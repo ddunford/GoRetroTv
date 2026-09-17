@@ -16,7 +16,7 @@ due to exist.
 | `ARCH-LAYER-1` | Core and device packages do not import outward transport packages | Application structure | STATIC | SELF-ARMING | **enforced** |
 | `ARCH-FW-1` | Firmware bytes are absent from git and built images | Deployment and access | IMAGE | ARMED | **enforced** |
 | `ARCH-PLATFORM-1` | The shared platform layer does not import domain packages | The shared / platform layer | STATIC | ARMED | **enforced** |
-| `ARCH-MODULE-1` | The Go module graph contains only the project module until a dependency is deliberately approved | Dependencies | STATIC | ARMED | **enforced** |
+| `ARCH-MODULE-1` | The Go module declares only the approved WebSocket module and version | Phase 5 transport decision | STATIC | ARMED | **enforced** |
 
 ## Rule definitions
 
@@ -59,9 +59,10 @@ packages. Importing one of them from `internal/platform` is the deliberate viola
 
 ### `ARCH-MODULE-1`
 
-The module graph currently contains only the project module. Adding a dependency without an
-explicit architecture decision is the deliberate violation. The conformance rule now owns the CI
-assertion and proves it rejects a new `require` directive.
+The phase 5 WebSocket transport requires exactly `github.com/coder/websocket@v1.8.15`, approved in
+ADR 0001. A different module or version, a replacement, or removal of that requirement violates
+the decision. The checker parses `go.mod` with Go's modfile editor; separate probes prove each
+rejection and the missing-file refusal.
 
 ## Decision ledger
 
@@ -85,7 +86,7 @@ work is named as future work.
 | Public TLS via Traefik | None yet, because deployment is a phase 5 deliverable; its production gate must exercise the served TLS route. A source string cannot prove a route is publicly reachable. |
 | Developer surfaces restricted to loopback | `ARCH-DEV-1` exercises the HTTP loader, GDB listener and Compose mapping. Future instrument listeners must use a validated path or extend this rule before exposure. |
 | Firmware stays outside source and images | `ARCH-FW-1` scans tracked source and the exported runtime image, with separate probes. |
-| Standard-library-only module floor from ADR 0001 | `ARCH-MODULE-1` checks the parsed module declaration. A needed dependency requires a deliberate decision and rule edit. |
+| Explicit dependency set from ADR 0001 | `ARCH-MODULE-1` checks the parsed module declaration against the approved WebSocket module and version. A new dependency or version requires a deliberate decision and rule edit. |
 | Go toolchain version in ADR 0001 | None as a conformance rule yet: the recorded host ceiling was disproved, and `gort-4sx.15` owns the version update and vulnerability recheck before public deployment. |
 
 ## Not mechanisable

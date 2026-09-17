@@ -116,6 +116,13 @@ imports; `internal/platform` may import nothing from `internal/device`, `interna
 - This is a **rejection, not an omission**: if the page later grows real UI (instrument panels,
   a debugger front-end), revisit it then.
 
+### WebSocket transport dependency
+- **Adopt `github.com/coder/websocket@v1.8.15`** at the outward browser transport boundary. Go's
+  standard library has the HTTP server but no WebSocket protocol implementation. The tagged module
+  has no transitive module requirements, so this adds one reviewed dependency while the emulator
+  core remains standard-library-only. ADR 0001 records the decision and `ARCH-MODULE-1` enforces
+  the exact path and version. Last web-verified: 2026-09.
+
 ### Observability
 - **Structured JSON logging** with an emulator-time field (`icount`) alongside wall time, because
   every question here is "what was the machine doing at instruction N".

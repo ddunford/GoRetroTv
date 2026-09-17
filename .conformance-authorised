@@ -70,3 +70,7 @@ digest: 40a0c89b1ea0e4ae53e32b69657a38affb65003833ea1f659144c9e2f3187560
   when: 2026-09-17T13:36:28Z
    why: Extend ARCH-DEV-1 to exercise the real GDB listener and prove its loopback guard fails under mutation
 
+digest: e7cc01ab912f3dc8c409805d34b05df590cdc11bff4a5392cc16c569a26dd1e3
+  when: 2026-09-17T14:13:13Z
+   why: Phase 5 requires a browser WebSocket transport; ADR 0001 explicitly anticipated a later dependency. Permit only coder/websocket v1.8.15, retain rejection probes for every extra module, wrong version and replacement, and preserve firmware-free runtime images.
+

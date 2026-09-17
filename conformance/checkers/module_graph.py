@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require an explicit decision before adding a Go module dependency."""
+"""Enforce the approved Go module and version without replacement."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from finding import EXIT_HARNESS, EXIT_OK, EXIT_VIOLATION, coverage, harness, vi
 RULE = "ARCH-MODULE-1"
 ROOT = Path(__file__).resolve().parents[2]
 SUBJECT = "go.mod"
+APPROVED_PATH = "github.com/coder/websocket"
+APPROVED_VERSION = "v1.8.15"
 
 
 def main() -> int:
@@ -30,6 +32,7 @@ def main() -> int:
     try:
         document = json.loads(result.stdout)
         requirements = document.get("Require", [])
+        replacements = document.get("Replace", [])
         module = document["Module"]["Path"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         print(harness(RULE, f"go.mod did not yield a module and requirements: {exc}"))
@@ -37,11 +40,29 @@ def main() -> int:
     if not module:
         print(harness(RULE, "go.mod has an empty module path"))
         return EXIT_HARNESS
-    if requirements:
-        for requirement in requirements:
-            print(violation(RULE, "external-module", f"go.mod requires {requirement['Path']}"))
-        return EXIT_VIOLATION
-    return EXIT_OK
+    failed = False
+    if replacements:
+        for replacement in replacements:
+            print(violation(RULE, "module-replaced", f"go.mod replaces {replacement['Old']['Path']}"))
+            failed = True
+
+    approved = [requirement for requirement in requirements
+                if requirement["Path"] == APPROVED_PATH]
+    if not approved:
+        print(violation(RULE, "approved-module-missing", f"go.mod does not require {APPROVED_PATH}"))
+        failed = True
+    for requirement in approved:
+        if requirement["Version"] != APPROVED_VERSION:
+            print(violation(RULE, "unapproved-version",
+                            f"go.mod requires {APPROVED_PATH}@{requirement['Version']}, "
+                            f"approved version is {APPROVED_VERSION}"))
+            failed = True
+    for requirement in requirements:
+        if requirement["Path"] != APPROVED_PATH:
+            print(violation(RULE, "external-module",
+                            f"go.mod requires {requirement['Path']}@{requirement['Version']}"))
+            failed = True
+    return EXIT_VIOLATION if failed else EXIT_OK
 
 
 if __name__ == "__main__":

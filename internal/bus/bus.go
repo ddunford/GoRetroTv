@@ -134,7 +134,21 @@ type Bus struct {
 	// machine that never existed. Reset clears it: a reset genuinely does return the machine to
 	// a state that is known.
 	unknownState error
+	observer     func(ObservedAccess)
 }
+
+// ObservedAccess is one guest bus operation. An observer is diagnostic state and
+// is never included in a machine snapshot.
+type ObservedAccess struct {
+	Virtual uint32
+	Size    Size
+	Value   uint32
+	Write   bool
+}
+
+// SetObserver installs a synchronous access observer. Pass nil to remove it.
+// Callers must keep observation on the instruction thread; Bus is not concurrent.
+func (b *Bus) SetObserver(observer func(ObservedAccess)) { b.observer = observer }
 
 // New returns a bus with nothing attached.
 func New() *Bus {
@@ -209,15 +223,18 @@ func (b *Bus) Read(virt uint32, size Size) uint32 {
 		panic(fmt.Sprintf("bus: read at %s with invalid size %d", hexfmt.Addr(virt), size))
 	}
 	phys, ok := Physical(virt)
+	var value uint32
 	if !ok {
 		b.note(virt, 0, NoSegment, true)
-		return 0
+	} else if r := b.find(phys); r != nil {
+		value = r.dev.Read(phys-r.base, size)
+	} else {
+		b.note(virt, phys, NoDevice, true)
 	}
-	if r := b.find(phys); r != nil {
-		return r.dev.Read(phys-r.base, size)
+	if b.observer != nil {
+		b.observer(ObservedAccess{Virtual: virt, Size: size, Value: value})
 	}
-	b.note(virt, phys, NoDevice, true)
-	return 0
+	return value
 }
 
 // Write decodes virt and hands the value to the device there. A write with no device behind it is
@@ -229,13 +246,14 @@ func (b *Bus) Write(virt uint32, size Size, value uint32) {
 	phys, ok := Physical(virt)
 	if !ok {
 		b.note(virt, 0, NoSegment, false)
-		return
-	}
-	if r := b.find(phys); r != nil {
+	} else if r := b.find(phys); r != nil {
 		r.dev.Write(phys-r.base, size, value)
-		return
+	} else {
+		b.note(virt, phys, NoDevice, false)
 	}
-	b.note(virt, phys, NoDevice, false)
+	if b.observer != nil {
+		b.observer(ObservedAccess{Virtual: virt, Size: size, Value: value, Write: true})
+	}
 }
 
 // find returns the region containing phys, or nil.

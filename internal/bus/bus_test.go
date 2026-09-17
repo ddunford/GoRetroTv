@@ -96,6 +96,28 @@ func attach(t *testing.T, b *bus.Bus, base, size uint32, d bus.Device) {
 	}
 }
 
+func TestObserverSeesGuestAccessWithoutChangingReadback(t *testing.T) {
+	b := bus.New()
+	p := newProbe("observed")
+	attach(t, b, dramKseg0, 32, p)
+	var accesses []bus.ObservedAccess
+	b.SetObserver(func(access bus.ObservedAccess) { accesses = append(accesses, access) })
+	b.Write(dramKseg1+4, bus.Word, 0x12345678)
+	if got := b.Read(dramKseg0+4, bus.Word); got != 0x12345678 {
+		t.Fatalf("observer changed device readback: %#x", got)
+	}
+	if len(accesses) != 2 || !accesses[0].Write || accesses[0].Virtual != dramKseg1+4 ||
+		accesses[0].Value != 0x12345678 || accesses[1].Write ||
+		accesses[1].Virtual != dramKseg0+4 || accesses[1].Value != 0x12345678 {
+		t.Fatalf("wrong observed accesses: %+v", accesses)
+	}
+	b.SetObserver(nil)
+	b.Read(dramKseg0+4, bus.Word)
+	if len(accesses) != 2 {
+		t.Fatalf("observer kept reporting after removal: %+v", accesses)
+	}
+}
+
 // The device contract, proven against the bus's own test device so that a change to the interface
 // cannot pass here while failing everywhere else.
 func TestProbeHoldsTheDeviceContract(t *testing.T) {

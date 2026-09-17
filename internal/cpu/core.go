@@ -38,6 +38,17 @@ type branch struct {
 // New starts execution at pc on the supplied bus.
 func New(b *bus.Bus, pc uint32) *Core { return &Core{PC: pc, bus: b} }
 
+// SetDebugPC changes the address and ISA selected by a debugger. A new PC
+// abandons any pending branch delay slot, which belonged to the old flow.
+func (c *Core) SetDebugPC(pc uint32, isa bool) error {
+	if isa && pc&1 != 0 || !isa && pc&3 != 0 {
+		return fmt.Errorf("cpu: unaligned debugger PC %s", hexfmt.Addr(pc))
+	}
+	c.PC, c.ISA = pc, isa
+	c.delayed = branch{}
+	return nil
+}
+
 // HasPendingBranch reports the interval in which a checkpoint or interrupt would see an
 // incomplete machine: the branch has retired, but its delay slot has not.
 func (c *Core) HasPendingBranch() bool { return c.delayed.armed }

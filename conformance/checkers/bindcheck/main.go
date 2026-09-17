@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/ddunford/goretrotv/internal/config"
+	"github.com/ddunford/goretrotv/internal/gdbstub"
 )
 
 func main() {
@@ -38,6 +39,23 @@ func main() {
 			_ = os.Setenv("GORETROTV_BIND_ALL_INTERFACES", "true")
 		}
 		_, err := config.Load()
+		results = append(results, result{Name: tc.name, Allowed: err == nil})
+	}
+	for _, tc := range []struct {
+		name, addr string
+	}{
+		{"gdb-loopback", "127.0.0.1:0"},
+		{"gdb-localhost", "localhost:0"},
+		{"gdb-empty-host", ":0"},
+		{"gdb-ipv4-any", "0.0.0.0:0"},
+	} {
+		listener, err := gdbstub.Listen(tc.addr)
+		if err == nil {
+			if closeErr := listener.Close(); closeErr != nil {
+				_, _ = os.Stderr.WriteString(closeErr.Error())
+				os.Exit(2)
+			}
+		}
 		results = append(results, result{Name: tc.name, Allowed: err == nil})
 	}
 	if err := json.NewEncoder(os.Stdout).Encode(results); err != nil {

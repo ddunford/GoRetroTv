@@ -66,3 +66,7 @@ digest: 9c3db11c9bffa31b6b002cc552c0f8733a007d9be24203a1b21b9ba6c2ff908c
   when: 2026-09-17T13:21:10Z
    why: Add the real-firmware input replay gate as a ctl.sh quality command; no architecture rule behavior changed.
 
+digest: 40a0c89b1ea0e4ae53e32b69657a38affb65003833ea1f659144c9e2f3187560
+  when: 2026-09-17T13:36:28Z
+   why: Extend ARCH-DEV-1 to exercise the real GDB listener and prove its loopback guard fails under mutation
+

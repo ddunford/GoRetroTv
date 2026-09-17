@@ -49,6 +49,32 @@ func TestBranchDelaySlotForms(t *testing.T) {
 	}
 }
 
+func TestDebuggerPCChangeAbandonsPendingBranch(t *testing.T) {
+	t.Parallel()
+	c, _ := machine(t, ri(4, 0, 0, 2), 0, ri(9, 4, 4, 7), 0)
+	if err := c.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if !c.HasPendingBranch() {
+		t.Fatal("fixture did not arm branch delay slot")
+	}
+	if err := c.SetDebugPC(codeBase+8, false); err != nil {
+		t.Fatal(err)
+	}
+	if c.HasPendingBranch() {
+		t.Fatal("debugger PC change retained prior branch")
+	}
+	if err := c.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if c.PC != codeBase+12 || c.GPR[4] != 7 {
+		t.Fatalf("debugger resumed old branch flow: PC=%#x value=%d", c.PC, c.GPR[4])
+	}
+	if err := c.SetDebugPC(codeBase+9, false); err == nil {
+		t.Fatal("accepted unaligned MIPS32 debugger PC")
+	}
+}
+
 func TestPendingBranchIsVisibleToCheckpointDriver(t *testing.T) {
 	t.Parallel()
 	c, _ := machine(t, ri(4, 0, 0, 2), 0, 0, 0)

@@ -48,7 +48,17 @@
   with an altered expected framebuffer digest fails replay; the decoder also
   rejects malformed input events and trailing JSON. Evidence:
   `.artifacts/sky-key-record.log` and `.artifacts/sky-key-replay-{a,b}.log`.
-- [ ] **TC-4.5: gdb attaches and breaks** (covers: TASK-4.5, TASK-4.7) — break on a firmware address, read
+- [x] **TC-4.5: gdb attaches and breaks** (covers: TASK-4.5, TASK-4.7) — break on a firmware address, read
   registers, step, continue. And it must **refuse a non-localhost bind**.
+  **Result:** `gdb-multiarch` attached to the real post-acquisition machine on
+  `127.0.0.1:23458`, read PC `0x800D35E0`, SP `0x80128E7C` and guest memory,
+  continued to a breakpoint at `0x800D35E4`, single stepped to `0x800D35E8`,
+  and detached after two retired guest instructions. A real runner invocation
+  rejected `-gdb-addr 0.0.0.0:23457`. A second real GDB session stopped on a
+  read watchpoint at guest address `0x801072D8`. `internal/gdbstub` tests cover packet
+  framing, MIPS register order, memory access, breakpoint resume, watchpoint
+  overlap/removal and Ctrl-C. Evidence: `.artifacts/gdb-real-client.log`,
+  `.artifacts/gdb-watch-client.log` and
+  `docs/debugger.md`.
 - [ ] **TC-4.6: An instrument refuses to report on a wrong state** (covers: TASK-4.6, TASK-4.7) — a census
   whose subject is absent reports a harness failure, not zero.

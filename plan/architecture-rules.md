@@ -26,8 +26,9 @@ The public demo must not expose developer endpoints. The current HTTP server can
 loader refuses a non-loopback address unless the container-only override is explicit, and Compose
 must publish that container port on host loopback. Removing the refusal, setting the override
 outside Compose, making it interpolated, or publishing the port publicly are separate violations.
-The planned gdb and instrument surfaces must use this validated bind path or extend this rule when
-they are built.
+The GDB listener is exercised directly: loopback binds succeed and empty or all-interface binds
+are refused. A separate probe weakens that guard and must make the rule fail. Any future
+instrument surface must use a validated bind path or extend this rule when it is built.
 
 ### `ARCH-SNAP-1`
 
@@ -82,7 +83,7 @@ work is named as future work.
 | Structured JSON logs with `icount` | None as a conformance rule, because `internal/logging/logging_test.go` already exercises emitted JSON records and their instruction counts. Whether events are diagnostically useful is an operator judgement. |
 | No Sentry | None, because this is an observability scope decision; the boot and oracle gates are the chosen error-detection mechanism. |
 | Public TLS via Traefik | None yet, because deployment is a phase 5 deliverable; its production gate must exercise the served TLS route. A source string cannot prove a route is publicly reachable. |
-| Developer surfaces restricted to loopback | `ARCH-DEV-1` exercises the current loader and Compose mapping. A future gdb listener must use the validated path or extend this rule before it is exposed. |
+| Developer surfaces restricted to loopback | `ARCH-DEV-1` exercises the HTTP loader, GDB listener and Compose mapping. Future instrument listeners must use a validated path or extend this rule before exposure. |
 | Firmware stays outside source and images | `ARCH-FW-1` scans tracked source and the exported runtime image, with separate probes. |
 | Standard-library-only module floor from ADR 0001 | `ARCH-MODULE-1` checks the parsed module declaration. A needed dependency requires a deliberate decision and rule edit. |
 | Go toolchain version in ADR 0001 | None as a conformance rule yet: the recorded host ceiling was disproved, and `gort-4sx.15` owns the version update and vulnerability recheck before public deployment. |

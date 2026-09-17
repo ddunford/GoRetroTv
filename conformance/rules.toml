@@ -16,8 +16,8 @@ classification = "STATIC"
 arming = "ARMED"
 state = "enforced"
 command = ["conformance/checkers/developer_bind.py"]
-tooling = "Runs the real Go config loader for loopback, public and container scenarios, and asks Docker Compose for its effective port mapping using the committed example env."
-subjects = ["internal/config/config.go", "docker-compose.yml", ".env.example", "conformance/checkers/bindcheck/main.go"]
+tooling = "Runs the real Go config loader and GDB listener for loopback and non-loopback scenarios, and asks Docker Compose for its effective port mapping using the committed example env."
+subjects = ["internal/config/config.go", "internal/gdbstub/server.go", "docker-compose.yml", ".env.example", "conformance/checkers/bindcheck/main.go"]
 coverage_detector = "bind-subject-missing"
 probes = [
   { name = "guard-removed", detectors = ["non-loopback-accepted"] },
@@ -25,10 +25,14 @@ probes = [
   { name = "override-interpolated", detectors = ["container-override-not-literal"] },
   { name = "public-port", detectors = ["container-port-public"] },
   { name = "config-removed", detectors = ["bind-subject-missing"] },
+  { name = "gdb-guard-removed", detectors = ["gdb-non-loopback-accepted"] },
+  { name = "gdb-subject-removed", detectors = ["bind-subject-missing"] },
 ]
 halves = [
   { half = "the binding loader and compose subjects exist", held_by = "probe", probe = "config-removed", detectors = ["bind-subject-missing"] },
   { half = "a public bind without explicit container override is refused", held_by = "probe", probe = "guard-removed", detectors = ["non-loopback-accepted"] },
+  { half = "the GDB listener source remains available to the bind checker", held_by = "probe", probe = "gdb-subject-removed", detectors = ["bind-subject-missing"] },
+  { half = "the GDB listener refuses empty and non-loopback bind hosts", held_by = "probe", probe = "gdb-guard-removed", detectors = ["gdb-non-loopback-accepted"] },
   { half = "only the compose service sets the override", held_by = "probe", probe = "override-elsewhere", detectors = ["bind-override-elsewhere"] },
   { half = "compose sets the override as a literal", held_by = "probe", probe = "override-interpolated", detectors = ["container-override-not-literal"] },
   { half = "the container is published on host loopback", held_by = "probe", probe = "public-port", detectors = ["container-port-public"] },

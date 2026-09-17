@@ -12,8 +12,8 @@ from finding import EXIT_HARNESS, EXIT_OK, EXIT_VIOLATION, coverage, harness, vi
 
 ROOT = Path(__file__).resolve().parents[2]
 RULE = "ARCH-DEV-1"
-SUBJECTS = ("internal/config/config.go", "docker-compose.yml", ".env.example",
-            "conformance/checkers/bindcheck/main.go")
+SUBJECTS = ("internal/config/config.go", "internal/gdbstub/server.go", "docker-compose.yml",
+            ".env.example", "conformance/checkers/bindcheck/main.go")
 SETTING = re.compile(r"^\s*(?:-\s*)?(?:export\s+)?GORETROTV_BIND_ALL_INTERFACES\s*[:=]", re.MULTILINE)
 
 
@@ -59,12 +59,22 @@ def main() -> int:
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         print(harness(RULE, f"bindcheck emitted malformed results: {exc}"))
         return EXIT_HARNESS
+    config_actual = {name: allowed for name, allowed in actual.items()
+                     if not name.startswith("gdb-")}
     expected = {"loopback": True, "ipv6-loopback": True, "empty-host": False,
                 "ipv4-any": False, "ipv6-any": False, "public-ip": False,
                 "container-override": True}
-    if actual != expected:
+    if config_actual != expected:
         findings.append(violation(RULE, "non-loopback-accepted",
-                                  f"config.Load bind outcomes {actual}, expected {expected}"))
+                                  f"config.Load bind outcomes {config_actual}, expected {expected}"))
+    gdb_actual = {name: allowed for name, allowed in actual.items()
+                  if name.startswith("gdb-")}
+    gdb_expected = {"gdb-loopback": True, "gdb-localhost": True,
+                    "gdb-empty-host": False, "gdb-ipv4-any": False}
+    if gdb_actual != gdb_expected:
+        findings.append(violation(RULE, "gdb-non-loopback-accepted",
+                                  f"gdbstub.Listen bind outcomes {gdb_actual}, expected "
+                                  f"{gdb_expected}"))
 
     compose = command("docker", "compose", "--env-file", ".env.example", "config", "--format", "json")
     if compose.returncode:

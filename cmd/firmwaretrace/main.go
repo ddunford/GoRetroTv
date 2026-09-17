@@ -25,6 +25,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/osd"
 	"github.com/ddunford/goretrotv/internal/device/smartcard"
 	"github.com/ddunford/goretrotv/internal/firmware"
+	"github.com/ddunford/goretrotv/internal/gdbstub"
 	"github.com/ddunford/goretrotv/internal/machine"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/clock"
@@ -75,11 +76,15 @@ func run() error {
 	snapshotOut := flag.String("snapshot-out", "", "write a complete machine snapshot after the run")
 	recordOut := flag.String("record-out", "", "record timed host inputs and final framebuffer digest")
 	replayIn := flag.String("replay-in", "", "replay and verify a prior input recording")
+	gdbAddr := flag.String("gdb-addr", "", "serve one GDB session on an explicit loopback TCP address")
 	stateHash := flag.Bool("state-hash", false, "print the exact final CPU and DRAM state hash")
 	flag.Var(&hits, "pc-hit", "count guest executions of this PC (repeatable, hex or decimal)")
 	flag.Parse()
 	if *recordOut != "" && *replayIn != "" {
 		return fmt.Errorf("record-out and replay-in are mutually exclusive")
+	}
+	if *gdbAddr != "" && (*recordOut != "" || *replayIn != "" || *key >= 0 || *sectionHex != "" || len(sections) != 0) {
+		return fmt.Errorf("gdb-addr cannot be combined with scheduled host inputs or recording")
 	}
 	if *recordOut != "" || *replayIn != "" {
 		if *ackAll || *ackCode >= 0 || *nvram != "" {
@@ -335,6 +340,76 @@ func run() error {
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
+	advance := func(i uint64, observe func(bus.ObservedAccess)) error {
+		instruction = i
+		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
+		// Go executes them as two Steps, so the delay slot does not advance this phase.
+		if !core.HasPendingBranch() || core.ISA {
+			if err := pumpBoard(); err != nil {
+				return err
+			}
+		}
+		if *trace && i >= *traceFrom && i < *traceTo {
+			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
+		}
+		hits.Observe(core.PC)
+		if err := core.ObserveCheckpoint(emitter, i); err != nil {
+			return err
+		}
+		if *skyGates && (!core.HasPendingBranch() || core.ISA) {
+			applied, err := skyMenu.Tick(i, handoff.Done(), func() (int, error) {
+				offsets, err := createdTaskOffsets(ram)
+				return len(offsets), err
+			}, busMap, flash0)
+			if err != nil {
+				return fmt.Errorf("after %d instructions: %w", i, err)
+			}
+			if applied {
+				fmt.Fprintf(os.Stderr, "declared Sky menu gates applied after %d guest instructions\n", i)
+			}
+		}
+		if observe != nil {
+			busMap.SetObserver(observe)
+		}
+		interruptBoundary := pumpBoard
+		if observe != nil {
+			interruptBoundary = func() error {
+				busMap.SetObserver(nil)
+				err := pumpBoard()
+				busMap.SetObserver(observe)
+				return err
+			}
+		}
+		stepErr := core.StepWithInterruptBoundary(interruptBoundary)
+		if observe != nil {
+			busMap.SetObserver(nil)
+		}
+		if err := stepErr; err != nil {
+			return fmt.Errorf("after %d instructions: %w", i, err)
+		}
+		retired = i + 1
+		emulated.Retired = retired
+		if err := dmaController.Fault(); err != nil {
+			return fmt.Errorf("after %d instructions: %w", i, err)
+		}
+		if err := master.Fault(); err != nil {
+			return fmt.Errorf("after %d instructions: %w", i, err)
+		}
+		return nil
+	}
+	if *gdbAddr != "" {
+		listener, err := gdbstub.Listen(*gdbAddr)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = listener.Close() }()
+		fmt.Fprintf(os.Stderr, "GDB listening on %s; retired=%d PC=%08X\n", listener.Addr(), retired, core.PC)
+		backend := &firmwareDebugBackend{core: core, bus: busMap, retired: &retired, advance: advance}
+		if err := gdbstub.New(backend).ServeListener(listener); err != nil {
+			return err
+		}
+		*steps = retired
+	}
 	for i := retired; i < *steps; i++ {
 		instruction = i
 		if *scheduler {
@@ -389,52 +464,16 @@ func run() error {
 			fmt.Fprintf(os.Stderr, "section-inject icount=%d pid=%04X bytes=%d\n", i, section.pid, len(section.bytes))
 			nextSection++
 		}
-		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
-		// Go executes them as two Steps, so the delay slot does not advance this phase.
-		if !core.HasPendingBranch() || core.ISA {
-			if err := pumpBoard(); err != nil {
-				return err
-			}
-		}
-		if *trace && i >= *traceFrom && i < *traceTo {
-			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
-		}
-		hits.Observe(core.PC)
-		if err := core.ObserveCheckpoint(emitter, i); err != nil {
-			return err
-		}
-		if *skyGates && (!core.HasPendingBranch() || core.ISA) {
-			applied, err := skyMenu.Tick(i, handoff.Done(), func() (int, error) {
-				offsets, err := createdTaskOffsets(ram)
-				return len(offsets), err
-			}, busMap, flash0)
-			if err != nil {
-				return fmt.Errorf("after %d instructions: %w", i, err)
-			}
-			if applied {
-				fmt.Fprintf(os.Stderr, "declared Sky menu gates applied after %d guest instructions\n", i)
-			}
-		}
-		if err := core.StepWithInterruptBoundary(pumpBoard); err != nil {
-			halt = fmt.Errorf("after %d instructions: %w", i, err)
+		if err := advance(i, nil); err != nil {
+			halt = err
 			break
 		}
-		retired = i + 1
-		emulated.Retired = retired
 		if *watchWord != 0 {
 			value := busMap.Read(uint32(*watchWord), bus.Word) // #nosec G115 -- checked above.
 			if value != previousWord {
 				fmt.Fprintf(os.Stderr, "watch %d PC=%08X address=%08X before=%08X after=%08X\n", i+1, core.PC, uint32(*watchWord), previousWord, value) // #nosec G115 -- checked above.
 				previousWord = value
 			}
-		}
-		if err := dmaController.Fault(); err != nil {
-			halt = fmt.Errorf("after %d instructions: %w", i, err)
-			break
-		}
-		if err := master.Fault(); err != nil {
-			halt = fmt.Errorf("after %d instructions: %w", i, err)
-			break
 		}
 		// #nosec G115 -- stopPC was checked against the 32-bit address space.
 		if *stopPC != 0 && core.PC == uint32(*stopPC) {

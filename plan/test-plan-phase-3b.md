@@ -11,8 +11,12 @@
   **Result:** `internal/device/blitter/blitter_test.go` verifies 8-bit fills, packed-source copy
   with a source stride of the blit width rather than destination pitch, 16-bit cell fill, planar
   chroma copy and snapshot restore. A bit-23 mutant fails the copy assertion.
-- [ ] **TC-3b.3: A DMA transfer completes and acknowledges** (covers: TASK-3b.3, TASK-3b.7) — and `+0x010` reads
+- [x] **TC-3b.3: A DMA transfer completes and acknowledges** (covers: TASK-3b.3, TASK-3b.7) — and `+0x010` reads
   back, without which the LISR's read-modify-write corrupts the enable set.
+  **Result:** `internal/device/dma/controller_test.go` drives descriptor channel 12 through the
+  blitter and row-two IP2, checks halfword completion, enable readback and write-one-to-clear
+  acknowledgement; channel 8 uploads a plane and bootloader channel 5 completes without IP2.
+  A zero-readback mutant fails the test.
 - [ ] **TC-3b.4: Window 0 is refused safely** (covers: TASK-3b.4, TASK-3b.7) — driving window 0 while the gate
   reads 0 must not wedge the machine.
 - [ ] **TC-3b.5: Bit depths render** (covers: TASK-3b.5, TASK-3b.7) — 2, 4 and 8 bpp against known pixels.

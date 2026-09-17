@@ -94,6 +94,14 @@ func (v *Video) Write(off uint32, size bus.Size, value uint32) {
 	}
 }
 
+// Upload copies a DMA plane into the decoder's video RAM, wrapping at one megabyte.
+// DMA channel 8 supplies the destination address through the measured +0xD0 register.
+func (v *Video) Upload(at uint32, plane []byte) {
+	for i, value := range plane {
+		v.data[(at+uint32(i))&(VRAMSize-1)] = value // #nosec G115 -- DMA bounds each transfer to board DRAM
+	}
+}
+
 // Reset clears video RAM and every register the port owns.
 func (v *Video) Reset() { *v = Video{} }
 

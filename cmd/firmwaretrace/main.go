@@ -11,6 +11,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/cpu"
 	"github.com/ddunford/goretrotv/internal/device/blitter"
 	"github.com/ddunford/goretrotv/internal/device/demux"
+	"github.com/ddunford/goretrotv/internal/device/dma"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/device/osd"
 	"github.com/ddunford/goretrotv/internal/firmware"
@@ -77,13 +78,19 @@ func run() error {
 	if err := busMap.Attach(demux.MMIOBase, demux.MMIOSize, sectionDemux); err != nil {
 		return err
 	}
-	if err := busMap.Attach(osd.VideoBase, osd.WindowSize, osd.NewVideo()); err != nil {
+	video := osd.NewVideo()
+	if err := busMap.Attach(osd.VideoBase, osd.WindowSize, video); err != nil {
 		return err
 	}
 	if err := busMap.Attach(osd.DisplayBase, osd.WindowSize, osd.NewDisplay()); err != nil {
 		return err
 	}
-	if err := busMap.Attach(blitter.Base, blitter.Size, blitter.New(ram)); err != nil {
+	graphics := blitter.New(ram)
+	if err := busMap.Attach(blitter.Base, blitter.Size, graphics); err != nil {
+		return err
+	}
+	dmaController := dma.New(ram, graphics, video, interrupts)
+	if err := busMap.Attach(dma.Base, dma.Size, dmaController); err != nil {
 		return err
 	}
 	hasher, err := statehash.New(ram)
@@ -103,6 +110,10 @@ func run() error {
 			return err
 		}
 		if err := core.Step(); err != nil {
+			halt = fmt.Errorf("after %d instructions: %w", i, err)
+			break
+		}
+		if err := dmaController.Fault(); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
 			break
 		}

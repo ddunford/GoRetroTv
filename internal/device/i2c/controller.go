@@ -10,8 +10,8 @@ import (
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
 )
 
-// Controller implements the byte-at-a-time I²C master. Attached slaves own
-// their contents; this device owns only the transaction in progress.
+// Controller implements the byte-at-a-time I²C master. Its EEPROM and
+// demodulator are child devices; their state travels with this snapshot.
 type Controller struct {
 	control, status, clock, data, enable uint32
 	startArmed, active, dirty            bool
@@ -188,9 +188,9 @@ func (c *Controller) Reset() {
 	}
 }
 
-// Snapshot captures every byte of the transfer currently in progress.
+// Snapshot captures the transfer and the complete state of both bound slaves.
 func (c *Controller) Snapshot() ([]byte, error) {
-	w := snapcodec.NewWriter(c.Name(), 1)
+	w := snapcodec.NewWriter(c.Name(), 2)
 	w.Words([]uint32{c.control, c.status, c.clock, c.data, c.enable})
 	w.Bool(c.startArmed)
 	w.Bool(c.active)
@@ -199,26 +199,82 @@ func (c *Controller) Snapshot() ([]byte, error) {
 	w.Uint16(c.pointer)
 	w.Uint8(c.addressBytes)
 	w.String(c.fault)
+	w.Bool(c.store != nil)
+	if c.store != nil {
+		state, err := c.store.Snapshot()
+		if err != nil {
+			return nil, fmt.Errorf("i2c: snapshot EEPROM: %w", err)
+		}
+		w.Bytes(state)
+	}
+	w.Bool(c.demod != nil)
+	if c.demod != nil {
+		state, err := c.demod.Snapshot()
+		if err != nil {
+			return nil, fmt.Errorf("i2c: snapshot demod: %w", err)
+		}
+		w.Bytes(state)
+	}
 	return w.Blob()
 }
 
-// Restore validates complete volatile state before replacing it.
+// Restore validates the entire controller and child state before replacing it.
 func (c *Controller) Restore(blob []byte) error {
 	r, err := snapcodec.Open(blob)
 	if err != nil {
 		return fmt.Errorf("i2c: restore: %w", err)
 	}
-	if err := r.Expect(c.Name(), 1, 1); err != nil {
+	if err := r.Expect(c.Name(), 1, 2); err != nil {
 		return fmt.Errorf("i2c: restore: %w", err)
 	}
 	regs := r.Words()
 	armed, active, dirty := r.Bool(), r.Bool(), r.Bool()
 	slave, pointer, addressBytes, fault := r.Uint8(), r.Uint16(), r.Uint8(), r.String()
+	var storeState, demodState []byte
+	var hasStore, hasDemod bool
+	if r.Version() >= 2 {
+		hasStore = r.Bool()
+		if hasStore {
+			storeState = r.Bytes()
+		}
+		hasDemod = r.Bool()
+		if hasDemod {
+			demodState = r.Bytes()
+		}
+	}
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("i2c: restore: %w", err)
 	}
 	if len(regs) != 5 || addressBytes > 2 || pointer >= eeprom.Capacity || len(fault) > 256 {
 		return fmt.Errorf("i2c: restore: invalid state")
+	}
+	if r.Version() == 1 && (c.store != nil || c.demod != nil) {
+		return fmt.Errorf("i2c: restore: v1 snapshot omits bound EEPROM and demod state")
+	}
+	if r.Version() >= 2 && (hasStore != (c.store != nil) || hasDemod != (c.demod != nil)) {
+		return fmt.Errorf("i2c: restore: slave bindings do not match snapshot")
+	}
+	// Validate both child blobs against temporary devices before mutating either
+	// child or the controller. This makes a corrupt second blob atomic too.
+	if c.store != nil {
+		if err := eeprom.New().Restore(storeState); err != nil {
+			return fmt.Errorf("i2c: restore EEPROM: %w", err)
+		}
+	}
+	if c.demod != nil {
+		if err := demod.New().Restore(demodState); err != nil {
+			return fmt.Errorf("i2c: restore demod: %w", err)
+		}
+	}
+	if c.store != nil {
+		if err := c.store.Restore(storeState); err != nil {
+			return fmt.Errorf("i2c: restore EEPROM: %w", err)
+		}
+	}
+	if c.demod != nil {
+		if err := c.demod.Restore(demodState); err != nil {
+			return fmt.Errorf("i2c: restore demod: %w", err)
+		}
 	}
 	c.control, c.status, c.clock, c.data, c.enable = regs[0], regs[1], regs[2], regs[3], regs[4]
 	c.startArmed, c.active, c.dirty, c.slave, c.pointer, c.addressBytes, c.fault = armed, active, dirty, slave, pointer, addressBytes, fault

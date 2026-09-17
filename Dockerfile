@@ -2,7 +2,8 @@
 # not ours (firmware/MANIFEST.md), so a running container is given them as a mounted volume and a
 # published image stays inert without them.
 
-FROM golang:1.27.1 AS builder
+# Linux/amd64 image manifest, resolved from the official Docker Hub registry.
+FROM golang:1.27.1@sha256:b475798fb16158e6c38e8b5ca2d870fbeaa8b7fec0fc8ec64b3dc20966040635 AS builder
 WORKDIR /src
 
 # The module has no external dependencies, so there is nothing to pre-download; copying go.mod
@@ -27,7 +28,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
       -X github.com/ddunford/goretrotv/internal/version.Date=${BUILD_DATE}" \
     -o /out/ ./cmd/...
 
-FROM gcr.io/distroless/static-debian12:nonroot AS runtime
+# Linux/amd64 image manifest from the distroless registry. Debian 13 is the supported runtime line.
+FROM gcr.io/distroless/static-debian13:nonroot@sha256:2293b36c7c9082bf4115aab724b4d2cddec82c8eba39bf27ac0517e159acf150 AS runtime
 COPY --from=builder /out/goretrotv /goretrotv
 # oraclecmp travels with the emulator rather than being a separate developer-only build, because
 # it answers a question about THIS binary: whether the checkpoint stream this build produced

@@ -54,3 +54,7 @@ digest: 008ef911bffde77c6ac4f322a07969ca4c99e04e40443908e4f1016dbf1a2ce6
   when: 2026-09-17T12:25:44Z
    why: Upgrade Go toolchain and keep conformance and security gates working
 
+digest: 043e4d54548f284a163d9fecec7ffab152db8a05d8b8ee0c2ebe8817ddb13ff1
+  when: 2026-09-17T12:37:01Z
+   why: Pin immutable supported builder and runtime images
+

@@ -1,0 +1,52 @@
+package hwtimer
+
+import (
+	"testing"
+
+	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/irq"
+)
+
+func TestTimerHoldsTheDeviceContract(t *testing.T) {
+	interrupts := irq.New(nil)
+	interrupts.Write(0x40, bus.Word, IRQMask)
+	timer := New(interrupts)
+	var device bus.Device = timer
+	if device.Name() == "" {
+		t.Fatal("timer has no snapshot identity")
+	}
+	device.Write(0x00, bus.Word, 1)
+	timer.Pump(PeriodInstructions - 1)
+	if got := interrupts.Read(0x30, bus.Word); got != 0 {
+		t.Fatalf("early interrupt: %#x", got)
+	}
+	timer.Pump(PeriodInstructions)
+	if got := device.Read(0xD0, bus.Word); got != 1 {
+		t.Fatalf("timer status: %#x", got)
+	}
+	if got := interrupts.Read(0x30, bus.Word); got != IRQMask {
+		t.Fatalf("board interrupt: %#x", got)
+	}
+	blob, err := device.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	device.Write(0xE0, bus.Word, 1)
+	if got := interrupts.Read(0x30, bus.Word); got != 0 {
+		t.Fatalf("acknowledge left interrupt: %#x", got)
+	}
+	if err := device.Restore(blob); err != nil {
+		t.Fatal(err)
+	}
+	if got := interrupts.Read(0x30, bus.Word); got != IRQMask {
+		t.Fatalf("restore lost interrupt: %#x", got)
+	}
+	device.Reset()
+	if got := interrupts.Read(0x30, bus.Word); got != 0 {
+		t.Fatalf("reset left interrupt: %#x", got)
+	}
+	timer.Pump(PeriodInstructions * 2)
+	if got := device.Read(0xD0, bus.Word); got != 0 {
+		t.Fatalf("unarmed timer fired: %#x", got)
+	}
+}

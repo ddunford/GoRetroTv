@@ -198,7 +198,7 @@ on 30.
 | `0xB0009000` | `0x244` | `+0x120` is a completion flag polled after command `0x08031F00` | SOURCED (mechanism) |
 | `0xB000A000` | `0x160` | **DEMUX**. `PIDREG[ch] = +0x14 + 4*ch`, ch 0..31, bits 12:0 = PID, 15:14 = mode, `0x1FFF` = null | **SOURCED** |
 | `0xB000B000` | `0x1000` | largest block — a buffer window rather than registers | GUESS |
-| `0xB000D000` | `0xE4` | — | table only |
+| `0xB000D000` | `0xE4` | board timer; channel 0 status at `+0xD0`, acknowledge at `+0xE0`, IRQ mask `0x40` | SOURCED — bootloader EVTTick advances when this interrupt is modelled |
 | `0xB1000000` | `0x38` | — | table only |
 | `0xB2000000`–`0xB2009000` | various | ten blocks of identical shape (`0x74`/`0x94`/`0x134` repeating) — a bank of like devices | GUESS |
 | `0xB200A000` | `0xF4` | **flash controller** — the flash device descriptor in DRAM holds `0xB200A000` and `0xB200A010` | SOURCED |

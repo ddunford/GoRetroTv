@@ -15,6 +15,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/device/dma"
 	"github.com/ddunford/goretrotv/internal/device/eeprom"
+	"github.com/ddunford/goretrotv/internal/device/hwtimer"
 	"github.com/ddunford/goretrotv/internal/device/i2c"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/device/osd"
@@ -41,6 +42,8 @@ func run() error {
 	unmapped := flag.Bool("unmapped", false, "list unmapped access sites at the end")
 	bootState := flag.Bool("boot-state", false, "print bootloader handoff and decompression probes")
 	stopPC := flag.Uint64("stop-pc", 0, "stop on the first guest PC match (hex or decimal)")
+	tasks := flag.Bool("tasks", false, "print the guest Nucleus task census")
+	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
@@ -83,6 +86,10 @@ func run() error {
 	core := cpu.New(busMap, memory.FlashU202)
 	interrupts := irq.New(core.Interrupt)
 	if err := busMap.Attach(irq.Base, irq.Size, interrupts); err != nil {
+		return err
+	}
+	boardTimer := hwtimer.New(interrupts)
+	if err := busMap.Attach(hwtimer.Base, hwtimer.Size, boardTimer); err != nil {
 		return err
 	}
 	serial := csi.New(interrupts)
@@ -145,7 +152,15 @@ func run() error {
 	}
 	var halt error
 	var retired uint64
+	var previousTask uint32
 	for i := uint64(0); i < *steps; i++ {
+		if *scheduler {
+			current := ram.Read(0x83d0, bus.Word)
+			if current != previousTask {
+				fmt.Fprintf(os.Stderr, "scheduler %d PC=%08X from=%08X to=%08X ready=%08X\n", i, core.PC, previousTask, current, ram.Read(0x83cc, bus.Word))
+				previousTask = current
+			}
+		}
 		if *key >= 0 && i == *keyAt {
 			// #nosec G115 -- raw key was checked to be within 0..255 above.
 			if err := serial.Key(uint8(*key), 0); err != nil {
@@ -153,6 +168,7 @@ func run() error {
 			}
 		}
 		serial.Pump(i)
+		boardTimer.Pump(i)
 		cardPort.Pump(i)
 		if *trace && i >= *traceFrom && i < *traceTo {
 			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
@@ -199,6 +215,11 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "flash descriptor base=%08X data=%08X step=%08X interrupt pending=%08X enable=%08X\n",
 			busMap.Read(0x800050B0, bus.Word), busMap.Read(0x800050B4, bus.Word),
 			busMap.Read(0x800050BC, bus.Word), interrupts.Read(0x30, bus.Word), interrupts.Read(0x40, bus.Word))
+	}
+	if *tasks {
+		if err := reportTasks(os.Stderr, ram); err != nil {
+			return err
+		}
 	}
 	return nil
 }

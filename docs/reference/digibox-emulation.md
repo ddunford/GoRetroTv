@@ -5898,11 +5898,20 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   `0x44`. A diagnostic peripheral reply using the oracle's synthetic all-buttons-released frame
   reaches scanner PC `0x9FC122B6` at instruction 19,193,163. Both JB images pass their header
   and payload CRC checks, with the second scan returning success at instruction 64,451,653.
-  BOOTMain calls `0x9FC036F8` at instruction 64,453,227 and enters its sleep/service loop.
+  Validation stores payload address `0xBFC20024` in the selected descriptor's `+8` field. The
+  nonzero field makes `0x9FC12846` take the call to `0x9FC036F8` at instruction 64,453,227.
+  That routine sends a CSI `0x17` command and enters an unconditional sleep/service loop. The
+  same command is sent from the demux-test-failure loop, and the oracle's normal startup sends
+  it without resetting; it is not evidence for an external CPU reset. A temporary diagnostic
+  that zeroed the selected field before the branch reached further loader setup and created a
+  sixth task, but still did not enter the application by 200 million instructions. This host
+  mutation is not acceptance.
   By 100 million instructions it reaches the browser oracle's declared fiction boundary:
   `ready=0x100`, `current=0`, still in the bootloader. That reply is not a measured
   physical-controller response, the guest never reaches the flash entry at `0x9FC2048C` or
-  loader at `0x9FC20618`, and the application image at `0x800009F4` remains zero. The browser
+  loader at `0x9FC20618`, and the application image at `0x800009F4` remains zero. The flash
+  stub at offset `0x2002C` really does jump to `0xBFC2048C`; that is valid code, but no normal
+  guest path to it has been established. The browser
   oracle then forces its own host-side handoff; that injection cannot establish that the firmware
   itself transferred control.
 - **Whether the EPG runs without a viewing card.** 54 CA strings, `NDS XSG`, `CA API Glue`.

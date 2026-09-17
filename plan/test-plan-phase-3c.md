@@ -32,14 +32,16 @@
   vbus-0 I²C path and reads register 75 as 0x17 through the controller data register.
 - [ ] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
   matching end to end. **SPEC success criterion 1.**
-- [ ] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses
+- [?] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses
   the application to `0x800009F4` and transfers control by executing guest instructions. The
   test must fail if a host-side forced PC change or image copy is substituted for the handoff.
-  **Open evidence:** the ROM demux self-test now passes through a guest-driven DMA channel-5
-  transport transfer, setting `[0x800081F8]` to zero and flash scan step `[0x800050BC]` to
+  **Blocked on an acceptance decision or external boot evidence:** the ROM demux self-test now
+  passes through a guest-driven DMA channel-5 transfer, setting `[0x800081F8]` to zero and
+  flash scan step `[0x800050BC]` to
   `0x10000` without host mutation. BOOTMain then waits for CSI command `0x44`; a diagnostic
   synthetic peripheral reply reaches scanner PC `0x9FC122B6`. Both JB image scans and CRCs pass;
-  BOOTMain enters a sleep/service loop and reaches the browser oracle's idle handoff boundary
-  (`ready=0x100`, `current=0`) by 100 million
-  instructions. The guest still never reaches flash entry `0x9FC2048C` or loader `0x9FC20618`,
+  the selected valid descriptor has a nonzero payload pointer, so BOOTMain enters a terminal
+  sleep/service loop and reaches the browser oracle's idle handoff boundary
+  (`ready=0x100`, `current=0`) by 100 million instructions. The guest never reaches flash entry
+  `0x9FC2048C` or loader `0x9FC20618`,
   and the application image at `0x800009F4` remains zero. See `gort-f3f.10` for trace PCs.

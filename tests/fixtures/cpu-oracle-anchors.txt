@@ -1,5 +1,5 @@
 # Selected checkpoints emitted by the unchanged browser oracle on the verified firmware.
-# These span reset, long MIPS32/MIPS16 execution, and the last sampled state before VRAM diverges.
+# These span reset, long MIPS32/MIPS16 execution, and the first video RAM readback.
 0 0xF1F29240
 100000 0xCB99AE4A
 500000 0xA546BB30
@@ -8,3 +8,4 @@
 3000000 0xFA3D3165
 3204000 0x88D562CB
 3204400 0xFDD85FE0
+3204500 0x8BC499D0

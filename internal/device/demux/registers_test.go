@@ -44,15 +44,52 @@ func TestDemuxRegistersCarryAllStateInSnapshot(t *testing.T) {
 			d := device.(*Demux)
 			d.Write(0xD8, bus.Word, 0x00400000)
 			d.complete(22)
+			d.writePointer[22] = 0x45c24
+			d.Write(0x124, bus.Word, 0x4000|(22<<2))
 		},
 		Disturb: func(device bus.Device) {
 			d := device.(*Demux)
 			d.Write(0xD8, bus.Word, 0x00800000)
 			d.complete(23)
+			d.writePointer[22] = 0x45c30
+			d.Write(0x124, bus.Word, 0x4000|(23<<2))
 		},
 		Constant: []string{"name"},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestLISRPointerHandshake(t *testing.T) {
+	t.Parallel()
+	d := New()
+	d.writePointer[22] = 0x45c24
+	d.writePointer[23] = 0x46c32
+	for _, tc := range []struct {
+		filter uint32
+		want   uint32
+	}{
+		{22, 0x45c24},
+		{23, 0x46c32},
+	} {
+		d.Write(0x124, bus.Word, 0x4000|(tc.filter<<2))
+		cleared := false
+		for spin := 0; spin < 8; spin++ {
+			if d.Read(0x124, bus.Word)&0x4000 == 0 {
+				cleared = true
+				break
+			}
+		}
+		if !cleared {
+			t.Fatalf("filter %d LISR would hang waiting for command busy bit", tc.filter)
+		}
+		if got := d.Read(0x128, bus.Word); got != tc.want {
+			t.Fatalf("filter %d pointer = %#x, want %#x", tc.filter, got, tc.want)
+		}
+	}
+	d.Reset()
+	if got := d.Read(0x128, bus.Word); got != 0 {
+		t.Fatalf("reset pointer = %#x", got)
 	}
 }

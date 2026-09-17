@@ -12,15 +12,17 @@ const (
 	MMIOBase = 0xB000A000
 	// MMIOSize is the demux register window attached to the physical bus.
 	MMIOSize             = 0x1000
-	demuxSnapshotVersion = 1
+	demuxSnapshotVersion = 2
 )
 
 // Demux owns the status and enable state of four EMMA interrupt groups.
 // Other registers answer zero until a measured read contract gives them meaning.
 type Demux struct {
-	name   string
-	status [4]uint32
-	enable [4]uint32
+	name           string
+	status         [4]uint32
+	enable         [4]uint32
+	selectedFilter uint32
+	writePointer   [FilterCount]uint32
 }
 
 // New returns the reset state of the EMMA transport demux.
@@ -39,6 +41,8 @@ func (d *Demux) Read(off uint32, size bus.Size) uint32 {
 		word = d.status[(reg-0xB0)/4]
 	case reg >= 0xD0 && reg <= 0xDC:
 		word = d.enable[(reg-0xD0)/4]
+	case reg == 0x128:
+		word = d.writePointer[d.selectedFilter] & 0x1fffff
 	default:
 		return 0
 	}
@@ -61,6 +65,8 @@ func (d *Demux) Write(off uint32, size bus.Size, value uint32) {
 		d.enable[i] |= bits
 	case reg == 0 && value&1 != 0:
 		d.Reset()
+	case reg == 0x124:
+		d.selectedFilter = (value >> 2) & (FilterCount - 1)
 	}
 }
 
@@ -91,13 +97,19 @@ func laneShift(off uint32, size bus.Size) uint32 {
 func (d *Demux) complete(filter uint8) { d.status[2] |= 1 << filter }
 
 // Reset clears all device state after a block reset or machine reset.
-func (d *Demux) Reset() { d.status, d.enable = [4]uint32{}, [4]uint32{} }
+func (d *Demux) Reset() {
+	d.status, d.enable = [4]uint32{}, [4]uint32{}
+	d.selectedFilter = 0
+	d.writePointer = [FilterCount]uint32{}
+}
 
 // Snapshot captures every register bit that can affect subsequent firmware reads.
 func (d *Demux) Snapshot() ([]byte, error) {
 	w := snapcodec.NewWriter(d.name, demuxSnapshotVersion)
 	w.Words(d.status[:])
 	w.Words(d.enable[:])
+	w.Words([]uint32{d.selectedFilter})
+	w.Words(d.writePointer[:])
 	return w.Blob()
 }
 
@@ -111,13 +123,23 @@ func (d *Demux) Restore(blob []byte) error {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
 	status, enable := r.Words(), r.Words()
+	selected := r.Words()
+	pointers := r.Words()
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
-	if len(status) != len(d.status) || len(enable) != len(d.enable) {
+	if len(status) != len(d.status) || len(enable) != len(d.enable) ||
+		len(selected) != 1 || selected[0] >= FilterCount || len(pointers) != len(d.writePointer) {
 		return fmt.Errorf("demux: restore: incompatible register count")
+	}
+	for _, pointer := range pointers {
+		if pointer > 0x1fffff {
+			return fmt.Errorf("demux: restore: invalid write pointer")
+		}
 	}
 	copy(d.status[:], status)
 	copy(d.enable[:], enable)
+	d.selectedFilter = selected[0]
+	copy(d.writePointer[:], pointers)
 	return nil
 }

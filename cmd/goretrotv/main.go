@@ -3,17 +3,22 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"image"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/ddunford/goretrotv/internal/app"
+	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/config"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/httpx"
 	"github.com/ddunford/goretrotv/internal/logging"
+	"github.com/ddunford/goretrotv/internal/platform/statehash"
 	"github.com/ddunford/goretrotv/internal/version"
+	"github.com/ddunford/goretrotv/internal/web"
 )
 
 func main() {
@@ -70,10 +75,48 @@ func run() error {
 		"application_ram_bytes", len(fw.ApplicationRAM),
 	)
 
-	handler, err := app.New(cfg, logger)
+	transport := web.NewTransport()
+	box, err := board.New(fw, true)
 	if err != nil {
 		return err
 	}
+	ready := false
+	if cfg.SnapshotPath != "" {
+		file, err := os.Open(cfg.SnapshotPath) // #nosec G304 -- operator explicitly supplies this private snapshot path.
+		if err != nil {
+			return fmt.Errorf("open machine snapshot: %w", err)
+		}
+		err = box.Restore(file)
+		closeErr := file.Close()
+		if err != nil {
+			return fmt.Errorf("restore machine snapshot: %w", err)
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+		ready, err = acquiredSnapshot(box)
+		if err != nil {
+			return err
+		}
+		if !ready {
+			return fmt.Errorf("machine snapshot is not the verified post-acquisition state")
+		}
+	}
+	if err := publishFrame(box, transport); err != nil {
+		return err
+	}
+	if ready {
+		if err := transport.PushState("ready", "The box is ready. Press sky on the handset."); err != nil {
+			return err
+		}
+	} else if err := transport.PushState("booting", "The box is starting its firmware."); err != nil {
+		return err
+	}
+	handler, err := app.New(cfg, logger, transport)
+	if err != nil {
+		return err
+	}
+	go runMachine(ctx, box, transport, ready, logger)
 
 	if err := httpx.NewServer(cfg.HTTPAddr, handler, logger).Run(ctx); err != nil {
 		return err
@@ -81,4 +124,83 @@ func run() error {
 
 	logger.Info("stopped")
 	return nil
+}
+
+func acquiredSnapshot(box *board.Runtime) (bool, error) {
+	if box.Machine.Retired != 1_100_000_000 || !box.Machine.Handoff.Done() || !box.Machine.SkyGates.Done() {
+		return false, nil
+	}
+	hasher, err := statehash.New(box.RAM)
+	if err != nil {
+		return false, err
+	}
+	got := hasher.Hash(box.Machine.Core.State())
+	if err := hasher.Err(); err != nil {
+		return false, err
+	}
+	return got == 0x04E99A24, nil
+}
+
+func publishFrame(box *board.Runtime, transport *web.Transport) error {
+	frame, err := box.Compose()
+	if err != nil {
+		return err
+	}
+	if frame.Rect != image.Rect(0, 0, web.FrameWidth, web.FrameHeight) {
+		full := image.NewPaletted(image.Rect(0, 0, web.FrameWidth, web.FrameHeight), frame.Palette)
+		for y := 0; y < frame.Rect.Dy() && y < web.FrameHeight; y++ {
+			copy(full.Pix[y*full.Stride:y*full.Stride+min(frame.Rect.Dx(), web.FrameWidth)],
+				frame.Pix[y*frame.Stride:y*frame.Stride+min(frame.Rect.Dx(), web.FrameWidth)])
+		}
+		frame = full
+	}
+	return transport.PushFrame(frame)
+}
+
+func runMachine(ctx context.Context, box *board.Runtime, transport *web.Transport, ready bool, logger *slog.Logger) {
+	const inputInterval = 1024
+	const frameInterval = 500_000
+	const stateInterval = 4_000_000
+	for {
+		count := box.Machine.Retired
+		if count%inputInterval == 0 {
+			if err := ctx.Err(); err != nil {
+				return
+			}
+			if err := transport.DrainKeys(func(raw, source uint8) error {
+				logger.Debug("handset key queued on CSI", "retired", count, "raw", raw, "source", source)
+				return box.CSI.Key(raw, source)
+			}); err != nil {
+				haltMachine(transport, logger, err)
+				return
+			}
+		}
+		if err := box.Step(); err != nil {
+			haltMachine(transport, logger, err)
+			return
+		}
+		count = box.Machine.Retired
+		if count%5_000_000 == 0 {
+			logger.Debug("guest progress", "retired", count, "pc", box.Machine.Core.PC)
+		}
+		if count%frameInterval == 0 {
+			if err := publishFrame(box, transport); err != nil {
+				haltMachine(transport, logger, err)
+				return
+			}
+		}
+		if !ready && count%stateInterval == 0 && box.Machine.Handoff.Done() {
+			if err := transport.PushState("channel-list", "The firmware is rebuilding its channel list."); err != nil {
+				haltMachine(transport, logger, err)
+				return
+			}
+		}
+	}
+}
+
+func haltMachine(transport *web.Transport, logger *slog.Logger, err error) {
+	logger.Error("guest halted", "err", err)
+	if stateErr := transport.PushState("halted", err.Error()); stateErr != nil {
+		logger.Error("publish guest halt", "err", stateErr)
+	}
 }

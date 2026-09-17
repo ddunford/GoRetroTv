@@ -9,26 +9,11 @@ import (
 	"os"
 	"sort"
 
+	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/bus"
-	"github.com/ddunford/goretrotv/internal/cpu"
-	"github.com/ddunford/goretrotv/internal/device/blitter"
-	"github.com/ddunford/goretrotv/internal/device/boardlatch"
-	"github.com/ddunford/goretrotv/internal/device/csi"
-	"github.com/ddunford/goretrotv/internal/device/demod"
 	"github.com/ddunford/goretrotv/internal/device/demux"
-	"github.com/ddunford/goretrotv/internal/device/dma"
-	"github.com/ddunford/goretrotv/internal/device/eeprom"
-	"github.com/ddunford/goretrotv/internal/device/hwtimer"
-	"github.com/ddunford/goretrotv/internal/device/i2c"
-	"github.com/ddunford/goretrotv/internal/device/irq"
-	"github.com/ddunford/goretrotv/internal/device/modem"
-	"github.com/ddunford/goretrotv/internal/device/osd"
-	"github.com/ddunford/goretrotv/internal/device/smartcard"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/gdbstub"
-	"github.com/ddunford/goretrotv/internal/machine"
-	"github.com/ddunford/goretrotv/internal/memory"
-	"github.com/ddunford/goretrotv/internal/platform/clock"
 	"github.com/ddunford/goretrotv/internal/platform/instrument"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
@@ -169,70 +154,29 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	busMap := bus.New()
-	ram, err := memory.NewRAM("dram", memory.DRAMSize)
+	runtime, err := board.New(images, *skyGates)
 	if err != nil {
 		return err
 	}
-	flash0, err := memory.NewFlash("U202", images.U202)
-	if err != nil {
-		return err
-	}
-	flash1, err := memory.NewFlash("U203", images.U203)
-	if err != nil {
-		return err
-	}
-	for _, m := range []struct {
-		base, size uint32
-		device     bus.Device
-	}{
-		{memory.DRAMBase, memory.DRAMSize, ram},
-		{memory.FlashU202, memory.FlashSize, flash0},
-		{memory.FlashU203, memory.FlashSize, flash1},
-	} {
-		if err := busMap.Attach(m.base, m.size, m.device); err != nil {
-			return err
-		}
-	}
-	if err := busMap.Attach(boardlatch.Base, boardlatch.Size, boardlatch.New()); err != nil {
-		return err
-	}
-	core := cpu.New(busMap, memory.FlashU202)
-	interrupts := irq.New(core.Interrupt)
-	if err := busMap.Attach(irq.Base, irq.Size, interrupts); err != nil {
-		return err
-	}
-	boardTimer := hwtimer.New(interrupts)
-	if err := busMap.Attach(hwtimer.Base, hwtimer.Size, boardTimer); err != nil {
-		return err
-	}
-	serial := csi.New(interrupts)
+	busMap, ram := runtime.Machine.Bus, runtime.RAM
+	core, interrupts := runtime.Machine.Core, runtime.IRQ
+	serial, master, sectionDemux := runtime.CSI, runtime.I2C, runtime.Demux
 	if *ackAll {
 		serial.AckAll()
 	} else if *ackCode >= 0 {
 		serial.SetAckPolicy([]uint8{0x52, 0x18, uint8(*ackCode)}) // #nosec G115 -- checked above.
 	}
-	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
-		return err
+	if *nvram != "" {
+		if err := master.BindImage(*nvram); err != nil {
+			return err
+		}
 	}
-	modemPort := modem.New(interrupts)
-	if err := busMap.Attach(modem.Base, modem.Size, modemPort); err != nil {
-		return err
-	}
-	cardPort := smartcard.New(interrupts)
-	if err := busMap.Attach(smartcard.Base, smartcard.Size, cardPort); err != nil {
-		return err
-	}
-	store := eeprom.New()
-	mux := i2c.NewMux()
-	master := i2c.New(store, interrupts)
-	demodModel := demod.New()
 	var instruction uint64
 	var demodReadTotal uint64
 	demodReadCount := make(map[uint16]uint64)
 	demodReadValue := make(map[uint16]uint8)
 	if *demodPolls {
-		demodModel.SetReadObserver(func(register uint16, value uint8) {
+		runtime.Demod.SetReadObserver(func(register uint16, value uint8) {
 			demodReadTotal++
 			demodReadCount[register]++
 			demodReadValue[register] = value
@@ -240,45 +184,6 @@ func run() error {
 				fmt.Fprintf(os.Stderr, "demod-read-at instruction=%d register=%d value=%s\n", instruction, register, wireByte(value))
 			}
 		})
-	}
-	master.BindDemod(demodModel)
-	if *nvram != "" {
-		if err := master.BindImage(*nvram); err != nil {
-			return err
-		}
-	}
-	if err := busMap.Attach(i2c.MuxBase, i2c.MuxSize, mux); err != nil {
-		return err
-	}
-	if err := busMap.Attach(i2c.Base, i2c.Size, master); err != nil {
-		return err
-	}
-	sectionDemux := demux.New()
-	if err := sectionDemux.BindRAM(ram); err != nil {
-		return err
-	}
-	sectionDemux.BindIRQ(interrupts)
-	if err := busMap.Attach(demux.MMIOBase, demux.MMIOSize, sectionDemux); err != nil {
-		return err
-	}
-	video := osd.NewVideo()
-	if err := busMap.Attach(osd.VideoBase, osd.WindowSize, video); err != nil {
-		return err
-	}
-	display := osd.NewDisplay()
-	if err := display.BindRAM(ram); err != nil {
-		return err
-	}
-	if err := busMap.Attach(osd.DisplayBase, osd.WindowSize, display); err != nil {
-		return err
-	}
-	graphics := blitter.New(ram)
-	if err := busMap.Attach(blitter.Base, blitter.Size, graphics); err != nil {
-		return err
-	}
-	dmaController := dma.New(ram, graphics, video, interrupts)
-	if err := busMap.Attach(dma.Base, dma.Size, dmaController); err != nil {
-		return err
 	}
 	hasher, err := statehash.New(ram)
 	if err != nil {
@@ -292,38 +197,7 @@ func run() error {
 	var retired uint64
 	var previousTask uint32
 	var previousWord uint32
-	var handoff machine.Handoff
-	skyMenu := machine.NewSkyGates(*skyGates)
-	// The oracle pumps once per loop iteration. Its MIPS32 branch and slot share one
-	// iteration, while an accepted interrupt adds an iteration without retiring a
-	// guest instruction. Keep this clock separate from the retired count below.
-	loopClock := clock.New()
-	const pumpName = "board-pump"
-	var boardPump clock.Handler
-	boardPump = func(now uint64) error {
-		boardTimer.Pump(now + 15)
-		serial.Pump(instruction, boardTimer.Ticks())
-		modemPort.Pump(boardTimer.Ticks())
-		cardPort.Pump(16)
-		applied, err := handoff.Tick(core, busMap)
-		if err != nil {
-			return fmt.Errorf("after %d instructions: %w", instruction, err)
-		}
-		if applied {
-			fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%s\n", instruction, wireWord(core.PC))
-		}
-		_, err = loopClock.At(now+16, pumpName, boardPump)
-		return err
-	}
-	if _, err := loopClock.At(1, pumpName, boardPump); err != nil {
-		return err
-	}
-	emulated, err := machine.New(core, busMap, loopClock, &handoff, skyMenu,
-		map[string]clock.Handler{pumpName: boardPump})
-	if err != nil {
-		return err
-	}
-	pumpBoard := func() error { return loopClock.Advance(1) }
+	emulated := runtime.Machine
 	if *snapshotIn != "" {
 		if err := loadSnapshot(*snapshotIn, emulated); err != nil {
 			return err
@@ -365,39 +239,13 @@ func run() error {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
 	advance := func(i uint64, observe func(bus.ObservedAccess)) error {
+		if i != emulated.Retired {
+			return fmt.Errorf("firmwaretrace: instruction %d differs from machine retired %d", i, emulated.Retired)
+		}
 		instruction = i
-		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
-		// Go executes them as two Steps, so the delay slot does not advance this phase.
-		if !core.HasPendingBranch() || core.ISA {
-			if err := pumpBoard(); err != nil {
-				return err
-			}
-		}
-		if *trace && i >= *traceFrom && i < *traceTo {
-			fmt.Fprintf(os.Stderr, "%d PC=%s ISA=%v Count=%s Status=%s GPR=%s\n", i, wireWord(core.PC), core.ISA, wireWord(core.COP0[9]), wireWord(core.COP0[12]), wireRegisters(core.GPR))
-		}
-		hits.Observe(core.PC)
-		if err := core.ObserveCheckpoint(emitter, i); err != nil {
-			return err
-		}
-		if *skyGates && (!core.HasPendingBranch() || core.ISA) {
-			applied, err := skyMenu.Tick(i, handoff.Done(), func() (int, error) {
-				offsets, err := createdTaskOffsets(ram)
-				return len(offsets), err
-			}, busMap, flash0)
-			if err != nil {
-				return fmt.Errorf("after %d instructions: %w", i, err)
-			}
-			if applied {
-				fmt.Fprintf(os.Stderr, "declared Sky menu gates applied after %d guest instructions\n", i)
-			}
-		}
-		if instrumentActive {
-			traceInstruments.ObserveInstruction(i, core.PC, core.GPR)
-		}
+		var pc uint32
 		var accessObserver func(bus.ObservedAccess)
 		if accessActive || observe != nil {
-			pc := core.PC
 			accessObserver = func(access bus.ObservedAccess) {
 				if access.Fetch {
 					return
@@ -409,32 +257,34 @@ func run() error {
 					observe(access)
 				}
 			}
-			busMap.SetObserver(accessObserver)
 		}
-		interruptBoundary := pumpBoard
-		if accessObserver != nil {
-			interruptBoundary = func() error {
-				busMap.SetObserver(nil)
-				err := pumpBoard()
-				busMap.SetObserver(accessObserver)
-				return err
-			}
+		err := runtime.StepWithHooks(board.StepHooks{
+			AfterPump: func() error {
+				if *trace && i >= *traceFrom && i < *traceTo {
+					fmt.Fprintf(os.Stderr, "%d PC=%s ISA=%v Count=%s Status=%s GPR=%s\n", i, wireWord(core.PC), core.ISA, wireWord(core.COP0[9]), wireWord(core.COP0[12]), wireRegisters(core.GPR))
+				}
+				hits.Observe(core.PC)
+				return core.ObserveCheckpoint(emitter, i)
+			},
+			AfterSky: func() error {
+				if instrumentActive {
+					traceInstruments.ObserveInstruction(i, core.PC, core.GPR)
+				}
+				pc = core.PC
+				return nil
+			},
+			Access: accessObserver,
+			Handoff: func(retired uint64, entryPC uint32) {
+				fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%s\n", retired, wireWord(entryPC))
+			},
+			SkyGate: func(retired uint64) {
+				fmt.Fprintf(os.Stderr, "declared Sky menu gates applied after %d guest instructions\n", retired)
+			},
+		})
+		if err != nil {
+			return err
 		}
-		stepErr := core.StepWithInterruptBoundary(interruptBoundary)
-		if accessObserver != nil {
-			busMap.SetObserver(nil)
-		}
-		if err := stepErr; err != nil {
-			return fmt.Errorf("after %d instructions: %w", i, err)
-		}
-		retired = i + 1
-		emulated.Retired = retired
-		if err := dmaController.Fault(); err != nil {
-			return fmt.Errorf("after %d instructions: %w", i, err)
-		}
-		if err := master.Fault(); err != nil {
-			return fmt.Errorf("after %d instructions: %w", i, err)
-		}
+		retired = emulated.Retired
 		return nil
 	}
 	if *gdbAddr != "" {

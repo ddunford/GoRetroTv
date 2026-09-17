@@ -247,6 +247,7 @@ func TestLoadAppliesDefaultsAndOverrides(t *testing.T) {
 	want := config.Config{
 		Env:                  "development",
 		FirmwareDir:          env["GORETROTV_FIRMWARE_DIR"],
+		WebDir:               "web",
 		ServiceName:          "goretrotv-oracle",
 		HTTPAddr:             "127.0.0.1:9000",
 		AllowNonLoopbackBind: false,

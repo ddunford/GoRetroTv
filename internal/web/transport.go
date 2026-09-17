@@ -35,7 +35,10 @@ type frameData struct {
 	palette []byte
 }
 
-type client struct{ latest chan *frameData }
+type client struct {
+	latest chan *frameData
+	state  chan wire.StateMessage
+}
 
 // Transport broadcasts indexed OSD frames. A slow browser receives the newest
 // image when it catches up; its dirty rectangle is calculated against the last
@@ -45,6 +48,33 @@ type Transport struct {
 	clients map[*client]struct{}
 	latest  *frameData
 	keys    chan wire.KeyMessage
+	state   *wire.StateMessage
+}
+
+// PushState publishes the latest observed machine phase to current and future
+// browsers. The caller derives it from guest state, never elapsed wall time.
+func (t *Transport) PushState(phase, reason string) error {
+	switch phase {
+	case "booting", "flash-check", "channel-list", "ready", "halted":
+	default:
+		return fmt.Errorf("web: unsupported machine phase %q", phase)
+	}
+	next := wire.StateMessage{Type: "state", Version: wire.Version, Phase: phase, Reason: reason}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.state != nil && *t.state == next {
+		return nil
+	}
+	t.state = &next
+	for c := range t.clients {
+		select {
+		case c.state <- next:
+		default:
+			<-c.state
+			c.state <- next
+		}
+	}
+	return nil
 }
 
 // NewTransport creates a framebuffer broadcaster.
@@ -136,11 +166,14 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusNormalClosure, "")
 	}()
 	conn.SetReadLimit(1024)
-	c := &client{latest: make(chan *frameData, 1)}
+	c := &client{latest: make(chan *frameData, 1), state: make(chan wire.StateMessage, 1)}
 	t.mu.Lock()
 	t.clients[c] = struct{}{}
 	if t.latest != nil {
 		c.latest <- t.latest
+	}
+	if t.state != nil {
+		c.state <- *t.state
 	}
 	t.mu.Unlock()
 	defer func() {
@@ -165,6 +198,13 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				_ = conn.Close(websocket.StatusPolicyViolation, "invalid key")
 				return
 			}
+			t.mu.Lock()
+			accepting := t.state != nil && t.state.Phase == "ready"
+			t.mu.Unlock()
+			if !accepting {
+				_ = conn.Close(websocket.StatusPolicyViolation, "box is not ready")
+				return
+			}
 			select {
 			case t.keys <- key:
 			default:
@@ -181,6 +221,10 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-disconnected:
 			return
+		case state := <-c.state:
+			if err := writeJSON(sessionCtx, conn, state); err != nil {
+				return
+			}
 		case pending = <-c.latest:
 			if last == nil {
 				if err := writeFrame(sessionCtx, conn, last, pending); err != nil {

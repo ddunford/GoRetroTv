@@ -150,6 +150,9 @@ func TestSlowClientCannotBlockPublisher(t *testing.T) {
 
 func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
 	transport := NewTransport()
+	if err := transport.PushState("ready", "The guest acquired its services"); err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(transport)
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -237,5 +240,38 @@ func TestTransportClosesSocketOnInvalidKey(t *testing.T) {
 	}
 	if len(transport.keys) != 0 {
 		t.Fatal("rejected key entered input queue")
+	}
+}
+
+func TestTransportPublishesLatestMachineStateOnConnectAndChange(t *testing.T) {
+	transport := NewTransport()
+	if err := transport.PushState("channel-list", "The guest is acquiring services"); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(transport)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	state := readMessage(t, conn)
+	if field[string](t, state, "type") != "state" || field[string](t, state, "phase") != "channel-list" {
+		t.Fatalf("initial guest state = %v", state)
+	}
+	if err := transport.PushState("halted", "guest instruction fault"); err != nil {
+		t.Fatal(err)
+	}
+	state = readMessage(t, conn)
+	if field[string](t, state, "phase") != "halted" || field[string](t, state, "reason") != "guest instruction fault" {
+		t.Fatalf("halt state = %v", state)
+	}
+	if err := transport.PushState("finished", ""); err == nil {
+		t.Fatal("invalid phase accepted")
 	}
 }

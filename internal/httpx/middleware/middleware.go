@@ -2,7 +2,9 @@
 package middleware
 
 import (
+	"bufio"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"time"
@@ -21,6 +23,18 @@ type statusRecorder struct {
 	http.ResponseWriter
 	status int
 	bytes  int
+}
+
+// Unwrap lets net/http's ResponseController reach optional capabilities of
+// the real writer, including the WebSocket upgrade path.
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, rw, err := http.NewResponseController(r.ResponseWriter).Hijack()
+	if err == nil {
+		r.status = http.StatusSwitchingProtocols
+	}
+	return conn, rw, err
 }
 
 func (r *statusRecorder) WriteHeader(code int) {

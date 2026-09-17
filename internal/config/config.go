@@ -45,6 +45,13 @@ type Config struct {
 	// /firmware and a relative path happens to resolve because distroless sets no WORKDIR.
 	FirmwareDir string `env:"GORETROTV_FIRMWARE_DIR,required"`
 
+	// SnapshotPath optionally restores a private, fully acquired machine image
+	// before accepting visitors. An empty path starts from the reset vector.
+	SnapshotPath string `env:"GORETROTV_SNAPSHOT_PATH"`
+
+	// WebDir contains the authored page and compiled TypeScript modules.
+	WebDir string `env:"GORETROTV_WEB_DIR"`
+
 	// ServiceName labels log lines.
 	ServiceName string `env:"GORETROTV_SERVICE_NAME"`
 
@@ -77,6 +84,7 @@ type Config struct {
 var Defaults = Config{
 	ServiceName: "goretrotv",
 	HTTPAddr:    "127.0.0.1:8099",
+	WebDir:      "web",
 	LogLevel:    "info",
 	LogFormat:   "json",
 	EnablePprof: false,

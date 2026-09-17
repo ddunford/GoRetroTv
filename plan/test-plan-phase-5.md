@@ -3,15 +3,19 @@
 ## Test Cases
 - [?] **TC-5.1: Frames reach the browser** (covers: TASK-5.1, TASK-5.7) — the canvas matches the core's
   framebuffer hash.
-  **Blocked:** The transport has a live WebSocket integration test, but the browser canvas and
-  machine wiring belong to TASK-5.2 and TASK-5.4; this hash comparison cannot run yet.
-- [?] **TC-5.2: The status line tracks real machine state** (covers: TASK-5.2, TASK-5.7) — it must be driven by
+  **Blocked:** `tests/live/firmware.spec.ts` proves the real core's blue baseline and Sky menu reach
+  the canvas, but an exact canvas/core framebuffer hash comparison remains for TASK-5.7.
+- [x] **TC-5.2: The status line tracks real machine state** (covers: TASK-5.2, TASK-5.7) — it must be driven by
   observed state, not a timer. The predecessor's said Ready twenty seconds early because it keyed on
   a task count that plateaus before the work starts.
-  **Blocked:** The page and machine-state source are not built yet (TASK-5.2 and TASK-5.4).
-- [?] **TC-5.3: A key press from the page reaches the firmware** (covers: TASK-5.3, TASK-5.7).
-  **Blocked:** A live WebSocket key reaches the real CSI link with the measured Sky frame, but the
-  instruction loop and browser are not connected yet (TASK-5.4); firmware receipt needs that path.
+  **Result:** The server sends Ready only after restoring the exact post-acquisition snapshot
+  (`retired=1.1B`, completed handoff/Sky gates, state hash `04E99A24`); cold runs observe the
+  application handoff and cannot claim Ready without measured acquisition. The live Playwright
+  test asserts Ready before enabling the handset and again after a real firmware menu transition.
+- [x] **TC-5.3: A key press from the page reaches the firmware** (covers: TASK-5.3, TASK-5.7).
+  **Result:** `tests/live/firmware.spec.ts` starts the real Go server with private firmware and
+  snapshot, clicks the page's Sky button, and waits for the firmware's Box Office menu on the
+  canvas; `internal/web/transport_test.go` asserts the measured CSI wire frame from a live socket.
 - [?] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
   **Blocked:** Browser wiring and the deployed path are not built yet (TASK-5.4 and TASK-5.5).
 - [?] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against

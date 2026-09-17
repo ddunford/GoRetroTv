@@ -10,7 +10,14 @@
   checks event deadlines, registration order and corrupt-state refusal; the existing device
   contract tests check each attached device's full state. `cmd/firmwaretrace -snapshot-out`
   wrote a 38.8 MB private snapshot from the real firmware at 100,000 instructions, and the
-  clock-driven runner retained 470,000/470,000 cold-oracle checkpoints and 42 tasks.
+  clock-driven runner retained 470,000/470,000 cold-oracle checkpoints and 42 tasks. A later
+  650M-instruction run exposed a missing child: the I²C-bound demodulator was not bus-attached,
+  so its indirect pointer was absent from the machine image. I²C snapshot v2 now includes both
+  demodulator and EEPROM child state. `internal/device/i2c/controller_test.go` proves mid-read
+  and mid-page-write continuation, refuses old incomplete images, and checks corrupt-child
+  atomicity. A fresh v2 image resumes a nine-section SI acquisition to 680M and matches the
+  unchanged browser oracle across six samples, nine guest PC counts, four match units and all
+  14 demodulator read deltas; the old image missed the first read's register.
 - [x] **TC-4.2: Restore is indistinguishable from not having stopped** (covers: TASK-4.2, TASK-4.7) — snapshot
   at N, restore, run to N+10,000,000; the state hash equals an uninterrupted run's. Omitting the
   flash command-sequencer state must fail this.

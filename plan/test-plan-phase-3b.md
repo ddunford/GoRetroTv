@@ -28,3 +28,7 @@
   display returns black. `./ctl.sh test`, lint and nine-anchor CPU gate passed.
 - [ ] **TC-3b.6: The menu matches the oracle** (covers: TASK-3b.6) — press sky; the framebuffer hash
   equals the oracle's for the same instruction count. 62 widgets, 37 colours is the known-good shape.
+
+**Guest acceptance dependency:** TC-3b.6 stays open until Phase 3c's real 42-task cold boot and
+handset link. TC-3b.1–3b.5 prove the drawing hardware boundary; the nine-anchor CPU gate reaches
+the first video RAM read but does not prove a menu was drawn or match its framebuffer.

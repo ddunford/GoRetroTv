@@ -7,6 +7,12 @@ The Sky interface appears. The single most visible milestone in the project.
 Blitter, DMA, VRAM and the OSD registers. The predecessor found two of these the hard way and both
 findings are load-bearing.
 
+**Execution dependency discovered 2026-09-17:** the drawing hardware and its unit/integration
+tests can finish before a real application menu exists. The complete drawn-menu framebuffer
+comparison remains TASK-3b.6/TC-3b.6 and depends on Phase 3c's 42-task cold boot and handset
+link. TASK-3b.7 and the security review cover the drawing hardware now, allowing Phase 3c to
+start without claiming the menu was seen.
+
 ## Tasks (mirror — bd epic `gort-omj` is the source of truth; never hand-ticked)
 
 - [x] `TASK-3b.1` VRAM and the OSD/display register block; the framebuffer at `0x80584048`, 720×576 → `/go-engineer` [TC-3b.1]
@@ -15,7 +21,7 @@ findings are load-bearing.
 - [x] `TASK-3b.4` The plane/window model: the 100-byte records at `*0x80105E9C`, the produce/consume indices at `+0x50`/`+0x54`, the background flag and colour. **Window 0 is a trap** — the validator errors when the id is 0 while the gate reads 0, and the error handler does not return → `/go-engineer` [TC-3b.4]
 - [x] `TASK-3b.5` Palette/CLUT and bit depth (2, 4 or 8 bpp per window) → `/go-engineer` [TC-3b.5]
 - [ ] `TASK-3b.6` Oracle comparison to a drawn menu; then compare the **framebuffer** itself, not just checkpoints → `/go-engineer` [TC-3b.6]
-- [ ] `TASK-3b.7` ⫘ Tests → `/go-engineer` [TC-3b.1, TC-3b.2, TC-3b.3, TC-3b.4, TC-3b.5]
+- [ ] `TASK-3b.7` ⫘ Drawing hardware integration tests → `/go-engineer` [TC-3b.1, TC-3b.2, TC-3b.3, TC-3b.4, TC-3b.5]
 - [ ] `TASK-3b.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns

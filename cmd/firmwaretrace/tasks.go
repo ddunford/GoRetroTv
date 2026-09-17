@@ -14,46 +14,12 @@ import (
 // misses valid tasks whose names are no longer printable, and silently turns a
 // complete boot into a plausible lower count.
 func reportTasks(out io.Writer, ram *memory.RAM) error {
-	var seed uint32
-	for off := uint32(0); off+0x38 <= ram.Size(); off += 4 {
-		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
-			continue
-		}
-		if string(taskName(ram, off)) == "SMTTask" {
-			seed = memory.DRAMBase + off
-			break
-		}
-	}
-	seeds := 0
-	if seed != 0 {
-		seeds = 1
-	}
-	if err := instrument.MustFind("Nucleus task census", "SMTTask seed", seeds, 1); err != nil {
+	offsets, err := createdTaskOffsets(ram)
+	if err != nil {
 		return err
 	}
-	seen := make(map[uint32]bool)
-	var offsets []uint32
-	for at := seed; ; {
-		if at < memory.DRAMBase || at-memory.DRAMBase+0x70 > ram.Size() || at&3 != 0 {
-			return fmt.Errorf("task census: created list left DRAM at %08X", at)
-		}
-		if seen[at] {
-			return fmt.Errorf("task census: created list repeated %08X before returning to seed", at)
-		}
-		if len(offsets) >= 200 {
-			return fmt.Errorf("task census: created list exceeds 200 tasks")
-		}
-		seen[at] = true
-		off := at - memory.DRAMBase
-		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
-			return fmt.Errorf("task census: created list points to non-task at %08X", at)
-		}
-		offsets = append(offsets, off)
-		next := ram.Read(off+4, bus.Word)
-		if next == seed {
-			break
-		}
-		at = next
+	if err := instrument.MustFind("Nucleus task census", "SMTTask seed", len(offsets), 1); err != nil {
+		return err
 	}
 	for count, off := range offsets {
 		name := taskName(ram, off)
@@ -102,8 +68,49 @@ func reportTasks(out io.Writer, ram *memory.RAM) error {
 	if err := instrument.MustFind("Nucleus task census", "TASK control blocks", len(offsets), 1); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(out, "tasks found: %d\n", len(offsets))
+	_, err = fmt.Fprintf(out, "tasks found: %d\n", len(offsets))
 	return err
+}
+
+func createdTaskOffsets(ram *memory.RAM) ([]uint32, error) {
+	var seed uint32
+	for off := uint32(0); off+0x38 <= ram.Size(); off += 4 {
+		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
+			continue
+		}
+		if string(taskName(ram, off)) == "SMTTask" {
+			seed = memory.DRAMBase + off
+			break
+		}
+	}
+	if seed == 0 {
+		return nil, nil
+	}
+	seen := make(map[uint32]bool)
+	var offsets []uint32
+	for at := seed; ; {
+		if at < memory.DRAMBase || at-memory.DRAMBase+0x70 > ram.Size() || at&3 != 0 {
+			return nil, fmt.Errorf("task census: created list left DRAM at %08X", at)
+		}
+		if seen[at] {
+			return nil, fmt.Errorf("task census: created list repeated %08X before returning to seed", at)
+		}
+		if len(offsets) >= 200 {
+			return nil, fmt.Errorf("task census: created list exceeds 200 tasks")
+		}
+		seen[at] = true
+		off := at - memory.DRAMBase
+		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
+			return nil, fmt.Errorf("task census: created list points to non-task at %08X", at)
+		}
+		offsets = append(offsets, off)
+		next := ram.Read(off+4, bus.Word)
+		if next == seed {
+			break
+		}
+		at = next
+	}
+	return offsets, nil
 }
 
 func taskName(ram *memory.RAM, off uint32) []byte {

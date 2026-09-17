@@ -184,6 +184,19 @@ func (f *Flash) Refused() uint64 { return f.refused }
 // Bytes exposes the live array to instruments that read it wholesale. Writers use commands.
 func (f *Flash) Bytes() []byte { return f.bytes }
 
+// ApplyHostPatch makes one declared presentation-policy change to the flash
+// image after checking the exact original byte. Guest writes still use Write.
+func (f *Flash) ApplyHostPatch(off uint32, expected, replacement byte) error {
+	if uint64(off) >= uint64(len(f.bytes)) {
+		return fmt.Errorf("memory: flash %s: host patch offset %X is outside image", f.name, off)
+	}
+	if f.bytes[off] != expected {
+		return fmt.Errorf("memory: flash %s: host patch at %X found %02X, want %02X", f.name, off, f.bytes[off], expected)
+	}
+	f.bytes[off] = replacement
+	return nil
+}
+
 // Reset clears command state, not non-volatile contents.
 func (f *Flash) Reset() {
 	f.refused, f.command = 0, 0

@@ -47,6 +47,7 @@ func run() error {
 	watchWord := flag.Uint64("watch-word", 0, "trace changes to one guest word")
 	stopPC := flag.Uint64("stop-pc", 0, "stop on the first guest PC match (hex or decimal)")
 	tasks := flag.Bool("tasks", false, "print the guest Nucleus task census")
+	skyGates := flag.Bool("sky-gates", false, "apply the oracle's declared post-boot Sky menu gate policy")
 	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
 	csiWire := flag.Bool("csi-wire", false, "print bytes the guest transmitted on CSI")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
@@ -177,6 +178,7 @@ func run() error {
 	var previousTask uint32
 	var previousWord uint32
 	var handoff machine.Handoff
+	skyMenu := machine.NewSkyGates(*skyGates)
 	var handoffPumpPhase uint8 = 1
 	var boardPumpClock uint64
 	var instruction uint64
@@ -230,6 +232,18 @@ func run() error {
 		}
 		if err := core.ObserveCheckpoint(emitter, i); err != nil {
 			return err
+		}
+		if *skyGates && (!core.HasPendingBranch() || core.ISA) {
+			applied, err := skyMenu.Tick(i, handoff.Done(), func() (int, error) {
+				offsets, err := createdTaskOffsets(ram)
+				return len(offsets), err
+			}, busMap, flash0)
+			if err != nil {
+				return fmt.Errorf("after %d instructions: %w", i, err)
+			}
+			if applied {
+				fmt.Fprintf(os.Stderr, "declared Sky menu gates applied after %d guest instructions\n", i)
+			}
 		}
 		if err := core.StepWithInterruptBoundary(pumpBoard); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)

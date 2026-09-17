@@ -1,29 +1,32 @@
 # Test Plan: Phase 3c — Links and NVRAM
 
 ## Test Cases
-- [?] **TC-3c.1: A key press reaches the input layer** (covers: TASK-3c.1, TASK-3c.7) — the dispatcher and key
+- [x] **TC-3c.1: A key press reaches the input layer** (covers: TASK-3c.1, TASK-3c.7) — the dispatcher and key
   event counters both move, as the predecessor's gate asserts.
-  The CSI register, paced receive byte, interrupt acknowledge, and escaped handset frame are
-  covered by `internal/device/csi/link_test.go`; guest dispatcher and event counters still need a
-  completed application boot before this case can pass. **Blocked:** the real application handoff
-  and guest dispatcher are not yet available in the Go trace; reopen after TASK-3c.9/3c.6.
+  **Result:** `internal/device/csi/link_test.go` covers the paced register, interrupt and escaped
+  frame. `./ctl.sh links-gate` boots with copied NVRAM, injects Sky raw 0x7D at 200 million
+  instructions, and counts 19 additional guest dispatcher hits at `0x800297B0` and two input
+  events at `0x8006EA04` against a zero-event no-key control. The 720×576 raw surface changes
+  from oracle hash `9825B318`/12 byte values to `F3634409`/37, matching the oracle after key.
 - [x] **TC-3c.2: NVRAM survives a restart** (covers: TASK-3c.2, TASK-3c.7) — write, stop, start, read back.
   **Result:** `internal/device/i2c/controller_test.go` writes EEPROM bytes over I²C, stops,
   constructs a new controller and store, loads the image from disk, and reads the same bytes
   over a fresh I²C transaction. `internal/device/eeprom/store_test.go` checks the file image
   independently. The I²C test also proves START alone raises no interrupt, while address-byte
   completion does and `+0x50` clears it.
-- [?] **TC-3c.3: Acknowledgement policy** (covers: TASK-3c.3, TASK-3c.7) — the documented set boots; acking
-  everything is shown to change where the boot stops, proving the model is the working one.
-  `internal/device/csi/peripheral_test.go` proves the default set answers only 0x52 and 0x18,
-  echoes the guest's sequence, and that acknowledging everything changes the wire replies.
-  **Blocked:** comparing the resulting 42-task and 19-task guest boots requires the real
-  application handoff and remaining Phase 3c devices. Reopen after TASK-3c.9/3c.6.
-- [?] **TC-3c.4: CA init proceeds past the card** (covers: TASK-3c.4, TASK-3c.7).
-  `internal/device/smartcard/port_test.go` drives the real six-byte boot command through six
-  separate TX completion interrupts, checks interrupt acknowledgement and the paced six-byte
-  empty-slot response. **Blocked:** proving that guest CA init advances requires the real
-  application handoff and complete Phase 3c boot; reopen after TASK-3c.9/3c.6.
+- [x] **TC-3c.3: Acknowledgement policy** (covers: TASK-3c.3, TASK-3c.7) — the documented set boots;
+  answering every command produces a measured, guest-visible difference.
+  **Result:** `internal/device/csi/peripheral_test.go` checks exact default and all-ack wire
+  replies. `./ctl.sh links-gate` proves both policies reach 42 tasks from the same NVRAM; their
+  checkpoint streams differ, and the guest-dependent Sky menu gate fires at instruction
+  143,465,315 under the default versus 127,465,311 under all-ack. The earlier 19-task stall
+  claim was withdrawn by the later oracle measurement; the oracle also measured an OSD-depth
+  difference that this Go test does not assert.
+- [x] **TC-3c.4: CA init proceeds past the card** (covers: TASK-3c.4, TASK-3c.7).
+  **Result:** `internal/device/smartcard/port_test.go` drives the six-byte boot command through
+  six TX completion interrupts and checks the paced six-byte empty-slot response.
+  `./ctl.sh links-gate` observes 12 guest smartcard ISR hits at `0x8002CCA0`; the same cold boot creates
+  42 tasks, with SCTask, ECM, EMM and the main task scheduled after the exchange.
 - [x] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75 with bits 0x17
   set and register 78 = 0x02, which is what the driver polls.
   **Result:** `internal/device/demod/model_test.go` checks the measured lock, identity, BER and

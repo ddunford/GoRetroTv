@@ -35,6 +35,7 @@ func main() {
 }
 
 func run() error {
+	var hits pcHits
 	dir := flag.String("firmware", "firmware", "verified firmware directory")
 	steps := flag.Uint64("steps", 100000, "maximum retired instructions")
 	interval := flag.Uint64("interval", 1000, "instructions between checkpoints")
@@ -50,16 +51,22 @@ func run() error {
 	skyGates := flag.Bool("sky-gates", false, "apply the oracle's declared post-boot Sky menu gate policy")
 	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
 	csiWire := flag.Bool("csi-wire", false, "print bytes the guest transmitted on CSI")
+	surfaceHash := flag.Bool("surface-hash", false, "print the raw 720x576 OSD RAM hash and distinct byte count")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	ackCode := flag.Int("ack-code", -1, "additional CSI command code to acknowledge (-1 keeps measured default)")
+	ackAll := flag.Bool("ack-all", false, "diagnostic policy: acknowledge every CSI command")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
+	flag.Var(&hits, "pc-hit", "count guest executions of this PC (repeatable, hex or decimal)")
 	flag.Parse()
 	if *key < -1 || *key > 255 {
 		return fmt.Errorf("raw handset key %d is outside 0..255", *key)
 	}
 	if *ackCode < -1 || *ackCode > 255 {
 		return fmt.Errorf("CSI acknowledgement code %d is outside 0..255", *ackCode)
+	}
+	if *ackAll && *ackCode >= 0 {
+		return fmt.Errorf("ack-all and ack-code are mutually exclusive")
 	}
 	if *stopPC > 0xffffffff {
 		return fmt.Errorf("stop PC %#x exceeds 32-bit address space", *stopPC)
@@ -109,7 +116,9 @@ func run() error {
 		return err
 	}
 	serial := csi.New(interrupts)
-	if *ackCode >= 0 {
+	if *ackAll {
+		serial.AckAll()
+	} else if *ackCode >= 0 {
 		serial.SetAckPolicy([]uint8{0x52, 0x18, uint8(*ackCode)}) // #nosec G115 -- checked above.
 	}
 	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
@@ -215,6 +224,7 @@ func run() error {
 			}
 		}
 		if *key >= 0 && i == *keyAt {
+			hits.MarkKey()
 			// #nosec G115 -- raw key was checked to be within 0..255 above.
 			if err := serial.Key(uint8(*key), 0); err != nil {
 				return err
@@ -230,6 +240,7 @@ func run() error {
 		if *trace && i >= *traceFrom && i < *traceTo {
 			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
 		}
+		hits.Observe(core.PC)
 		if err := core.ObserveCheckpoint(emitter, i); err != nil {
 			return err
 		}
@@ -303,6 +314,17 @@ func run() error {
 	}
 	if *csiWire {
 		fmt.Fprintf(os.Stderr, "CSI transmitted % X\n", serial.Transmitted())
+	}
+	for _, hit := range hits {
+		if *key >= 0 {
+			fmt.Fprintf(os.Stderr, "pc-hit %08X total=%d before-key=%d after-key=%d\n", hit.address, hit.total, hit.before, hit.total-hit.before)
+		} else {
+			fmt.Fprintf(os.Stderr, "pc-hit %08X total=%d\n", hit.address, hit.total)
+		}
+	}
+	if *surfaceHash {
+		hash, distinct := surfaceDigest(ram, surfaceBase, surfaceLength)
+		fmt.Fprintf(os.Stderr, "surface hash=%08X distinct=%d bytes=%d base=%08X\n", hash, distinct, surfaceLength, surfaceBase)
 	}
 	return nil
 }

@@ -101,6 +101,16 @@ try {
   if (errors.length) throw new Error(`browser errors: ${errors.join('; ')}`);
   if (!result.done || result.keyIcount === null || result.tasks?.n !== 42)
     throw new Error(`oracle did not reach a 42-task surface: ${JSON.stringify(result)}`);
+  if (result.keyIcount !== keyAt || result.stopIcount !== stopAt ||
+      !result.gates?.on || !result.gates?.applied ||
+      !result.keyLog?.some(entry => entry.icount === keyAt && entry.raw === 0x7D) ||
+      result.keyBlits !== 11 || result.after?.distinctColours !== 37)
+    throw new Error(`oracle Sky menu controls did not hold: ${JSON.stringify(result)}`);
+  const surfaceSha256 = await page.evaluate(async () => {
+    const surface = Uint8Array.from(window.__peek(0x80584048, 720 * 576));
+    const digest = await crypto.subtle.digest('SHA-256', surface);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  });
   const report = {
     oracleSha256: createHash('sha256').update(await readFile(htmlPath)).digest('hex'),
     nvramSha256: createHash('sha256').update(nvram).digest('hex'),
@@ -109,6 +119,7 @@ try {
     tasks: result.tasks.n, gates: result.gates, blits: result.blits,
     beforeBlits: result.beforeBlits, keyBlits: result.keyBlits,
     before: result.before, after: result.after, keyLog: result.keyLog,
+    surfaceSha256,
   };
   if (shotPath) {
     await mkdir(dirname(shotPath), {recursive: true});

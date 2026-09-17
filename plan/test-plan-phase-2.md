@@ -32,10 +32,10 @@
   **Result:** `internal/memory/flash_command_test.go` verifies per-chip IDs, program bit clearing, bottom-boot sector erase, and restoring the array plus an in-progress unlock. `TestFlashHoldsTheDeviceContract` covers all mutable fields; `./ctl.sh test` passed.
 - [x] **TC-2.9: Oracle agreement to the peripheral wall** (covers: TASK-2.9, TASK-2.11) — checkpoints match
   until the first access to an unmodelled device, and the divergence names that device.
-  **Result:** `docs/reference/cpu-oracle-measurement.md` records browser and Go checkpoint runs. The first differing value is a read from the unmodelled video RAM data port `0xB00020B0` at instruction 3,204,424; PC and registers agree before it.
+  **Result:** `tools/cpu-gate.sh` and `tests/fixtures/cpu-oracle-anchors.txt` pin eight browser checkpoints through instruction 3,204,400 and the later divergent window. `docs/reference/cpu-oracle-measurement.md` records the full browser and Go comparison: the first differing value is a read from the unmodelled video RAM data port `0xB00020B0` at instruction 3,204,424; PC and registers agree before it.
 - [x] **TC-2.10: Built-binary firmware integration** (covers: TASK-2.11) — the built Go runner
   loads verified firmware, matches independent oracle checkpoint anchors through instruction
   3,204,400, and names the first unmodelled video RAM read at instruction 3,204,424. The
   integration check fails if the anchors or peripheral-wall diagnosis change. The guest-driven
   application handoff is retained as TC-3c.7 after the required device models exist.
-  **Result:** `tools/cpu-gate.sh` builds and runs `cmd/firmwaretrace` with the verified local firmware. Eight anchors from `tests/fixtures/cpu-oracle-anchors.txt` agree through instruction 3,204,400; the MIPS16 load at `0xBFC0AF5A` names the unmapped video RAM port, and the first divergent sampled state is 3,204,500. `./ctl.sh cpu-gate` passed. A corrupted oracle anchor made the gate fail with exit 1.
+  **Result:** `tools/cpu-gate.sh` builds and runs `cmd/firmwaretrace` with the verified local firmware. Eight anchors from `tests/fixtures/cpu-oracle-anchors.txt` agree through instruction 3,204,400; `tests/fixtures/cpu-oracle-wall.txt` records the browser's differing checkpoint at 3,204,500. The MIPS16 load at `0xBFC0AF5A` names the unmapped video RAM port. `./ctl.sh cpu-gate` passed. A corrupted oracle anchor made the gate fail with exit 1.

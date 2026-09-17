@@ -45,14 +45,15 @@ NEC manual plus `docs/reference/digibox-emulation.md` Part 1.
 |---|---|---|
 | `GPR[32]`, `HI`, `LO`, `PC` | uint32 | `MTHI`/`MTLO` appear only in context restores — omit the writes and HI/LO corrupt across task switches and nowhere else |
 | `isa` | bool | MIPS16 vs MIPS32. Lives in bit 0 of EPC and **must be in the state hash** |
-| `delayed` | struct{target uint32; armed bool} | the slot model; an interrupt taken while armed is the night the predecessor lost |
+| `delayed` | target/from addresses, target ISA, armed/immediate flags | the slot model; an interrupt taken while armed is the night the predecessor lost |
 | `COP0[32]` | uint32 | Count, Compare, Status, Cause, EPC, ErrorEPC, BadVAddr, Config |
-| `T` | bool | MIPS16's implicit compare register, set by `cmpi` **and by a bare `move $t8`** |
+| `GPR[24]` (`T`) | uint32 | MIPS16's implicit compare register; also the destination of a bare `move $t8` |
+| LL/SC reservation and pending interrupt state | address, flags, line mask | retained across snapshots and consumed only at the matching instruction boundary |
 
 **Interfaces:**
 - `Core.Step() error` — one instruction; an undecodable word returns an error and halts visibly
 - `Core.Interrupt(ip uint8)` — deferred by one instruction when `delayed.armed`
-- `Core.Snapshot(*snapcodec.Writer)` / `Restore` — the whole table above, ISA bit included
+- `Core.Snapshot() ([]byte, error)` / `Restore([]byte) error` — the whole table above, ISA bit included
 
 **Key patterns (non-obvious, measured — do not re-derive):**
 - `ERET` picks EPC or ErrorEPC by `Status.ERL`, has **no delay slot**, and bit 0 of the address is

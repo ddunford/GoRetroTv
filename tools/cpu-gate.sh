@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 anchors="${CPU_GATE_ANCHORS:-tests/fixtures/cpu-oracle-anchors.txt}"
+wall=tests/fixtures/cpu-oracle-wall.txt
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
@@ -29,8 +30,15 @@ done < "$anchors"
 # The Go bus does not model the video RAM port yet. The last anchor must match, then the
 # immediately following checkpoint must differ for the documented reason. This expectation is
 # replaced by farther oracle agreement when the Phase 3b video RAM device is attached.
+read -r wall_icount wall_hash < <(grep -v '^#' "$wall")
+[[ "$wall_icount" == 3204500 && "$wall_hash" == 0x8BC499D0 ]] || {
+    printf 'cpu gate: the oracle wall fixture changed unexpectedly\n' >&2; exit 1;
+}
 grep -Fqx '3204500 0x97464295' "$work/checkpoints" || {
     printf 'cpu gate: the measured first divergent checkpoint moved\n' >&2; exit 1;
+}
+! grep -Fqx "$wall_icount $wall_hash" "$work/checkpoints" || {
+    printf 'cpu gate: Go unexpectedly equals the oracle after the unmodelled video RAM read\n' >&2; exit 1;
 }
 grep -Eq '^3204423 PC=BFC0AF5A ISA=true ' "$work/diagnostics" || {
     printf 'cpu gate: the expected MIPS16 video RAM load was not executed\n' >&2; exit 1;

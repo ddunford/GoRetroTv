@@ -1,0 +1,2 @@
+# First divergent interval-100 checkpoint from the unchanged browser oracle.
+3204500 0x8BC499D0

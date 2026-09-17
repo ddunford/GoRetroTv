@@ -44,12 +44,17 @@ func run() error {
 	stopPC := flag.Uint64("stop-pc", 0, "stop on the first guest PC match (hex or decimal)")
 	tasks := flag.Bool("tasks", false, "print the guest Nucleus task census")
 	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
+	csiWire := flag.Bool("csi-wire", false, "print bytes the guest transmitted on CSI")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
+	ackCode := flag.Int("ack-code", -1, "additional CSI command code to acknowledge (-1 keeps measured default)")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
 	flag.Parse()
 	if *key < -1 || *key > 255 {
 		return fmt.Errorf("raw handset key %d is outside 0..255", *key)
+	}
+	if *ackCode < -1 || *ackCode > 255 {
+		return fmt.Errorf("CSI acknowledgement code %d is outside 0..255", *ackCode)
 	}
 	if *stopPC > 0xffffffff {
 		return fmt.Errorf("stop PC %#x exceeds 32-bit address space", *stopPC)
@@ -93,6 +98,9 @@ func run() error {
 		return err
 	}
 	serial := csi.New(interrupts)
+	if *ackCode >= 0 {
+		serial.SetAckPolicy([]uint8{0x52, 0x18, uint8(*ackCode)}) // #nosec G115 -- checked above.
+	}
 	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
 		return err
 	}
@@ -220,6 +228,9 @@ func run() error {
 		if err := reportTasks(os.Stderr, ram); err != nil {
 			return err
 		}
+	}
+	if *csiWire {
+		fmt.Fprintf(os.Stderr, "CSI transmitted % X\n", serial.Transmitted())
 	}
 	return nil
 }

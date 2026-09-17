@@ -12,15 +12,23 @@ function indexedHash(pixels: Buffer): number {
 test('deployed HTTPS serves its own assets and no developer routes', async ({ request }) => {
   const health = await request.get('/health');
   expect(health.ok()).toBe(true);
-  expect((await health.json()).status).toBe('ok');
-  for (const asset of ['/', '/styles.css', '/favicon.svg', '/dist/app.js',
-    '/dist/wire.js', '/dist/wire_generated.js']) {
+  const identity = await health.json() as { status: string; version: string };
+  expect(identity.status).toBe('ok');
+  for (const [asset, file] of [['/', 'web/index.html'], [`/styles.css?v=${identity.version}`, 'web/styles.css'],
+    ['/favicon.svg', 'web/favicon.svg'], [`/dist/${identity.version}/app.js`, 'web/dist/app.js'],
+    [`/dist/${identity.version}/wire.js`, 'web/dist/wire.js'],
+    [`/dist/${identity.version}/wire_generated.js`, 'web/dist/wire_generated.js']] as const) {
     const response = await request.get(asset);
     expect(response.status(), asset).toBe(200);
-    const file = asset === '/' ? 'web/index.html' : `web${asset}`;
-    expect(await response.body(), asset).toEqual(readFileSync(resolve(file)));
+    const expected = readFileSync(resolve(file));
+    expect(await response.body(), asset).toEqual(asset === '/'
+      ? Buffer.from(expected.toString()
+        .replaceAll('href="/styles.css"', `href="/styles.css?v=${identity.version}"`)
+        .replaceAll('src="/dist/app.js"', `src="/dist/${identity.version}/app.js"`))
+      : expected);
   }
   expect((await request.get('/dist/nonexistent.js')).status()).toBe(404);
+  expect((await request.get('/dist/not-this-build/app.js')).status()).toBe(404);
   for (const path of ['/debug/pprof/', '/debug/pprof/profile', '/debug/pprof/cmdline',
     '/instruments', '/metrics', '/trace']) {
     expect((await request.get(path)).status(), path).toBe(404);

@@ -21,7 +21,8 @@ import (
 func TestPageServesOnlyBuiltAssets(t *testing.T) {
 	root := t.TempDir()
 	assets := map[string]string{
-		"index.html": "<title>Sky box</title>", "styles.css": "body{color:blue}",
+		"index.html":  `<title>Sky box</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/dist/app.js"></script>`,
+		"styles.css":  "body{color:blue}",
 		"favicon.svg": "<svg></svg>", "dist/app.js": "import './wire.js'",
 		"dist/wire.js": "export const wire = 1", "dist/wire_generated.js": "export const version = 1",
 		"app.ts": "private TypeScript source",
@@ -44,7 +45,7 @@ func TestPageServesOnlyBuiltAssets(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	for path, want := range map[string]string{
-		"/": "Sky box", "/styles.css": "body{color:blue}", "/dist/app.js": "import './wire.js'",
+		"/": `/dist/dev/app.js`, "/styles.css": "body{color:blue}", "/dist/dev/app.js": "import './wire.js'",
 	} {
 		response, err := http.Get(server.URL + path)
 		if err != nil {
@@ -55,8 +56,11 @@ func TestPageServesOnlyBuiltAssets(t *testing.T) {
 		if err != nil || response.StatusCode != http.StatusOK || !strings.Contains(string(body), want) {
 			t.Fatalf("GET %s: status=%d body=%q err=%v", path, response.StatusCode, body, err)
 		}
+		if got := response.Header.Get("Cache-Control"); got != "no-store" {
+			t.Fatalf("GET %s Cache-Control = %q, want no-store", path, got)
+		}
 	}
-	for _, path := range []string{"/app.ts", "/missing.js", "/dist/missing.js", "/firmware/FLASH_U202.bin"} {
+	for _, path := range []string{"/app.ts", "/missing.js", "/dist/missing.js", "/dist/old/app.js", "/firmware/FLASH_U202.bin"} {
 		response, err := http.Get(server.URL + path)
 		if err != nil {
 			t.Fatal(err)

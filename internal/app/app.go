@@ -10,10 +10,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/ddunford/goretrotv/internal/config"
 	"github.com/ddunford/goretrotv/internal/httpx/handlers"
 	"github.com/ddunford/goretrotv/internal/httpx/middleware"
+	"github.com/ddunford/goretrotv/internal/version"
 	"github.com/ddunford/goretrotv/internal/web"
 )
 
@@ -43,14 +45,31 @@ func New(cfg *config.Config, logger *slog.Logger, transport *web.Transport) (htt
 func registerRoutes(mux *http.ServeMux, cfg *config.Config, assets fs.FS, transport *web.Transport) {
 	mux.HandleFunc("GET /health", handlers.Health)
 	mux.Handle("GET /ws", transport)
+	distPrefix := "/dist/" + version.Version + "/"
 	for path, name := range map[string]string{
 		"/": "index.html", "/styles.css": "styles.css", "/favicon.svg": "favicon.svg",
-		"/dist/app.js": "dist/app.js", "/dist/wire.js": "dist/wire.js", "/dist/wire_generated.js": "dist/wire_generated.js",
+		distPrefix + "app.js":            "dist/app.js",
+		distPrefix + "wire.js":           "dist/wire.js",
+		distPrefix + "wire_generated.js": "dist/wire_generated.js",
 	} {
 		asset := name
 		mux.HandleFunc("GET "+path, func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != path {
 				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			if asset == "index.html" {
+				data, err := fs.ReadFile(assets, asset)
+				if err != nil {
+					http.Error(w, "page asset missing", http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				page := string(data)
+				page = strings.ReplaceAll(page, `href="/styles.css"`, `href="/styles.css?v=`+version.Version+`"`)
+				page = strings.ReplaceAll(page, `src="/dist/app.js"`, `src="/dist/`+version.Version+`/app.js"`)
+				_, _ = w.Write([]byte(page))
 				return
 			}
 			http.ServeFileFS(w, r, assets, asset)

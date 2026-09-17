@@ -40,12 +40,16 @@ func run() error {
 	traceTo := flag.Uint64("trace-to", ^uint64(0), "first instruction excluded from the trace")
 	unmapped := flag.Bool("unmapped", false, "list unmapped access sites at the end")
 	bootState := flag.Bool("boot-state", false, "print bootloader handoff and decompression probes")
+	stopPC := flag.Uint64("stop-pc", 0, "stop on the first guest PC match (hex or decimal)")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
 	flag.Parse()
 	if *key < -1 || *key > 255 {
 		return fmt.Errorf("raw handset key %d is outside 0..255", *key)
+	}
+	if *stopPC > 0xffffffff {
+		return fmt.Errorf("stop PC %#x exceeds 32-bit address space", *stopPC)
 	}
 	images, err := firmware.Load(context.Background(), *dir)
 	if err != nil {
@@ -140,6 +144,7 @@ func run() error {
 		return err
 	}
 	var halt error
+	var retired uint64
 	for i := uint64(0); i < *steps; i++ {
 		if *key >= 0 && i == *keyAt {
 			// #nosec G115 -- raw key was checked to be within 0..255 above.
@@ -159,6 +164,12 @@ func run() error {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
 			break
 		}
+		retired = i + 1
+		// #nosec G115 -- stopPC was checked against the 32-bit address space.
+		if *stopPC != 0 && core.PC == uint32(*stopPC) {
+			fmt.Fprintf(os.Stderr, "reached PC=%08X after %d guest instructions; Cause=%08X EPC=%08X\n", core.PC, i+1, core.COP0[13], core.COP0[14])
+			break
+		}
 		if err := dmaController.Fault(); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
 			break
@@ -174,7 +185,7 @@ func run() error {
 	if halt != nil {
 		return halt
 	}
-	fmt.Fprintf(os.Stderr, "retired %d instructions; PC=%08X ISA=%v; unmapped accesses: %+v\n", *steps, core.PC, core.ISA, busMap.UnmappedTotals())
+	fmt.Fprintf(os.Stderr, "retired %d instructions; PC=%08X ISA=%v; unmapped accesses: %+v\n", retired, core.PC, core.ISA, busMap.UnmappedTotals())
 	if *unmapped {
 		for _, site := range busMap.Unmapped() {
 			fmt.Fprintf(os.Stderr, "unmapped %+v\n", site)
@@ -185,6 +196,9 @@ func run() error {
 			busMap.Read(0x800083CC, bus.Word), busMap.Read(0x800083D0, bus.Word),
 			busMap.Read(0xBFC20000, bus.Word), busMap.Read(0xBFC2002C, bus.Word),
 			busMap.Read(0x800009F4, bus.Word))
+		fmt.Fprintf(os.Stderr, "flash descriptor base=%08X data=%08X step=%08X interrupt pending=%08X enable=%08X\n",
+			busMap.Read(0x800050B0, bus.Word), busMap.Read(0x800050B4, bus.Word),
+			busMap.Read(0x800050BC, bus.Word), interrupts.Read(0x30, bus.Word), interrupts.Read(0x40, bus.Word))
 	}
 	return nil
 }

@@ -13,6 +13,8 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/csi"
 	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/device/dma"
+	"github.com/ddunford/goretrotv/internal/device/eeprom"
+	"github.com/ddunford/goretrotv/internal/device/i2c"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/device/osd"
 	"github.com/ddunford/goretrotv/internal/firmware"
@@ -38,6 +40,7 @@ func run() error {
 	bootState := flag.Bool("boot-state", false, "print bootloader handoff and decompression probes")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
+	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
 	flag.Parse()
 	if *key < -1 || *key > 255 {
 		return fmt.Errorf("raw handset key %d is outside 0..255", *key)
@@ -78,6 +81,20 @@ func run() error {
 	}
 	serial := csi.New(interrupts)
 	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
+		return err
+	}
+	store := eeprom.New()
+	mux := i2c.NewMux()
+	master := i2c.New(store, mux, interrupts)
+	if *nvram != "" {
+		if err := master.BindImage(*nvram); err != nil {
+			return err
+		}
+	}
+	if err := busMap.Attach(i2c.MuxBase, i2c.MuxSize, mux); err != nil {
+		return err
+	}
+	if err := busMap.Attach(i2c.Base, i2c.Size, master); err != nil {
 		return err
 	}
 	sectionDemux := demux.New()
@@ -135,6 +152,10 @@ func run() error {
 			break
 		}
 		if err := dmaController.Fault(); err != nil {
+			halt = fmt.Errorf("after %d instructions: %w", i, err)
+			break
+		}
+		if err := master.Fault(); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
 			break
 		}

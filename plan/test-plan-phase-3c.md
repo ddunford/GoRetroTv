@@ -7,7 +7,12 @@
   covered by `internal/device/csi/link_test.go`; guest dispatcher and event counters still need a
   completed application boot before this case can pass. **Blocked:** the real application handoff
   and guest dispatcher are not yet available in the Go trace; reopen after TASK-3c.9/3c.6.
-- [ ] **TC-3c.2: NVRAM survives a restart** (covers: TASK-3c.2, TASK-3c.7) — write, stop, start, read back.
+- [x] **TC-3c.2: NVRAM survives a restart** (covers: TASK-3c.2, TASK-3c.7) — write, stop, start, read back.
+  **Result:** `internal/device/i2c/controller_test.go` writes EEPROM bytes over I²C, stops,
+  constructs a new controller and store, loads the image from disk, and reads the same bytes
+  over a fresh I²C transaction. `internal/device/eeprom/store_test.go` checks the file image
+  independently. The I²C test also proves START alone raises no interrupt, while address-byte
+  completion does and `+0x50` clears it.
 - [ ] **TC-3c.3: Acknowledgement policy** (covers: TASK-3c.3, TASK-3c.7) — the documented set boots; acking
   everything is shown to change where the boot stops, proving the model is the working one.
 - [ ] **TC-3c.4: CA init proceeds past the card** (covers: TASK-3c.4, TASK-3c.7).

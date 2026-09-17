@@ -139,7 +139,7 @@ func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
 		if channel == 1 {
 			word >>= 16
 		}
-		match, mask := byte(word>>8), byte(word)
+		match, mask := byte((word>>8)&0xff), byte(word&0xff)
 		if section[offset]&mask != match&mask {
 			return nil
 		}

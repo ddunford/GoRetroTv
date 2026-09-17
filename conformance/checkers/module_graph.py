@@ -29,7 +29,7 @@ def main() -> int:
         return EXIT_HARNESS
     try:
         document = json.loads(result.stdout)
-        requirements = document["Require"]
+        requirements = document.get("Require", [])
         module = document["Module"]["Path"]
     except (json.JSONDecodeError, KeyError, TypeError) as exc:
         print(harness(RULE, f"go.mod did not yield a module and requirements: {exc}"))

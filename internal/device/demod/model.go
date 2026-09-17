@@ -35,7 +35,7 @@ func (m *Model) Read(off uint32, _ bus.Size) uint32 {
 }
 
 // Write feeds a byte to the currently selected indirect port.
-func (m *Model) Write(_ uint32, _ bus.Size, value uint32) { m.ShiftWrite(byte(value)) }
+func (m *Model) Write(_ uint32, _ bus.Size, value uint32) { m.ShiftWrite(byte(value & 0xff)) }
 
 // Answer returns the firmware-observed values. Guest writes do not alter these
 // read responses; doing so once stopped the reference machine booting.

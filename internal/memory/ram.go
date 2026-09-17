@@ -120,11 +120,11 @@ func (r *RAM) Write(off uint32, size bus.Size, value uint32) {
 	//exhaustive:ignore
 	switch size {
 	case bus.Byte:
-		b[0] = byte(value)
+		b[0] = byte(value & 0xff)
 	case bus.Half:
-		b[0], b[1] = byte(value>>8), byte(value)
+		b[0], b[1] = byte((value>>8)&0xff), byte(value&0xff)
 	default:
-		b[0], b[1], b[2], b[3] = byte(value>>24), byte(value>>16), byte(value>>8), byte(value)
+		b[0], b[1], b[2], b[3] = byte((value>>24)&0xff), byte((value>>16)&0xff), byte((value>>8)&0xff), byte(value&0xff)
 	}
 	r.markDirty(off, uint32(size))
 }
@@ -155,7 +155,7 @@ func (r *RAM) writeStraddling(off uint32, size bus.Size, value uint32) {
 		if a >= limit {
 			continue
 		}
-		r.bytes[a] = byte(value >> ((n - 1 - i) * 8))
+		r.bytes[a] = byte((value >> ((n - 1 - i) * 8)) & 0xff)
 		r.markDirty(a, 1)
 	}
 }

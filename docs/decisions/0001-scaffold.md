@@ -1,4 +1,4 @@
-# ADR 0001: The scaffold — Go 1.22, one module, no external dependencies
+# ADR 0001: The scaffold — one module, no external dependencies
 
 **Status:** accepted
 **Date:** 2026-09-16
@@ -20,8 +20,8 @@ downloads and runs fine. Measured afterwards: the whole tree builds, vets and pa
 1.27.1 with `go.mod` untouched, and `govulncheck` goes from **29 called standard-library
 vulnerabilities to zero**. The ceiling was never real.
 
-So the Go version is a live choice, tracked as `gort-4sx.15`, and **the decision below stands on
-its second justification only** — which was always the stronger one.
+Go 1.27.1 is now pinned in `go.mod`, CI and the Docker builder (`gort-4sx.15`). **The decision below
+stands on its second justification only** — which was always the stronger one.
 
 **The house scaffold's default dependency set buys nothing this project's conventions want.**
 `CLAUDE.md` already specifies "Go's own test framework", `plan/module-decisions.md` already records
@@ -50,8 +50,8 @@ format with the emulator and must not re-declare it.
 | OTel SDK, `sentry-go` | `log/slog` | `plan/module-decisions.md` → Observability records structured JSON logging with an `icount` field, and **"No Sentry"** explicitly. |
 | `testcontainers-go` | — | No database, no queue, no cache — all four recorded as not applicable. There is no container to stand up for a test. |
 
-`GOTOOLCHAIN=local` is exported by the Makefile and set in the Dockerfile so an accidental `go`
-directive above 1.22 fails at once rather than hanging on a download that cannot succeed.
+The `go 1.27.1` directive selects the same toolchain for local builds, CI and the Docker builder.
+The local Go 1.22 executable downloads that toolchain through the Go module proxy.
 
 ## Consequences
 
@@ -63,8 +63,8 @@ directive above 1.22 fails at once rather than hanging on a download that cannot
 - **This is a floor, not a vow.** A later phase that genuinely needs a dependency should take one:
   the WebSocket transport (phase 5) and ffmpeg bindings (Video) are the expected candidates. What
   this decision rules out is acquiring dependencies *by default*, before a requirement names them.
-- Revisit when the host can run a current Go: the pinning problem disappears and `chi` becomes a
-  free choice again rather than a cost.
+- The host can run current Go through the module proxy. If routing requirements grow, `chi` is a
+  choice on its own merits rather than a toolchain constraint.
 
 ## Alternatives rejected
 
@@ -75,8 +75,8 @@ directive above 1.22 fails at once rather than hanging on a download that cannot
   `dl.google.com` is unreachable", and that was **wrong on both counts**. Toolchains come from the
   module proxy, not `dl.google.com`, and the proxy is reachable; the original test asked for a
   version string that does not exist. No upgrade of the *host's* Go is needed at all — a `go`
-  directive plus dropping `GOTOOLCHAIN=local` is the whole change. Tracked as `gort-4sx.15`, a
-  precondition of publishing, because it takes the tree from 29 called standard-library
+  directive plus dropping `GOTOOLCHAIN=local` is the whole change. `gort-4sx.15` tracks this
+  publication precondition, which takes the tree from 29 called standard-library
   vulnerabilities to zero.
 
   **The lesson worth keeping is the shape of the mistake, not the fact of it.** A single failed

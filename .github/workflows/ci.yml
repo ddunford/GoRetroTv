@@ -17,12 +17,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # The host this project is developed on cannot fetch a newer toolchain, so a `go` directive above
-  # 1.22 must fail loudly here too rather than succeed in CI and fail on every developer machine.
-  # See docs/decisions/0001-scaffold.md.
-  GOTOOLCHAIN: local
-
 jobs:
   conformance:
     name: architecture conformance
@@ -31,7 +25,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.22'
+          go-version: '1.27.1'
           cache: false
       - name: Run architecture conformance
         run: ./ctl.sh conformance --classification STATIC
@@ -52,7 +46,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.22'
+          go-version: '1.27.1'
           # Nothing to cache. The module has no external dependencies (ADR 0001), so there is no
           # go.sum, `go mod download` has nothing to fetch, and pointing setup-go at a lockfile
           # that does not exist only produces a warning nobody reads.
@@ -86,11 +80,12 @@ jobs:
         # step with this one. The action major and the linter version are pinned together because
         # v8 was the first that supports golangci-lint v2 (>= v2.1.0), and the linter version is
         # pinned to the one developers run locally - a gate that finds different things in CI than
-        # on the machine that wrote the code is a gate people learn to ignore. v9 is v8 plus the
+        # on the machine that wrote the code is a gate people learn to ignore. v2.13.2 supports Go
+        # 1.27; v2.1.6 was built with Go 1.25 and cannot analyze this module. v9 is v8 plus the
         # node24 runtime, which the runners now require; it keeps v8's `>= v2.1.0` constraint.
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.1.6
+          version: v2.13.2
 
       - name: go test -race
         # The race detector is the arbiter. Nothing in the instruction loop is concurrent by
@@ -115,28 +110,19 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.22'
+          go-version: '1.27.1'
           cache: false
 
       - name: Install govulncheck
-        # PINNED, and to v1.1.4 specifically: it is the newest release whose go directive is
-        # `go >= 1.22.0`. v1.2 and v1.3 require Go 1.25 to build, so @latest fails outright here -
-        # which is worth knowing, because the failure is at install time and would leave the job
-        # red for a reason that has nothing to do with this repository's code.
+        # Pin the scanner so a new release cannot change the CI verdict without a reviewed edit.
         run: |
           set -euo pipefail
-          GOTOOLCHAIN=local go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
           "$(go env GOPATH)/bin/govulncheck" -version
 
-      - name: Anything newly vulnerable?
-        # Not a bare `govulncheck ./...`. This project has no external dependencies, so the
-        # standard library is the whole supply-chain surface - and the Go 1.22 line is out of
-        # support, so 26 of the 32 vulnerabilities this tree reaches are fixed only in 1.23 or
-        # later and cannot be fixed here at all. A plain scan would be red on every run for ever,
-        # and a permanently red gate is one people stop reading.
-        #
-        # So the gate asks what can actually be acted on: is there anything NEW? The accepted set
-        # and its reasoning are in tools/govulncheck-baseline.txt.
+      - name: No called vulnerabilities
+        # The baseline is empty on Go 1.27.1. The wrapper rejects any new called finding and
+        # guards against a malformed or empty scan report.
         run: |
           set -euo pipefail
           export PATH="$(go env GOPATH)/bin:$PATH"

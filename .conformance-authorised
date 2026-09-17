@@ -50,3 +50,7 @@ digest: 2a8e9054ebb9f0c7e82ed869d45cb6632751093764322a0ed0c9f137010c0f60
   when: 2026-09-17T12:17:17Z
    why: Add private named snapshot verbs and update vulnerability gate description
 
+digest: 008ef911bffde77c6ac4f322a07969ca4c99e04e40443908e4f1016dbf1a2ce6
+  when: 2026-09-17T12:25:44Z
+   why: Upgrade Go toolchain and keep conformance and security gates working
+

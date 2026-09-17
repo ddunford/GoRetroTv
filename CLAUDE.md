@@ -10,7 +10,7 @@ one tool it says so and names the equivalent for the others.*
 
 | Layer | Technology |
 |---|---|
-| Emulator core | Go 1.22+, single binary, no CGo in the core |
+| Emulator core | Go 1.27.1, single binary, no CGo in the core |
 | Browser client | One static page + a small TypeScript module — **no SPA framework** |
 | Transport | WebSocket: framebuffer out, handset keys in |
 | Persistence | Files only — NVRAM image, machine snapshots, recorded traces |

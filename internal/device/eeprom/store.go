@@ -31,7 +31,9 @@ func (*Store) Name() string { return "24c128" }
 func (s *Store) Read(off uint32, _ bus.Size) uint32 { return uint32(s.image[off&(Capacity-1)]) }
 
 // Write programs a byte at the 14-bit chip address.
-func (s *Store) Write(off uint32, _ bus.Size, value uint32) { s.image[off&(Capacity-1)] = byte(value) }
+func (s *Store) Write(off uint32, _ bus.Size, value uint32) {
+	s.image[off&(Capacity-1)] = byte(value & 0xff)
+}
 
 // Reset returns the chip to blank state for the device contract.
 func (s *Store) Reset() {

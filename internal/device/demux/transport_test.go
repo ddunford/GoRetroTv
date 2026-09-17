@@ -58,7 +58,8 @@ func TestTransportRejectsUnrepresentableWritePointer(t *testing.T) {
 	if err := d.BindRAM(ram); err != nil {
 		t.Fatal(err)
 	}
-	section := []byte{0x00, 0xb0, 0x04}
+	section := make([]byte, 0, 7)
+	section = append(section, 0x00, 0xb0, 0x04)
 	var checksum [4]byte
 	binary.BigEndian.PutUint32(checksum[:], mpegCRC(section))
 	section = append(section, checksum[:]...)

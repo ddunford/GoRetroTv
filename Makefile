@@ -9,10 +9,6 @@ LDFLAGS := -s -w \
   -X $(MODULE)/internal/version.Commit=$(COMMIT) \
   -X $(MODULE)/internal/version.Date=$(DATE)
 
-# The host has no fetchable newer toolchain (dl.google.com is unreachable here), so an accidental
-# `go` directive above 1.22 must fail loudly at build time rather than hang on a download.
-export GOTOOLCHAIN := local
-
 .PHONY: build run test test-race test-cover lint vet fmt tidy vuln docker clean help
 
 help: ## Show this help

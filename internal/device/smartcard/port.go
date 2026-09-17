@@ -74,7 +74,7 @@ func (p *Port) Write(off uint32, size bus.Size, value uint32) {
 		p.pair40 = value
 	case 0x50:
 		p.txDelay = ByteInstructions
-		p.accept(byte(value))
+		p.accept(byte(value & 0xff))
 	case 0x60:
 		p.status = 0
 	case 0x70:
@@ -145,7 +145,8 @@ func (p *Port) accept(b byte) {
 	if len(p.reply)+len(reply)+1 > maxFrameBytes {
 		return
 	}
-	p.reply = append(p.reply, append(reply, checksum)...)
+	p.reply = append(p.reply, reply...)
+	p.reply = append(p.reply, checksum)
 	p.rxDelay = 2 * ReplyGapInstructions
 }
 

@@ -171,7 +171,7 @@ if [ -n "$staged_go" ] && command -v go >/dev/null 2>&1; then
     # pipe's last command, and a guard that misreads its own result is worse than no guard.
     vet_out="$(mktemp)"
     # shellcheck disable=SC2086
-    if ! GOTOOLCHAIN=local go vet $pkgs > "$vet_out" 2>&1; then
+    if ! go vet $pkgs > "$vet_out" 2>&1; then
       say "✗ go vet failed in the packages being committed:"
       sed 's/^/    /' < "$vet_out" >&2
       go_fail=1

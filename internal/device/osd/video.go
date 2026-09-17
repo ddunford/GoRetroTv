@@ -77,7 +77,7 @@ func (v *Video) Write(off uint32, size bus.Size, value uint32) {
 	case 0xb0:
 		at := v.addr & (VRAMSize - 1)
 		for i := uint32(0); i < 4; i++ {
-			v.data[(at+i)&(VRAMSize-1)] = byte(value >> (24 - 8*i))
+			v.data[(at+i)&(VRAMSize-1)] = byte((value >> (24 - 8*i)) & 0xff)
 		}
 		v.addr = (at + 4) & (VRAMSize - 1)
 	case 0xb4:

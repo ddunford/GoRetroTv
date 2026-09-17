@@ -85,13 +85,14 @@ func (l *Link) Write(off uint32, size bus.Size, value uint32) {
 	case 0x00:
 		l.control = value
 	case 0x10:
+		transmitted := byte(value & 0xff)
 		if l.enabled() && len(l.transmitted) < MaxQueuedBytes {
-			l.transmitted = append(l.transmitted, byte(value))
+			l.transmitted = append(l.transmitted, transmitted)
 		}
 		if l.enabled() {
-			l.boxBusy = byte(value) != 0
+			l.boxBusy = transmitted != 0
 			l.txSeen = true
-			l.accept(byte(value))
+			l.accept(transmitted)
 		}
 	case 0x20:
 		if value&1 == 0 {

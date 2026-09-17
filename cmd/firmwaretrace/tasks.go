@@ -126,4 +126,6 @@ func taskName(ram *memory.RAM, off uint32) []byte {
 	return name[:end]
 }
 
-func magicBytes(v uint32) []byte { return []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)} }
+func magicBytes(v uint32) []byte {
+	return []byte{byte((v >> 24) & 0xff), byte((v >> 16) & 0xff), byte((v >> 8) & 0xff), byte(v & 0xff)}
+}

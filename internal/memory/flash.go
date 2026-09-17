@@ -109,7 +109,7 @@ func (f *Flash) Write(off uint32, size bus.Size, value uint32) {
 		for i := uint32(0); i < uint32(size); i++ {
 			at := off + i
 			if uint64(at) < uint64(len(f.bytes)) {
-				f.bytes[at] &= byte(value >> ((uint32(size) - 1 - i) * 8))
+				f.bytes[at] &= byte((value >> ((uint32(size) - 1 - i) * 8)) & 0xff)
 			}
 		}
 		return

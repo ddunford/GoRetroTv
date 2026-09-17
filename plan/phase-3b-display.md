@@ -22,7 +22,7 @@ start without claiming the menu was seen.
 - [x] `TASK-3b.5` Palette/CLUT and bit depth (2, 4 or 8 bpp per window) → `/go-engineer` [TC-3b.5]
 - [ ] `TASK-3b.6` Oracle comparison to a drawn menu; then compare the **framebuffer** itself, not just checkpoints → `/go-engineer` [TC-3b.6]
 - [x] `TASK-3b.7` ⫘ Drawing hardware integration tests → `/go-engineer` [TC-3b.1, TC-3b.2, TC-3b.3, TC-3b.4, TC-3b.5]
-- [ ] `TASK-3b.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
+- [x] `TASK-3b.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns
 - **Before the application programs the OSD the panel reads video RAM at a guessed bit depth and

@@ -16,4 +16,4 @@ The reviewer also checked allocation bounds, VRAM wrapping, display parsing, sna
 
 ## Verification and limits
 
-`./ctl.sh test`, `./ctl.sh lint`, and `./ctl.sh cpu-gate` passed after the fixes; the CPU gate matched nine oracle anchors through instruction 3,204,424. The complete drawn-menu comparison is still open under `gort-omj.6` / TC-3b.6 until the Phase 3c application boot and handset link are available. This audit does not claim the menu appeared.
+`./ctl.sh test`, `./ctl.sh lint`, `./ctl.sh cpu-gate`, `./ctl.sh conformance`, `./ctl.sh vuln`, and `./ctl.sh gate` passed after the fixes. Conformance enforced seven rules and caught all 21 mutation probes; vulnerability checking reported 32 accepted findings and zero new. The CPU gate matched nine oracle anchors through instruction 3,204,424. The complete drawn-menu comparison is still open under `gort-omj.6` / TC-3b.6 until the Phase 3c application boot and handset link are available. This audit does not claim the menu appeared.

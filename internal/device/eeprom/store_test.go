@@ -1,7 +1,9 @@
 package eeprom
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/bus"
@@ -33,6 +35,30 @@ func TestPersistsAcrossNewMachine(t *testing.T) {
 	}
 	if got := second.Read(0x400, bus.Byte); got != 1 {
 		t.Fatalf("reload = %#x", got)
+	}
+}
+
+func TestLoadRejectsOversizedImageWithoutChangingChip(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "oversized.nvram")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(1 << 30); err != nil {
+		_ = f.Close()
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store := New()
+	store.Write(0x400, bus.Byte, 0x42)
+	if err := store.Load(path); err == nil || !strings.Contains(err.Error(), "exceeds 16384 bytes") {
+		t.Fatalf("oversized image error = %v", err)
+	}
+	if got := store.Read(0x400, bus.Byte); got != 0x42 {
+		t.Fatalf("rejected image changed chip byte to %#x", got)
 	}
 }
 

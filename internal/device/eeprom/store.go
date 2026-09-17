@@ -3,6 +3,7 @@ package eeprom
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -48,7 +49,7 @@ func (s *Store) Load(path string) error {
 		return fmt.Errorf("eeprom: image path is empty")
 	}
 	// #nosec G304 -- path is the explicit NVRAM image chosen by the caller.
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if os.IsNotExist(err) {
 		s.Reset()
 		return nil
@@ -56,7 +57,15 @@ func (s *Store) Load(path string) error {
 	if err != nil {
 		return fmt.Errorf("eeprom: load %s: %w", path, err)
 	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, Capacity+1))
+	if err != nil {
+		return fmt.Errorf("eeprom: load %s: %w", path, err)
+	}
 	if len(data) != Capacity {
+		if len(data) > Capacity {
+			return fmt.Errorf("eeprom: image %s exceeds %d bytes", path, Capacity)
+		}
 		return fmt.Errorf("eeprom: image %s has %d bytes; need %d", path, len(data), Capacity)
 	}
 	copy(s.image[:], data)

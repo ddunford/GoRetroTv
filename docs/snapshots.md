@@ -34,3 +34,10 @@ two length-reader entries, a nine-byte ring advance and cleared interrupt status
 The image's restored state hash is `C918AA06`; `./ctl.sh snapshot inspect post-tdt`
 reports it without running any instructions. The image is an intermediate SI state;
 NIT and SDT acquisition still need their own guest proof.
+
+The private `si-registered` image is a later, clean state at instruction 650,000,000.
+Its restored state hash is `32D1E63B`. By then the guest has polled demodulator
+register 11 and programmed a NIT match for network `0x0020` plus a TOT match.
+It has received no broadcast sections. Use it for controlled SI input experiments;
+the guest's filters, rather than a guessed network ID, determine which sections
+should be sent.

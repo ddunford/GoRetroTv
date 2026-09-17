@@ -11,7 +11,10 @@
   back its own writes at `+0x124` must hang, proving the model is the working one.
   **Result:** `TestLISRPointerHandshake` exercises two selected filter pointers and a bounded LISR
   spin; an overlay that echoes the busy command fails at the spin limit. `./ctl.sh test` passed.
-- [ ] **TC-3a.4: PID channels and match units are separate index spaces** (covers: TASK-3a.4, TASK-3a.8).
+- [x] **TC-3a.4: PID channels and match units are separate index spaces** (covers: TASK-3a.4, TASK-3a.8).
+  **Result:** `TestPIDChannelsAndMatchUnitsAreIndependent` programs PID channel 22 while match
+  unit 22 cannot exist, then programs unit 0 and verifies the armed PIDs are unchanged. Snapshot
+  coverage, `./ctl.sh test` and `./ctl.sh lint` passed.
 - [ ] **TC-3a.5: A pushed section is read by the firmware** (covers: TASK-3a.5, TASK-3a.8) — including the
   appended byte; without it the task walks off the end of each section.
 - [ ] **TC-3a.6: The demux interrupt reaches its handler** (covers: TASK-3a.6, TASK-3a.8).

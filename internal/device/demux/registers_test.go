@@ -1,6 +1,7 @@
 package demux
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/bus"
@@ -46,6 +47,9 @@ func TestDemuxRegistersCarryAllStateInSnapshot(t *testing.T) {
 			d.complete(22)
 			d.writePointer[22] = 0x45c24
 			d.Write(0x124, bus.Word, 0x4000|(22<<2))
+			d.Write(0x6c, bus.Word, 0x14014)
+			d.Write(0x148, bus.Word, 0x4aff)
+			d.Write(0x144, bus.Word, 0xc000)
 		},
 		Disturb: func(device bus.Device) {
 			d := device.(*Demux)
@@ -53,11 +57,45 @@ func TestDemuxRegistersCarryAllStateInSnapshot(t *testing.T) {
 			d.complete(23)
 			d.writePointer[22] = 0x45c30
 			d.Write(0x124, bus.Word, 0x4000|(23<<2))
+			d.Write(0x70, bus.Word, 0x14011)
+			d.Write(0x148, bus.Word, 0x4bff)
+			d.Write(0x144, bus.Word, 0xc000)
 		},
 		Constant: []string{"name"},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPIDChannelsAndMatchUnitsAreIndependent(t *testing.T) {
+	t.Parallel()
+	d := New()
+	// Channel 22 is the TDT PID 0x14. The 16 match units cannot be indexed by 22.
+	d.Write(0xD8, bus.Word, 1<<22)
+	d.Write(0x14+4*22, bus.Word, 0x14014)
+	d.Write(0x14+4*23, bus.Word, 0x14011)
+	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x14}) {
+		t.Fatalf("armed PIDs = %v, want TDT only", got)
+	}
+	d.Write(0xD8, bus.Word, 1<<23)
+	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x14, 0x11}) {
+		t.Fatalf("armed PIDs = %v", got)
+	}
+	d.Write(0x148, bus.Word, 0x4aff)
+	d.Write(0x144, bus.Word, 0xc000)
+	if got, ok := d.Match(0, 0); !ok || got != (MatchByte{Value: 0x4a, Mask: 0xff}) {
+		t.Fatalf("match unit 0 byte 0 = %+v, %t", got, ok)
+	}
+	if _, ok := d.Match(22, 0); ok {
+		t.Fatal("match unit 22 must not exist merely because PID channel 22 exists")
+	}
+	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x14, 0x11}) {
+		t.Fatalf("programming match unit 0 changed channel PIDs: %v", got)
+	}
+	d.Write(0x14+4*23, bus.Word, 0x1fff)
+	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x14}) {
+		t.Fatalf("disabled channel still armed: %v", got)
 	}
 }
 

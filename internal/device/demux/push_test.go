@@ -25,10 +25,13 @@ func TestPushWritesSectionAndHardwareByteToBoardDRAM(t *testing.T) {
 	d.Write(0xD8, bus.Word, 1<<22)
 	d.Write(0x14+4*22, bus.Word, 0x14014)
 	section := []byte{0x70, 0x70, 0x05, 0xc3, 0x50, 0x00, 0x00, 0x00}
+	base := RingBase(22)
+	// A fresh DRAM page already contains zero; poison the trailer position so a missing
+	// hardware-byte write cannot pass merely because of its initial contents.
+	b.Write(base+uint32(len(section)), bus.Byte, 0xa5) // #nosec G115 -- fixed fixture length.
 	if err := d.Push(0x14, section); err != nil {
 		t.Fatal(err)
 	}
-	base := RingBase(22)
 	for i, want := range append(append([]byte(nil), section...), 0) {
 		if got := b.Read(base+uint32(i), bus.Byte); got != uint32(want) { // #nosec G115 -- small fixture index
 			t.Fatalf("ring byte %d = %#x, want %#x", i, got, want)

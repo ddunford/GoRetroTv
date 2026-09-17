@@ -6,16 +6,19 @@
 - [x] **TC-3a.2: Enable and status semantics** (covers: TASK-3a.2, TASK-3a.8) — write-one-to-set and
   write-zero-to-clear, each asserted in the direction it actually works. Swapping them must fail.
   **Result:** `internal/device/demux/registers_test.go` verifies cumulative enable bits, complement
-  acknowledgement, reset and snapshot restore; `./ctl.sh test` passed.
-- [!] **TC-3a.3: The LISR handshake completes** (covers: TASK-3a.3, TASK-3a.8) — and a register file that reads
+  acknowledgement, reset and snapshot restore. Separate write-one-to-clear enable and write-one-to-set
+  status mutations each failed `TestEnableSetsAndStatusClears` at the expected assertion.
+- [x] **TC-3a.3: The LISR handshake completes** (covers: TASK-3a.3, TASK-3a.8) — and a register file that reads
   back its own writes at `+0x124` must hang, proving the model is the working one.
-  **Reconcile note (2026-09-17):** `TestLISRPointerHandshake` exercises two selected filter pointers
-  and a bounded LISR spin on the working model, but it does not apply the claimed echoing-register
-  overlay. The negative control remains unproved; `gort-l14.17` must run it before this TC passes.
+  **Result:** `TestLISRPointerHandshake` completes for filters 22 and 23. A test-only echoing
+  command-register overlay stays busy for eight bounded LISR polls in
+  `TestEchoingCommandRegisterStallsLISR`. A production `+0x124` read mutation that echoes the
+  selected busy command fails `TestLISRPointerHandshake` with the expected hang assertion.
 - [x] **TC-3a.4: PID channels and match units are separate index spaces** (covers: TASK-3a.4, TASK-3a.8).
   **Result:** `TestPIDChannelsAndMatchUnitsAreIndependent` programs PID channel 22 while match
   unit 22 cannot exist, then programs unit 0 and verifies the armed PIDs are unchanged. Snapshot
-  coverage, `./ctl.sh test` and `./ctl.sh lint` passed.
+  coverage, `./ctl.sh test` and `./ctl.sh lint` passed. A channel-index join mutation loses
+  armed PID `0x52` and fails `TestJoiningMatchUnitsToPIDChannelsInventsMissingPID`.
 - [x] **TC-3a.5: A pushed section is read by the firmware** (covers: TASK-3a.5, TASK-3a.8) — including the
   appended byte; without it the task walks off the end of each section.
   **Result:** With the real firmware and the unchanged browser oracle at instruction 469,000,000,
@@ -23,8 +26,9 @@
   firmware's length reader at `0x800044BC` ran twice and the filter record's last-read pointer
   advanced from `0xA07E2000` to `0xA07E2009` (section plus the hardware's status byte). The
   same 468M Go snapshot without a feed left the pointer unchanged and the reader unexecuted.
-  `TestPushWritesSectionAndHardwareByteToBoardDRAM` proves two consecutive sections are separated
-  by that byte. Evidence: `.artifacts/oracle-si-tdt-470m.json`,
+  `TestPushWritesSectionAndHardwareByteToBoardDRAM` poisons the trailer position before delivery
+  and proves two consecutive sections are separated by the hardware byte. Removing just the
+  trailer write leaves the poison and fails this test. Evidence: `.artifacts/oracle-si-tdt-470m.json`,
   `.artifacts/go-si-tdt-470m-even.log`, `.artifacts/go-si-control-470m.log`.
 - [x] **TC-3a.6: The demux interrupt reaches its handler** (covers: TASK-3a.6, TASK-3a.8).
   **Result:** For the same TDT, both machines executed the guest LISR `0x800041B4` once, the

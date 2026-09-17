@@ -62,7 +62,7 @@ including section read pointers and nine guest PC counts. The diagnostic feeder 
 sections at recorded instruction counts; autonomous carousel delivery remains Phase 6 work.
 
 **Test checklist:**
-- [ ] Swapping set/clear semantics on `+0xD8`/`+0xB8` fails
-- [ ] A `+0x124` that echoes its writes hangs, proving the model is the working one
-- [ ] Joining match units to channels by index is shown to produce the artefact it produced before
-- [ ] Omitting the appended byte fails section delivery
+- [x] Swapping set/clear semantics on `+0xD8`/`+0xB8` fails (`TestEnableSetsAndStatusClears`; both directions independently mutated)
+- [x] A `+0x124` that echoes its writes hangs, proving the model is the working one (`TestEchoingCommandRegisterStallsLISR`; mutated production read fails `TestLISRPointerHandshake`)
+- [x] Joining match units to channels by index is shown to produce the artefact it produced before (`TestJoiningMatchUnitsToPIDChannelsInventsMissingPID`; joined-index mutation loses PID `0x52`)
+- [x] Omitting the appended byte fails section delivery (`TestPushWritesSectionAndHardwareByteToBoardDRAM`; poisoned trailer position survives the omitted-write mutation)

@@ -153,3 +153,59 @@ func TestLISRPointerHandshake(t *testing.T) {
 		t.Fatalf("reset pointer = %#x", got)
 	}
 }
+
+// echoingCommandRegister models the tempting but incorrect generic register file:
+// the last command written at +0x124 is returned on the next read.
+type echoingCommandRegister struct {
+	*Demux
+	command uint32
+}
+
+func (e *echoingCommandRegister) Write(off uint32, size bus.Size, value uint32) {
+	e.Demux.Write(off, size, value)
+	if off == 0x124 {
+		e.command = value
+	}
+}
+
+func (e *echoingCommandRegister) Read(off uint32, size bus.Size) uint32 {
+	if off == 0x124 {
+		return e.command
+	}
+	return e.Demux.Read(off, size)
+}
+
+func TestEchoingCommandRegisterStallsLISR(t *testing.T) {
+	t.Parallel()
+	const command = 0x4000 | (22 << 2)
+	working := New()
+	working.Write(0x124, bus.Word, command)
+	if working.Read(0x124, bus.Word)&0x4000 != 0 {
+		t.Fatal("working command register never clears busy")
+	}
+	echoing := &echoingCommandRegister{Demux: New()}
+	echoing.Write(0x124, bus.Word, command)
+	for spin := 0; spin < 8; spin++ {
+		if echoing.Read(0x124, bus.Word)&0x4000 == 0 {
+			t.Fatalf("echoing command register unexpectedly cleared busy after %d spins", spin)
+		}
+	}
+}
+
+func TestJoiningMatchUnitsToPIDChannelsInventsMissingPID(t *testing.T) {
+	t.Parallel()
+	d := New()
+	d.Write(0xD8, bus.Word, 1<<21)
+	d.Write(0x14+4*21, bus.Word, 0x14052)
+	d.Write(0x148, bus.Word, 0x73ff)
+	d.Write(0x144, bus.Word, 0xc005) // Match unit 5, while PID 0x52 is on channel 21.
+	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x52}) {
+		t.Fatalf("actual armed PIDs = %v, want PID 0x52", got)
+	}
+	if got, ok := d.Match(5, 0); !ok || got != (MatchByte{Value: 0x73, Mask: 0xff}) {
+		t.Fatalf("match unit 5 = %+v, %t", got, ok)
+	}
+	if _, ok := d.Match(21, 0); ok {
+		t.Fatal("a channel-index join would invent match unit 21")
+	}
+}

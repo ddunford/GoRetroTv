@@ -97,6 +97,42 @@ func TestChannel8UploadsPlaneAndBootChannel5DoesNotInterrupt(t *testing.T) {
 	}
 }
 
+func TestDMARejectsWrappedLengthsAndDescriptorAddresses(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		channel  uint8
+		pointer  uint32
+		src, end uint32
+		control  uint32
+	}{
+		{name: "wrapped source length", channel: 8, pointer: 0x1000, src: 0, end: 0xffffffff},
+		{name: "wrapped blitter length", channel: 12, pointer: 0x1000, src: 0, end: 0xffffffff},
+		{name: "wrapped descriptor offsets", channel: 8, pointer: 0xfffffff4},
+		{name: "short blitter command", channel: 12, pointer: 0x1000, src: 0x80002000, end: 0x80002003, control: 4},
+		{name: "source crosses DRAM end", channel: 8, pointer: 0x1000, src: 0x81fffffe, end: 0x82000001},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ram := testRAM(t)
+			d := New(ram, blitter.New(ram), osd.NewVideo(), irq.New(nil))
+			if tc.pointer == 0x1000 {
+				ram.Write(0x1000+12, bus.Word, tc.src)
+				ram.Write(0x1000+20, bus.Word, tc.control)
+				ram.Write(0x1000+32, bus.Word, tc.end)
+			}
+			d.Write(0x40+uint32(tc.channel)*0x10, bus.Word, tc.pointer)
+			d.Write(0x10, bus.Word, 1<<tc.channel)
+			if err := d.Fault(); err == nil {
+				t.Fatal("invalid DMA transfer completed without a fault")
+			}
+			if got := d.Read(0x120, bus.Word); got != 0 {
+				t.Fatalf("invalid DMA transfer signalled completion %#x", got)
+			}
+		})
+	}
+}
+
 func TestControllerHoldsTheDeviceContract(t *testing.T) {
 	t.Parallel()
 	err := bustest.CheckSnapshot(bustest.Check{

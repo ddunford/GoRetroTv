@@ -55,10 +55,9 @@ func (c *Core) State() statehash.State {
 }
 
 // ObserveCheckpoint samples only states the browser oracle can reach. Its MIPS32 loop retires
-// a branch and slot atomically, so a Go checkpoint between them would describe no comparable
-// state and would omit the pending target from the hash.
+// a branch and slot atomically; MIPS16 executes its slot in a separate pump iteration.
 func (c *Core) ObserveCheckpoint(e *statehash.Emitter, icount uint64) error {
-	if c.delayed.armed {
+	if c.delayed.armed && !c.ISA {
 		return nil
 	}
 	return e.Observe(icount, c.State())

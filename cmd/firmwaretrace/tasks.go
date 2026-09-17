@@ -10,29 +10,53 @@ import (
 	"github.com/ddunford/goretrotv/internal/platform/instrument"
 )
 
-// reportTasks scans the guest's own TCB magic and checks that the census found
-// its subject. Counts vary as the bootloader starts and suspends tasks.
+// reportTasks walks the guest's created-task list from SMTTask. A raw RAM scan
+// misses valid tasks whose names are no longer printable, and silently turns a
+// complete boot into a plausible lower count.
 func reportTasks(out io.Writer, ram *memory.RAM) error {
-	count := 0
+	var seed uint32
 	for off := uint32(0); off+0x38 <= ram.Size(); off += 4 {
 		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
 			continue
 		}
-		var name [8]byte
-		valid := true
-		for i := range name {
-			name[i] = byte(ram.Read(off+0x10+uint32(i), bus.Byte)) // #nosec G115 -- bus.Byte fits in uint8
-			if name[i] != 0 && (name[i] < 0x20 || name[i] > 0x7e) {
-				valid = false
-			}
+		if string(taskName(ram, off)) == "SMTTask" {
+			seed = memory.DRAMBase + off
+			break
 		}
-		if !valid {
-			continue
+	}
+	seeds := 0
+	if seed != 0 {
+		seeds = 1
+	}
+	if err := instrument.MustFind("Nucleus task census", "SMTTask seed", seeds, 1); err != nil {
+		return err
+	}
+	seen := make(map[uint32]bool)
+	var offsets []uint32
+	for at := seed; ; {
+		if at < memory.DRAMBase || at-memory.DRAMBase+0x70 > ram.Size() || at&3 != 0 {
+			return fmt.Errorf("task census: created list left DRAM at %08X", at)
 		}
-		end := 0
-		for end < len(name) && name[end] != 0 {
-			end++
+		if seen[at] {
+			return fmt.Errorf("task census: created list repeated %08X before returning to seed", at)
 		}
+		if len(offsets) >= 200 {
+			return fmt.Errorf("task census: created list exceeds 200 tasks")
+		}
+		seen[at] = true
+		off := at - memory.DRAMBase
+		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
+			return fmt.Errorf("task census: created list points to non-task at %08X", at)
+		}
+		offsets = append(offsets, off)
+		next := ram.Read(off+4, bus.Word)
+		if next == seed {
+			break
+		}
+		at = next
+	}
+	for count, off := range offsets {
+		name := taskName(ram, off)
 		status := ram.Read(off+0x18, bus.Byte)
 		runs := ram.Read(off+0x1c, bus.Word)
 		sp := ram.Read(off+0x2c, bus.Word)
@@ -47,10 +71,9 @@ func reportTasks(out io.Writer, ram *memory.RAM) error {
 		}
 		cleanup := ram.Read(off+0x68, bus.Word)
 		suspend := ram.Read(off+0x6c, bus.Word)
-		if _, err := fmt.Fprintf(out, "task %d TCB=%08X name=%q status=%d runs=%d SP=%08X cleanup=%08X suspend=%08X stack-code-words=[%s]\n", count, memory.DRAMBase+off, name[:end], status, runs, sp, cleanup, suspend, strings.Join(codeWords, " ")); err != nil {
+		if _, err := fmt.Fprintf(out, "task %d TCB=%08X name=%q status=%d runs=%d SP=%08X cleanup=%08X suspend=%08X stack-code-words=[%s]\n", count, memory.DRAMBase+off, name, status, runs, sp, cleanup, suspend, strings.Join(codeWords, " ")); err != nil {
 			return err
 		}
-		count++
 	}
 	for off := uint32(0); off+0x30 <= ram.Size(); off += 4 {
 		magic := ram.Read(off+0x0c, bus.Word)
@@ -76,11 +99,24 @@ func reportTasks(out io.Writer, ram *memory.RAM) error {
 			return err
 		}
 	}
-	if err := instrument.MustFind("Nucleus task census", "TASK control blocks", count, 1); err != nil {
+	if err := instrument.MustFind("Nucleus task census", "TASK control blocks", len(offsets), 1); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(out, "tasks found: %d\n", count)
+	_, err := fmt.Fprintf(out, "tasks found: %d\n", len(offsets))
 	return err
+}
+
+func taskName(ram *memory.RAM, off uint32) []byte {
+	var name [8]byte
+	end := 0
+	for end < len(name) {
+		name[end] = byte(ram.Read(off+0x10+uint32(end), bus.Byte)) // #nosec G115 -- bus.Byte fits in uint8
+		if name[end] == 0 {
+			break
+		}
+		end++
+	}
+	return name[:end]
 }
 
 func magicBytes(v uint32) []byte { return []byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)} }

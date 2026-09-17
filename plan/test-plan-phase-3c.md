@@ -30,8 +30,13 @@
   register-11 responses plus a 1 KiB port-5 microcode upload without changing readback;
   `internal/device/i2c/controller_test.go` sets the indirect register pointer through the
   vbus-0 I²C path and reads register 75 as 0x17 through the controller data register.
-- [ ] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
-  matching end to end. **SPEC success criterion 1.**
+- [x] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
+  matching end to end. **SPEC success criterion 1.** `./ctl.sh oracle-gate` runs the real firmware
+  to 470 million guest instructions, checks the guest-created task list contains 42 tasks, and
+  compares all 4,700 checkpoint hashes with the clean browser trace through instruction
+  469,900,000. The trace disables only the oracle's declared post-boot Sky menu patch, because
+  that host RAM/flash mutation is a separate presentation policy; capture provenance is in
+  `internal/platform/statehash/testdata/README.md`.
 - [x] **TC-3c.7: Declared application handoff** (covers: TASK-3c.9) — after 200,000 continuous
   idle instructions with `ready >= 0x100` and `current = 0`, compare the flash `JB` header to
   the ROM literal and apply the oracle's explicit one-time PC/ISA/RA handoff. The policy must

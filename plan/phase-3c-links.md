@@ -13,7 +13,7 @@ CSI (the handset), I²C and the EEPROM (NVRAM), the smartcard link, and the sate
 - [x] `TASK-3c.3` The peripheral micro's command acknowledgements — which commands are answered is load-bearing: acking everything frees the link but stalls the boot elsewhere → `/go-engineer` [TC-3c.3]
 - [x] `TASK-3c.4` The smartcard link, enough for the CA init to proceed → `/go-engineer` [TC-3c.4]
 - [x] `TASK-3c.5` The satellite demodulator at I²C `0x18`: indirect register addressing, the microcode upload port, and **always locked** — there is no RF here and the point is to let the firmware open the demux → `/go-engineer` [TC-3c.5]
-- [ ] `TASK-3c.6` **Oracle agreement to a full cold boot — 42 Nucleus tasks.** This is SPEC success criterion 1 → `/go-engineer` [TC-3c.6]
+- [x] `TASK-3c.6` **Oracle agreement to a full cold boot — 42 Nucleus tasks.** This is SPEC success criterion 1 → `/go-engineer` [TC-3c.6]
 - [ ] `TASK-3c.7` ⫘ Tests → `/go-engineer` [TC-3c.1, TC-3c.2, TC-3c.3, TC-3c.4, TC-3c.5]
 - [ ] `TASK-3c.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 - [x] `TASK-3c.9` ⫘ Apply the declared oracle handoff after the bootloader reaches idle and the flash header checks; then prove guest instructions decompress the application to `0x800009F4` and enter it → `/go-engineer` [TC-3c.7]

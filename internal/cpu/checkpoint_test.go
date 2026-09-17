@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
@@ -67,5 +68,44 @@ func TestCheckpointLoopSkipsReachableBranchSlot(t *testing.T) {
 	}
 	if !strings.Contains(bad.String(), "\n1 ") {
 		t.Fatal("negative control did not produce the forbidden mid-pair sample")
+	}
+}
+
+func TestCheckpointSamplesMIPS16DelaySlot(t *testing.T) {
+	c, b := machine(t)
+	c.PC, c.ISA = codeBase+0x40, true
+	b.Write(c.PC, bus.Half, 0x1c00) // JALX index follows
+	b.Write(c.PC+2, bus.Half, 4)
+	b.Write(c.PC+4, bus.Half, 0x6803) // MIPS16 delay slot
+	ram, err := memory.NewRAM("mips16-checkpoint", memory.DirtyPageLen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := statehash.New(ram)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stream bytes.Buffer
+	e, err := statehash.NewEmitter(&stream, 1, h)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ObserveCheckpoint(e, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Step(); err != nil {
+		t.Fatal(err)
+	}
+	if !c.HasPendingBranch() || !c.ISA {
+		t.Fatal("MIPS16 slot was not pending")
+	}
+	if err := c.ObserveCheckpoint(e, 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stream.String(), "\n1 ") {
+		t.Fatalf("MIPS16 slot checkpoint missing:\n%s", stream.String())
 	}
 }

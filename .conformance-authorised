@@ -26,3 +26,7 @@ digest: ac5555ed1e1edb259d549a2f9f7aaa87c3491f12f007c6c6ce06fe68d70313e8
   when: 2026-09-17T09:59:04Z
    why: Isolate the handoff gate build, require the verified application entry word, and check device faults before stop-PC success; detector behavior remains unchanged.
 
+digest: d61a5179de6caf555ae5cb918430d7fbea97ec38e461510eb8aa8ee65268e774
+  when: 2026-09-17T11:00:57Z
+   why: Add oracle-gate control command for the verified 42-task real-firmware cold boot; no architecture rule or detector changes.
+

@@ -14,8 +14,9 @@ finding: it breaks the page's main interaction on phones.
 
 The fix keeps the television visible at the top of a phone viewport while the handset scrolls
 under it. Keyboard scrolling reserves room for the display, so focused keys stay below it. Sticky
-positioning is disabled when viewport height is under 600 px, leaving room for controls in short
-or zoomed views. Desktop layout and the single original canvas remain the same.
+positioning is disabled in short portrait viewports. Short landscape views place the display and
+handset side by side, with a sticky display in its own column. Desktop layout and the single
+original canvas remain the same.
 
 ## Pattern briefs
 
@@ -32,3 +33,9 @@ inside the viewport while each focused key lies below the television. It also ta
 in a mobile touch context and checks that the screen stays above Select. The focused `0` key and
 display were inspected together in the screenshot. The full Playwright suite passed 9/9;
 TypeScript and CSS lint passed. The deployed page is checked again after the CSS build is live.
+
+A second mobile pass found the display offscreen at 568 × 320 landscape. The local Playwright
+landscape test now checks that the display and Select are both visible, side by side, without
+horizontal overflow. The deployed URL was checked at 568 × 320 after the public rebuild; the
+screen and Select were visible together with no horizontal overflow, and the screenshot was
+inspected.

@@ -82,3 +82,8 @@
   in a mobile touch context and checks the screen stays above Select. The screenshot of
   the final key shows the screen and key together. Playwright passed 9/9; the public mobile view
   is inspected after deployment.
+- [x] **TC-5.11: Short landscape keeps screen and handset together** (covers: gort-4sx.21) — a 568 × 320 viewport must show the guest display beside a usable handset during navigation.
+  **Result:** `tests/e2e/handset.spec.ts` passes locally and checks that screen and Select are
+  visible side by side with no horizontal overflow. The deployed URL at 568 × 320 reported
+  screen bounds `121.875..288.265625`, Select bounds `136.9375..183.9375`, `scrollWidth=568`,
+  and the screenshot `.artifacts/public-landscape-568x320.png` was inspected.

@@ -90,6 +90,9 @@ func TestPrivatePostAcquisitionSnapshotRestoresAndRuns(t *testing.T) {
 	if frame.Rect.Dx() != 720 || frame.Rect.Dy() != 576 {
 		t.Fatalf("restored display geometry %v", frame.Rect)
 	}
+	if got := statehash.HashBytes(frame.Pix); got != 0xA6A21DC5 {
+		t.Fatalf("restored composed framebuffer hash %08X, want A6A21DC5", got)
+	}
 	for i := 0; i < 100_000; i++ {
 		if err := r.Step(); err != nil {
 			t.Fatal(err)

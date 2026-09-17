@@ -1,10 +1,12 @@
 # Test Plan: Phase 5 — Browser and deployment
 
 ## Test Cases
-- [?] **TC-5.1: Frames reach the browser** (covers: TASK-5.1, TASK-5.7) — the canvas matches the core's
+- [x] **TC-5.1: Frames reach the browser** (covers: TASK-5.1, TASK-5.7) — the canvas matches the core's
   framebuffer hash.
-  **Blocked:** `tests/live/firmware.spec.ts` proves the real core's blue baseline and Sky menu reach
-  the canvas, but an exact canvas/core framebuffer hash comparison remains for TASK-5.7.
+  **Result:** `internal/board/runtime_test.go` pins the verified private snapshot's composed indexed
+  framebuffer hash to `A6A21DC5`. `tests/live/firmware.spec.ts` captures the full frame from the
+  running Go WebSocket, checks that same hash, expands its real palette into RGBA, and compares a
+  SHA-256 digest against every pixel in the browser canvas before pressing Sky. The live test passes.
 - [x] **TC-5.2: The status line tracks real machine state** (covers: TASK-5.2, TASK-5.7) — it must be driven by
   observed state, not a timer. The predecessor's said Ready twenty seconds early because it keyed on
   a task count that plateaus before the work starts.

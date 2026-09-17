@@ -136,7 +136,7 @@ func (d *Display) Compose() (*image.Paletted, error) {
 		return nil, err
 	}
 	frame := image.NewPaletted(image.Rect(0, 0, int(desc.Width), int(desc.Height)), palette)
-	stride := desc.Width * uint32(desc.Depth) / 8
+	stride := (desc.Width*uint32(desc.Depth) + 7) / 8
 	for y := uint32(0); y < desc.Height; y++ {
 		base, row := desc.Field0, y
 		if desc.Field1 != 0 {

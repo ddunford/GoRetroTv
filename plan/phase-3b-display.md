@@ -39,13 +39,13 @@ manual has zero hits for CLUT, palette, MPEG, demux, video encoder or framebuffe
 |---|---|---|
 | VRAM + framebuffer | 720x576 at `0x80584048` | |
 | blitter command | src, dst, w, h, flags | **bit 24 is the fill bit, not bit 23** |
-| DMA descriptors | 13 x 40 bytes at `0x80108A60 + 40*ch` | at `0xB0009000` |
+| DMA descriptors | 14 x 40-byte slots at `0x80108A60 + 40*ch` | 13 channels scanned by the guest LISR; slot 13 is unused |
 | DMA `+0x010` | uint32 | **must read back** — the LISR read-modify-writes it |
 | plane/window records | 100 bytes each at `*0x80105E9C` | produce/consume indices at `+0x50`/`+0x54` |
 | CLUT | per window, 2/4/8 bpp | |
 
 **Interfaces:**
-- `Blitter.Execute(cmd) error` · `DMA.Run(ch int) error` · `OSD.Compose() *image.Paletted`
+- `Blitter.Execute(cmd) error` · `DMA.Run(channel uint8) error` · `Display.Compose() (*image.Paletted, error)`
 - `statehash.HashBytes(rawSurface) uint32` — used by the trace runner for the raw OSD surface, so
   framebuffer comparison and oracle checkpoints use the same FNV-1a definition
 

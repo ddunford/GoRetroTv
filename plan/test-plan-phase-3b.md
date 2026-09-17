@@ -25,7 +25,9 @@
 - [x] **TC-3b.5: Bit depths render** (covers: TASK-3b.5, TASK-3b.7) — 2, 4 and 8 bpp against known pixels.
   **Result:** `internal/device/osd/compose_test.go` programs field buffers at each depth, checks
   known pixels in both interlaced fields, decodes a packed CLUT entry, and checks the unprogrammed
-  display returns black. `./ctl.sh test`, lint and nine-anchor CPU gate passed.
+  display returns black. `TestComposeAdvancesPastPartialByteAtEndOfRow` proved the former floor
+  stride wrong for two-row, non-byte-aligned 1/2/4bpp surfaces and passes with the rounded-up
+  byte stride. OSD package and race tests pass.
 - [x] **TC-3b.6: The menu matches the oracle** (covers: TASK-3b.6) — press sky; the framebuffer hash
   equals the oracle's for the same instruction count. 37 distinct surface bytes is the known-good shape.
   **Result:** a 470M-instruction cold boot produced a persistent 16 KiB EEPROM image and 42 guest

@@ -9,7 +9,7 @@ findings are load-bearing.
 
 ## Tasks (mirror — bd epic `gort-omj` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-3b.1` VRAM and the OSD/display register block; the framebuffer at `0x80584048`, 720×576 → `/go-engineer` [TC-3b.1]
+- [x] `TASK-3b.1` VRAM and the OSD/display register block; the framebuffer at `0x80584048`, 720×576 → `/go-engineer` [TC-3b.1]
 - [ ] `TASK-3b.2` The blitter: fills and copies. **Bit 24 is the fill bit, not bit 23** — bit-24-clear commands are copies from a source packed at the blit width (stride 480, measured against 1,593 candidates) → `/go-engineer` [TC-3b.2]
 - [ ] `TASK-3b.3` The DMA controller at `0xB0009000`: 13 channels, 40-byte descriptors at `0x80108A60 + 40*ch`, completion bits, the write-1-to-clear acknowledge, and `+0x010` which **must read back** because the LISR read-modify-writes it → `/go-engineer` [TC-3b.3]
 - [ ] `TASK-3b.4` The plane/window model: the 100-byte records at `*0x80105E9C`, the produce/consume indices at `+0x50`/`+0x54`, the background flag and colour. **Window 0 is a trap** — the validator errors when the id is 0 while the gate reads 0, and the error handler does not return → `/go-engineer` [TC-3b.4]

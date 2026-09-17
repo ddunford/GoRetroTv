@@ -35,3 +35,7 @@
 - [ ] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses
   the application to `0x800009F4` and transfers control by executing guest instructions. The
   test must fail if a host-side forced PC change or image copy is substituted for the handoff.
+  **Open evidence:** the real bootloader reaches BOOTMain, but reset copies `0xA0001FE0` to
+  `[0x800050D0]`; its nonzero branch enters an unconditional service loop before the image
+  scanner. The board timer wakes the event loop, but 100 million guest instructions leave the
+  application image untouched. See `gort-f3f.10` for instruction watches and branch PCs.

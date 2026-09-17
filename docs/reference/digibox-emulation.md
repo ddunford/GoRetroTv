@@ -5889,11 +5889,16 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   scan was premature: a 100-million-instruction Go trace never reaches the validator at all and
   makes no read from that block. A missing board timer at `0xB000D000` was one measured blocker:
   with its `0x40` interrupt modelled, BOOTMain wakes and the bootloader creates five tasks, but
-  BOOTMain then sleeps in a 100-tick loop. At 100 million instructions the image at `0x800009F4`
-  is still zero and no guest handoff has occurred. The browser oracle forces its own host-side
+  BOOTMain then sleeps first for 100 ticks and repeatedly for 500. Its branch at `0xBFC012C6`
+  checks `[0x800050D0]` once: zero enters a guest path through `0xBFC12790`, `0xBFC124F8` and
+  the image scanner; nonzero enters the unconditional sleep loop. A reset copy at `0xBFC18E58`
+  sets `[0x800050D0]` to `0xA0001FE0` from ROM offset `0x1C8C0` before BOOTMain runs. The
+  instruction watch saw no later write before the branch. At 100 million instructions the image
+  at `0x800009F4` is still zero and no guest handoff has occurred. The browser oracle forces its own host-side
   handoff when the bootloader is idle; that injection cannot establish that the firmware itself
-  reached the validator or transferred control. The next measurement is the BOOTMain loop's
-  condition and its inputs.
+  reached the validator or transferred control. No hardware input has yet been found that changes
+  this boot decision; changing the pointer from the host would test the path, not satisfy the
+  real-handoff requirement.
 - **Whether the EPG runs without a viewing card.** 54 CA strings, `NDS XSG`, `CA API Glue`.
   Historically a Sky box showed its guide with no card and refused only to decrypt, and the EPG
   carousel was broadcast in the clear — but that is a reason to expect an answer, not evidence for

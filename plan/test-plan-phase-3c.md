@@ -3,6 +3,9 @@
 ## Test Cases
 - [ ] **TC-3c.1: A key press reaches the input layer** (covers: TASK-3c.1, TASK-3c.7) — the dispatcher and key
   event counters both move, as the predecessor's gate asserts.
+  The CSI register, paced receive byte, interrupt acknowledge, and escaped handset frame are
+  covered by `internal/device/csi/link_test.go`; guest dispatcher and event counters still need a
+  completed application boot before this case can pass.
 - [ ] **TC-3c.2: NVRAM survives a restart** (covers: TASK-3c.2, TASK-3c.7) — write, stop, start, read back.
 - [ ] **TC-3c.3: Acknowledgement policy** (covers: TASK-3c.3, TASK-3c.7) — the documented set boots; acking
   everything is shown to change where the boot stops, proving the model is the working one.

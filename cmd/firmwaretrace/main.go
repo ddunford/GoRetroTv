@@ -10,6 +10,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/cpu"
 	"github.com/ddunford/goretrotv/internal/device/blitter"
+	"github.com/ddunford/goretrotv/internal/device/csi"
 	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/device/dma"
 	"github.com/ddunford/goretrotv/internal/device/irq"
@@ -35,7 +36,12 @@ func run() error {
 	traceTo := flag.Uint64("trace-to", ^uint64(0), "first instruction excluded from the trace")
 	unmapped := flag.Bool("unmapped", false, "list unmapped access sites at the end")
 	bootState := flag.Bool("boot-state", false, "print bootloader handoff and decompression probes")
+	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
+	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	flag.Parse()
+	if *key < -1 || *key > 255 {
+		return fmt.Errorf("raw handset key %d is outside 0..255", *key)
+	}
 	images, err := firmware.Load(context.Background(), *dir)
 	if err != nil {
 		return err
@@ -68,6 +74,10 @@ func run() error {
 	core := cpu.New(busMap, memory.FlashU202)
 	interrupts := irq.New(core.Interrupt)
 	if err := busMap.Attach(irq.Base, irq.Size, interrupts); err != nil {
+		return err
+	}
+	serial := csi.New(interrupts)
+	if err := busMap.Attach(csi.Base, csi.Size, serial); err != nil {
 		return err
 	}
 	sectionDemux := demux.New()
@@ -107,6 +117,13 @@ func run() error {
 	}
 	var halt error
 	for i := uint64(0); i < *steps; i++ {
+		if *key >= 0 && i == *keyAt {
+			// #nosec G115 -- raw key was checked to be within 0..255 above.
+			if err := serial.Key(uint8(*key), 0); err != nil {
+				return err
+			}
+		}
+		serial.Pump(i)
 		if *trace && i >= *traceFrom && i < *traceTo {
 			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
 		}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/memory"
 )
 
 func TestSectionRingAndRecordGeometry(t *testing.T) {
@@ -30,8 +31,11 @@ func TestSectionRingAndRecordGeometry(t *testing.T) {
 func TestSectionRingsAreBusMemoryAndSurviveSnapshot(t *testing.T) {
 	t.Parallel()
 	b := bus.New()
-	r, err := AttachSectionRAM(b)
+	r, err := memory.NewRAM("dram", memory.DRAMSize)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Attach(memory.DRAMBase, memory.DRAMSize, r); err != nil {
 		t.Fatal(err)
 	}
 	for _, filter := range []uint8{0, 22, 31} {

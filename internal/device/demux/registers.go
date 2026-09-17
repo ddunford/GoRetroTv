@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
 )
 
@@ -27,6 +28,7 @@ type Demux struct {
 	pidWritten     [FilterCount]bool
 	matchValue     uint32
 	matchUnits     [16][16]MatchByte
+	ram            *memory.RAM
 }
 
 // MatchByte is one byte of a section match unit's value and mask.

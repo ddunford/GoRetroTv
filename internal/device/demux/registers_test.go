@@ -61,7 +61,7 @@ func TestDemuxRegistersCarryAllStateInSnapshot(t *testing.T) {
 			d.Write(0x148, bus.Word, 0x4bff)
 			d.Write(0x144, bus.Word, 0xc000)
 		},
-		Constant: []string{"name"},
+		Constant: []string{"name", "ram"},
 	})
 	if err != nil {
 		t.Fatal(err)

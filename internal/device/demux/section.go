@@ -2,8 +2,7 @@
 package demux
 
 import (
-	"github.com/ddunford/goretrotv/internal/bus"
-	"github.com/ddunford/goretrotv/internal/memory"
+	"fmt"
 )
 
 const (
@@ -26,15 +25,11 @@ func RingBase(filter uint8) uint32 { return SectionRAMBase + uint32(filter)*Ring
 // The firmware owns those records; the demux owns the section RAM they describe.
 func RecordBase(filter uint8) uint32 { return filterRecordRAM + uint32(filter)*filterRecordLen }
 
-// AttachSectionRAM maps the 32 contiguous rings as one snapshot-capable memory device.
-// The bus supplies the cached mirror automatically, so the two windows cannot drift.
-func AttachSectionRAM(b *bus.Bus) (*memory.RAM, error) {
-	r, err := memory.NewRAM("section-ram", SectionRAMSize)
-	if err != nil {
-		return nil, err
+// ringOffset is the offset inside board DRAM. The section rings are a DRAM
+// subregion, not a second physical memory device or a second snapshot key.
+func ringOffset(filter uint8) (uint32, error) {
+	if filter >= FilterCount {
+		return 0, fmt.Errorf("demux: filter %d out of range", filter)
 	}
-	if err := b.Attach(SectionRAMBase, SectionRAMSize, r); err != nil {
-		return nil, err
-	}
-	return r, nil
+	return (SectionRAMBase & 0x1fffffff) + uint32(filter)*RingSize, nil
 }

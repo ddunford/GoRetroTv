@@ -7,10 +7,11 @@
   write-zero-to-clear, each asserted in the direction it actually works. Swapping them must fail.
   **Result:** `internal/device/demux/registers_test.go` verifies cumulative enable bits, complement
   acknowledgement, reset and snapshot restore; `./ctl.sh test` passed.
-- [x] **TC-3a.3: The LISR handshake completes** (covers: TASK-3a.3, TASK-3a.8) — and a register file that reads
+- [!] **TC-3a.3: The LISR handshake completes** (covers: TASK-3a.3, TASK-3a.8) — and a register file that reads
   back its own writes at `+0x124` must hang, proving the model is the working one.
-  **Result:** `TestLISRPointerHandshake` exercises two selected filter pointers and a bounded LISR
-  spin; an overlay that echoes the busy command fails at the spin limit. `./ctl.sh test` passed.
+  **Reconcile note (2026-09-17):** `TestLISRPointerHandshake` exercises two selected filter pointers
+  and a bounded LISR spin on the working model, but it does not apply the claimed echoing-register
+  overlay. The negative control remains unproved; `gort-l14.17` must run it before this TC passes.
 - [x] **TC-3a.4: PID channels and match units are separate index spaces** (covers: TASK-3a.4, TASK-3a.8).
   **Result:** `TestPIDChannelsAndMatchUnitsAreIndependent` programs PID channel 22 while match
   unit 22 cannot exist, then programs unit 0 and verifies the armed PIDs are unchanged. Snapshot

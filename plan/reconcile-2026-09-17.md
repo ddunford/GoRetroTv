@@ -52,3 +52,70 @@ No new shared abstraction was justified by three or more duplicated production i
 Task/test link check: every named TC-3b and TC-3c appears in its phase plan, and every implementation task appears in its test plan. TASK-3b.8 and TASK-3c.8 are security audits with explicit `[no-test]` annotations and their own audit reports.
 
 Closeout evidence: `./ctl.sh test` passed under the race detector; `./ctl.sh lint` reported zero issues; `./ctl.sh image` built the firmware-free image; `./ctl.sh conformance` passed all seven architecture rules and caught all 21 negative probes. `./ctl.sh oracle-gate` matched 470,000/470,000 clean cold-boot checkpoints, `./ctl.sh links-gate` proved the warm handset/surface path and demodulator read histogram, and `tools/oracle-tier2-gate.sh` localized its deliberate mutation exactly. The unchanged browser oracle's SHA-256 is recorded with the fixture in `internal/platform/statehash/testdata/README.md`.
+
+## Phase 3a — demux and section acquisition (fresh pass)
+
+Scope: SPEC FR-3 and the SI acquisition portion of FR-9; `plan/phase-3a-demux-and-sections.md`,
+`plan/test-plan-phase-3a.md`, the Beads close records, and current Go and oracle-instrument code.
+This is a single-repository pass. Nine phase tasks are recorded closed; six of seven TCs retain
+passing evidence, while TC-3a.3 is marked failed pending its stated negative control.
+
+### Fresh wiring map and stop gate 1
+
+Five separate explorations rebuilt all five map sections before the requirement comparison:
+
+| Section | Rows | Result |
+|---|---:|---|
+| Product frontend routes | 0 | No product router or page exists yet; Phase 5 owns the browser. |
+| Page → component edges | 0 | No product page or orphan component. |
+| Frontend service → page edges | 0 | No product frontend service. |
+| HTTP endpoint → frontend consumer | 6 | `/health` and five optional local pprof registrations, all connected to handlers; none requires a Phase 3a frontend caller. |
+| Context providers | 0 | No provider or consumer. |
+
+The browser oracle is a measuring instrument, not a product route. The wiring agent checked all
+six HTTP rows, plus the internal bus → demux → section ring → IRQ → guest handler path and the
+manual oracle artifact → comparator path. No Phase 3a connection was unwired.
+
+### Requirements, code and stop gate 2
+
+Independent backend, frontend and wiring checks returned. The backend found substantive code for
+all eight implementation/test tasks: 32 rings and guest records, W1S enable/W0C status, non-echoing
+LISR command and 21-bit pointer, separate PID and match indices, hardware trailer byte, IRQ
+dispatch, real guest consumption and SI oracle comparison. `cmd/firmwaretrace` wires the hardware
+and scheduled feed to real firmware. The frontend check found no Phase 3a deliverable or gap; the
+six HTTP rows and all planned internal edges were checked. The architecture check found the device
+snapshot contract, instruction-time scheduler, inward imports and visible guest error policy
+consistent, and identified two trace-instrument deviations below. FR-9's autonomous broadcast
+source remains in Phase 6; Phase 3a proved acquisition from scheduled diagnostic sections.
+
+The targeted demux/IRQ/firmwaretrace Go tests passed. Replaying the recorded SI comparison command
+passed at six instruction samples, nine guest PC counters and four match units. These saved
+artifacts are evidence of the measured run, subject to the hash-pinning finding below.
+
+### Findings and disposition
+
+| Classification | Finding and evidence | Tracked action |
+|---|---|---|
+| PARTIAL test proof | TC-3a.3 claimed an echoing `+0x124` overlay failed the LISR spin, but `TestLISRPointerHandshake` (`internal/device/demux/registers_test.go`) exercises only the working register. The feature checklist's four failure-mode controls remain unchecked. | `gort-l14.17` adds and runs all four negative controls. TC-3a.3 is marked failed; the test-plan gate `gort-l14.10` was reopened and depends on this fix. |
+| DRIFT in acceptance instrument | `tools/compare-si-acquisition.py` compares a saved JSON artifact without checking its `oracleSha256` against the current `reference/digibox-boot.html`; a stale fixture can pass. | `gort-l14.18` pins provenance and proves a page mutation is rejected. |
+| INCONSISTENT architecture | `cmd/firmwaretrace/main.go` and `tasks.go` format addresses with raw `%08X`, while `pc_hits.go` uses variable-width lowercase `%#x`, bypassing the declared `hexfmt` convention. | `gort-l14.20` migrates those callers to the canonical formatter. |
+| INCONSISTENT instrument guard | `-pc-hit` with `-steps=0` can print plausible zero PC counts despite examining no guest instruction (`cmd/firmwaretrace/pc_hits.go` and `main.go`). | `gort-l14.19` requires a positive examined-instruction subject and a negative control. |
+
+No new product page, service, endpoint, architecture decision, shared helper or deferred later-phase
+task was justified by this pass. Closed Phase 3a TASK IDs already cite their owning behavior in the
+phase plan; the new `gort-l14.7` acquisition facts and the boundary with Phase 6 were backported
+into its custom feature record.
+
+### Plan changes and stop gate 3
+
+| File | Change |
+|---|---|
+| `plan/phase-3a-demux-and-sections.md` | Recorded the measured acquisition and corrected TASK-3a.8's TC suffix to a valid six-TC list. Task status boxes were not hand-edited. |
+| `plan/test-plan-phase-3a.md` | Marked TC-3a.3 failed and removed the false echo-overlay result. |
+
+No new task/TC IDs were added to the markdown mirror; four fix issues are in Beads under `gort-l14`.
+The Phase 3a link check passed: nine unique sequential tasks, seven TCs, valid suffixes, and
+bidirectional references. `git diff --check` passed. `./ctl.sh conformance` passed all seven rules
+and caught all 21 negative probes. `gort-l14.16` remains open and depends on the four fixes;
+the Phase 3a test-plan gate remains open until TC-3a.3 is actually proved. The Beads project has no
+`plan/TODO.md` to audit.

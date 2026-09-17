@@ -23,7 +23,7 @@ Phase 3c's real guest-driven handoff (TASK-3c.9); they are not inferred from uni
 - [x] `TASK-3a.5` Section injection API, appending the extra byte after each section that the hardware appends (the task advances by `section_length + 4` where DVB's total is `+ 3`) → `/go-engineer` [TC-3a.5]
 - [x] `TASK-3a.6` Demux interrupt wiring and its dispatch row → `/go-engineer` [TC-3a.6]
 - [x] `TASK-3a.7` Oracle comparison through SI acquisition → `/go-engineer` [TC-3a.7]
-- [x] `TASK-3a.8` ⫘ Demux unit and bus integration tests → `/go-engineer` [TC-3a.1, TC-3a.2, TC-3a.3, TC-3a.4; hardware portions of TC-3a.5 and TC-3a.6]
+- [x] `TASK-3a.8` ⫘ Demux unit and bus integration tests → `/go-engineer` [TC-3a.1, TC-3a.2, TC-3a.3, TC-3a.4, TC-3a.5, TC-3a.6]
 - [x] `TASK-3a.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Custom Feature: the section demux
@@ -53,6 +53,13 @@ every fact below was measured off the running box.
 - The task advances by `section_length + 4` where DVB's total is `+ 3`, so **the hardware appends a
   byte after each section**. Write one or the reader walks off the end of every section.
 - A PID and a filter index cannot share an argument: PID `0x0014` is 20, which is also a real filter.
+
+**Acquisition observed (`gort-l14.7`):** With the real firmware and the unchanged browser oracle,
+clock sections followed by NIT, BAT and SDT made both machines register the same four match units
+and arm transient PID `0x52` after BAT. A wrong-network-ID NIT parsed only its header; network ID
+`0x0020` registered the BAT filter. The six sampled guest states agreed through instruction 680M,
+including section read pointers and nine guest PC counts. The diagnostic feeder supplied these
+sections at recorded instruction counts; autonomous carousel delivery remains Phase 6 work.
 
 **Test checklist:**
 - [ ] Swapping set/clear semantics on `+0xD8`/`+0xB8` fails

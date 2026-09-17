@@ -5890,15 +5890,19 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   makes no read from that block. A missing board timer at `0xB000D000` was one measured blocker:
   with its `0x40` interrupt modelled, BOOTMain wakes and the bootloader creates five tasks, but
   BOOTMain then sleeps first for 100 ticks and repeatedly for 500. Its branch at `0xBFC012C6`
-  checks `[0x800050D0]` once: zero enters a guest path through `0xBFC12790`, `0xBFC124F8` and
-  the image scanner; nonzero enters the unconditional sleep loop. A reset copy at `0xBFC18E58`
-  sets `[0x800050D0]` to `0xA0001FE0` from ROM offset `0x1C8C0` before BOOTMain runs. The
-  instruction watch saw no later write before the branch. At 100 million instructions the image
-  at `0x800009F4` is still zero and no guest handoff has occurred. The browser oracle forces its own host-side
-  handoff when the bootloader is idle; that injection cannot establish that the firmware itself
-  reached the validator or transferred control. No hardware input has yet been found that changes
-  this boot decision; changing the pointer from the host would test the path, not satisfy the
-  real-handoff requirement.
+  checks `[0x800081F8]` once. A guest write at PC `0xBFC00500` sets that word from zero to one
+  at instruction 3,262,648; the nonzero branch enters the unconditional service loop. The
+  earlier identification of `[0x800050D0]` as this branch's input was a disassembly error:
+  reset does copy `0xA0001FE0` there from ROM offset `0x1C8C0`, but zeroing it in a temporary
+  run did not change the branch. In another temporary run, forcing the actual gate to zero
+  selected the other path; it set flash-descriptor step `[0x800050BC]` to `0x10000` but then
+  polled unmapped modem-UART status `0xB2001050` for bit `0x40`. By 100 million instructions
+  it had not visited the image scanner or reached the application. These host-mutated runs do
+  not prove a real handoff. In a normal run at 100 million instructions the image at
+  `0x800009F4` is still zero and no guest handoff has occurred. The browser oracle forces its
+  own host-side handoff when the bootloader is idle; that injection cannot establish that the
+  firmware itself reached the validator or transferred control. The hardware condition behind
+  the gate-setting guest write remains to be established.
 - **Whether the EPG runs without a viewing card.** 54 CA strings, `NDS XSG`, `CA API Glue`.
   Historically a Sky box showed its guide with no card and refused only to decrypt, and the EPG
   carousel was broadcast in the clear — but that is a reason to expect an answer, not evidence for

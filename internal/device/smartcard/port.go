@@ -28,7 +28,7 @@ type Port struct {
 	control, pair30, pair40, status, enable uint32
 	rxByte                                  uint8
 	frame, reply                            []byte
-	now, txDue, rxDue                       uint64
+	txDelay, rxDelay                        uint64
 	interrupt                               *irq.Controller
 }
 
@@ -73,28 +73,37 @@ func (p *Port) Write(off uint32, size bus.Size, value uint32) {
 	case 0x40:
 		p.pair40 = value
 	case 0x50:
-		p.txDue = p.now + ByteInstructions
+		p.txDelay = ByteInstructions
 		p.accept(byte(value))
 	case 0x60:
 		p.status = 0
-		p.updateLine()
 	case 0x70:
 		p.enable = value & 7
-		p.updateLine()
 	}
 }
 
-// Pump advances byte completion and the empty-slot reply from instruction time.
-func (p *Port) Pump(now uint64) {
-	p.now = now
-	if p.txDue != 0 && now >= p.txDue {
-		p.txDue = 0
-		p.status |= 2
+// Pump advances the oracle's byte delays by one device batch.
+func (p *Port) Pump(batch uint64) {
+	if p.txDelay > 0 {
+		if p.txDelay > batch {
+			p.txDelay -= batch
+		} else {
+			p.txDelay = 0
+			p.status |= 2
+		}
 	}
-	if len(p.reply) > 0 && p.status&4 == 0 && p.enable&2 == 0 && now >= p.rxDue {
-		p.rxByte, p.reply = p.reply[0], p.reply[1:]
-		p.status |= 4
-		p.rxDue = now + ReplyGapInstructions
+	if len(p.reply) > 0 && p.status&4 == 0 && p.enable&2 == 0 {
+		if p.rxDelay > 0 {
+			if p.rxDelay > batch {
+				p.rxDelay -= batch
+			} else {
+				p.rxDelay = 0
+			}
+		} else {
+			p.rxByte, p.reply = p.reply[0], p.reply[1:]
+			p.status |= 4
+			p.rxDelay = ReplyGapInstructions
+		}
 	}
 	p.updateLine()
 }
@@ -137,26 +146,25 @@ func (p *Port) accept(b byte) {
 		return
 	}
 	p.reply = append(p.reply, append(reply, checksum)...)
-	p.rxDue = p.now + 2*ReplyGapInstructions
+	p.rxDelay = 2 * ReplyGapInstructions
 }
 
 // Reset clears all volatile controller state; the modelled slot stays empty.
 func (p *Port) Reset() {
 	p.control, p.pair30, p.pair40, p.status, p.enable, p.rxByte = 0, 0, 0, 0, 0, 0
-	p.frame, p.reply, p.now, p.txDue, p.rxDue = nil, nil, 0, 0, 0
+	p.frame, p.reply, p.txDelay, p.rxDelay = nil, nil, 0, 0
 	p.updateLine()
 }
 
 // Snapshot captures the complete byte-level link state.
 func (p *Port) Snapshot() ([]byte, error) {
-	w := snapcodec.NewWriter(p.Name(), 1)
+	w := snapcodec.NewWriter(p.Name(), 2)
 	w.Words([]uint32{p.control, p.pair30, p.pair40, p.status, p.enable})
 	w.Uint8(p.rxByte)
 	w.Bytes(p.frame)
 	w.Bytes(p.reply)
-	w.Uint64(p.now)
-	w.Uint64(p.txDue)
-	w.Uint64(p.rxDue)
+	w.Uint64(p.txDelay)
+	w.Uint64(p.rxDelay)
 	return w.Blob()
 }
 
@@ -166,12 +174,12 @@ func (p *Port) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("smartcard: restore: %w", err)
 	}
-	if err := r.Expect(p.Name(), 1, 1); err != nil {
+	if err := r.Expect(p.Name(), 2, 2); err != nil {
 		return fmt.Errorf("smartcard: restore: %w", err)
 	}
 	regs, rxByte := r.Words(), r.Uint8()
 	frame, reply := r.Bytes(), r.Bytes()
-	now, txDue, rxDue := r.Uint64(), r.Uint64(), r.Uint64()
+	txDelay, rxDelay := r.Uint64(), r.Uint64()
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("smartcard: restore: %w", err)
 	}
@@ -179,7 +187,7 @@ func (p *Port) Restore(blob []byte) error {
 		return fmt.Errorf("smartcard: restore: invalid state")
 	}
 	p.control, p.pair30, p.pair40, p.status, p.enable = regs[0], regs[1], regs[2], regs[3], regs[4]
-	p.rxByte, p.frame, p.reply, p.now, p.txDue, p.rxDue = rxByte, frame, reply, now, txDue, rxDue
+	p.rxByte, p.frame, p.reply, p.txDelay, p.rxDelay = rxByte, frame, reply, txDelay, rxDelay
 	p.updateLine()
 	return nil
 }

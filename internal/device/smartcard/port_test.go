@@ -17,14 +17,14 @@ func TestBootFrameCompletesSixInterruptsAndRepliesNoCard(t *testing.T) {
 	p.Write(0x70, bus.Word, 2)
 	request := []byte{0x60, 0, 1, 0x11, 4, 0x74}
 	for i, b := range request {
-		at := uint64(i) * ByteInstructions
-		p.Pump(at)
 		p.Write(0x50, bus.Word, uint32(b))
-		p.Pump(at + ByteInstructions - 1)
+		for range ByteInstructions/16 - 1 {
+			p.Pump(16)
+		}
 		if p.Read(0x60, bus.Word) != 0 {
 			t.Fatalf("byte %d completed early", i)
 		}
-		p.Pump(at + ByteInstructions)
+		p.Pump(16)
 		if p.Read(0x60, bus.Word)&2 == 0 || interrupts.Read(0x30, bus.Word) != IRQMask {
 			t.Fatalf("byte %d did not interrupt", i)
 		}
@@ -33,15 +33,23 @@ func TestBootFrameCompletesSixInterruptsAndRepliesNoCard(t *testing.T) {
 	p.Write(0x70, bus.Word, 4)
 	want := []byte{0xe0, 0, 1, 0x11, 0xc0, 0x30}
 	got := make([]byte, 0, len(want))
-	start := uint64(len(request))*ByteInstructions + 2*ReplyGapInstructions
 	for i := range want {
-		at := start + uint64(i)*ReplyGapInstructions
-		p.Pump(at)
+		gap := ReplyGapInstructions
+		if i == 0 {
+			gap *= 2
+		}
+		for range gap / 16 {
+			p.Pump(16)
+		}
+		if p.Read(0x60, bus.Word)&4 != 0 {
+			t.Fatalf("reply byte %d appeared when delay reached zero", i)
+		}
+		p.Pump(16)
 		if p.Read(0x60, bus.Word)&4 == 0 {
 			t.Fatalf("reply byte %d was not ready", i)
 		}
 		got = append(got, byte(p.Read(0x53, bus.Byte)))
-		p.Pump(at + 1)
+		p.Pump(16)
 		if len(p.reply) != len(want)-i-1 {
 			t.Fatal("receive register overwritten before acknowledge")
 		}
@@ -60,7 +68,7 @@ func TestPortHoldsTheDeviceContract(t *testing.T) {
 			p := device.(*Port)
 			p.control, p.pair30, p.pair40, p.status, p.enable = 0xc0, 0x42, 1, 2, 7
 			p.rxByte, p.frame, p.reply = 0xe0, []byte{0x60, 0}, []byte{0xe0, 0}
-			p.now, p.txDue, p.rxDue = 100, 200, 300
+			p.txDelay, p.rxDelay = 200, 300
 		},
 		Disturb:  func(device bus.Device) { device.Reset() },
 		Constant: []string{"interrupt"},

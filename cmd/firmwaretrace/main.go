@@ -190,6 +190,7 @@ func run() error {
 		boardTimer.Pump(boardPumpClock)
 		serial.Pump(instruction, boardTimer.Ticks())
 		modemPort.Pump(boardTimer.Ticks())
+		cardPort.Pump(16)
 		applied, err := handoff.Tick(core, busMap)
 		if err != nil {
 			return fmt.Errorf("after %d instructions: %w", instruction, err)
@@ -217,7 +218,6 @@ func run() error {
 				return err
 			}
 		}
-		cardPort.Pump(i)
 		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
 		// Go executes them as two Steps, so the delay slot does not advance this phase.
 		if !core.HasPendingBranch() || core.ISA {

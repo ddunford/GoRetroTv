@@ -16,6 +16,7 @@ func TestHandsetFrameIsPacedThroughReceiveRegister(t *testing.T) {
 	link := New(interrupts)
 	link.Write(0, bus.Word, 0x80)
 	link.Write(0x30, bus.Word, 1)
+	link.Pump(0, PowerupTicks)
 	if err := link.Key(0x7d, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -31,6 +32,11 @@ func TestHandsetFrameIsPacedThroughReceiveRegister(t *testing.T) {
 		if link.Read(0x20, bus.Word) != 0 {
 			t.Fatal("byte arrived before its instruction deadline")
 		}
+		link.Pump(at, 0)
+		if link.Read(0x20, bus.Word) != 0 {
+			t.Fatal("handset byte arrived before guest transmit receipt")
+		}
+		link.Write(0x10, bus.Word, 0)
 		link.Pump(at, 0)
 		if link.Read(0x20, bus.Word) != 1 || interrupts.Read(0x30, bus.Word) != IRQMask {
 			t.Fatal("ready byte failed to raise board IRQ")
@@ -49,7 +55,8 @@ func TestHandsetFrameIsPacedThroughReceiveRegister(t *testing.T) {
 		t.Fatalf("wire = %x, want %x", got, want)
 	}
 	link.Write(0x10, bus.Word, 0xa5)
-	if !bytes.Equal(link.Transmitted(), []byte{0xa5}) {
+	transmitted := link.Transmitted()
+	if len(transmitted) != len(want)+1 || transmitted[len(transmitted)-1] != 0xa5 {
 		t.Fatal("transmitted byte not recorded")
 	}
 }

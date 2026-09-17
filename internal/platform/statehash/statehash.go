@@ -189,6 +189,16 @@ func mixOctet(v, x uint32) uint32 { return (v ^ (x & 0xFF)) * fnvPrime }
 
 func mixByte(v uint32, b uint8) uint32 { return mixOctet(v, uint32(b)) }
 
+// HashBytes applies the oracle's FNV-1a definition to a contiguous byte range.
+// The raw OSD surface uses this; it has no page index or machine registers.
+func HashBytes(data []byte) uint32 {
+	v := fnvOffset
+	for _, b := range data {
+		v = mixByte(v, b)
+	}
+	return v
+}
+
 // mixWord feeds a 32-bit value most significant byte first.
 func mixWord(v, w uint32) uint32 {
 	v = mixOctet(v, w>>24)

@@ -323,8 +323,11 @@ func run() error {
 		}
 	}
 	if *surfaceHash {
-		hash, distinct := surfaceDigest(ram, surfaceBase, surfaceLength)
-		fmt.Fprintf(os.Stderr, "surface hash=%08X distinct=%d bytes=%d base=%08X\n", hash, distinct, surfaceLength, surfaceBase)
+		hash, distinct, sha, err := surfaceDigest(ram, surfaceBase, surfaceLength)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "surface hash=%08X distinct=%d bytes=%d base=%08X sha256=%x\n", hash, distinct, surfaceLength, surfaceBase, sha)
 	}
 	return nil
 }

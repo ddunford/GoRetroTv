@@ -26,9 +26,17 @@
   **Result:** `internal/device/osd/compose_test.go` programs field buffers at each depth, checks
   known pixels in both interlaced fields, decodes a packed CLUT entry, and checks the unprogrammed
   display returns black. `./ctl.sh test`, lint and nine-anchor CPU gate passed.
-- [ ] **TC-3b.6: The menu matches the oracle** (covers: TASK-3b.6) — press sky; the framebuffer hash
-  equals the oracle's for the same instruction count. 62 widgets, 37 colours is the known-good shape.
-
-**Guest acceptance dependency:** TC-3b.6 stays open until Phase 3c's real 42-task cold boot and
-handset link. TC-3b.1–3b.5 prove the drawing hardware boundary; the nine-anchor CPU gate reaches
-the first video RAM read but does not prove a menu was drawn or match its framebuffer.
+- [x] **TC-3b.6: The menu matches the oracle** (covers: TASK-3b.6) — press sky; the framebuffer hash
+  equals the oracle's for the same instruction count. 37 distinct surface bytes is the known-good shape.
+  **Result:** a 470M-instruction cold boot produced a persistent 16 KiB EEPROM image and 42 guest
+  tasks. Both `tools/oracle-warm-surface.mjs` and `cmd/firmwaretrace` loaded copies of that same
+  image, queued raw Sky key `0x7D` at instruction 200,000,000, and stopped at exactly 230,000,000.
+  Before the key both raw 720×576 DRAM surfaces hashed to FNV-1a `9825B318` with 12 distinct bytes;
+  after the key both hashed to `F3634409` with 37. The oracle made 11 blits after the key; Go reached
+  the guest input-event PC `0x8006EA04` twice. The oracle screenshot in
+  `.artifacts/oracle-warm-surface.png` was inspected and shows the Box Office menu with six readable
+  rows. Both raw framebuffers also have SHA-256
+  `1bffc82b335571138a8c80c8589a0da52a4dcb317b634183311e2c4a7a3f0b74`.
+  The capture report is `.artifacts/oracle-warm-surface.json`; source oracle SHA-256 and EEPROM
+  SHA-256 are recorded there. The key path required CSI receive pacing on the guest transmit receipt,
+  verified by `internal/device/csi/link_test.go`.

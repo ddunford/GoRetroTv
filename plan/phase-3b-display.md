@@ -7,11 +7,10 @@ The Sky interface appears. The single most visible milestone in the project.
 Blitter, DMA, VRAM and the OSD registers. The predecessor found two of these the hard way and both
 findings are load-bearing.
 
-**Execution dependency discovered 2026-09-17:** the drawing hardware and its unit/integration
-tests can finish before a real application menu exists. The complete drawn-menu framebuffer
-comparison remains TASK-3b.6/TC-3b.6 and depends on Phase 3c's 42-task cold boot and handset
-link. TASK-3b.7 and the security review cover the drawing hardware now, allowing Phase 3c to
-start without claiming the menu was seen.
+**Execution dependency resolved 2026-09-17:** the drawing hardware tests finished before the
+application boot. After Phase 3c reached 42 guest tasks and the handset link worked, a warm boot
+and Sky key press produced the Box Office menu. The raw framebuffer agrees with the independent
+browser oracle at the same guest instruction count; TC-3b.6 records the capture and hashes.
 
 ## Tasks (mirror — bd epic `gort-omj` is the source of truth; never hand-ticked)
 
@@ -20,7 +19,7 @@ start without claiming the menu was seen.
 - [x] `TASK-3b.3` The DMA controller at `0xB0009000`: 13 channels, 40-byte descriptors at `0x80108A60 + 40*ch`, completion bits, the write-1-to-clear acknowledge, and `+0x010` which **must read back** because the LISR read-modify-writes it → `/go-engineer` [TC-3b.3]
 - [x] `TASK-3b.4` The plane/window model: the 100-byte records at `*0x80105E9C`, the produce/consume indices at `+0x50`/`+0x54`, the background flag and colour. **Window 0 is a trap** — the validator errors when the id is 0 while the gate reads 0, and the error handler does not return → `/go-engineer` [TC-3b.4]
 - [x] `TASK-3b.5` Palette/CLUT and bit depth (2, 4 or 8 bpp per window) → `/go-engineer` [TC-3b.5]
-- [ ] `TASK-3b.6` Oracle comparison to a drawn menu; then compare the **framebuffer** itself, not just checkpoints → `/go-engineer` [TC-3b.6]
+- [x] `TASK-3b.6` Oracle comparison to a drawn menu; then compare the **framebuffer** itself, not just checkpoints → `/go-engineer` [TC-3b.6]
 - [x] `TASK-3b.7` ⫘ Drawing hardware integration tests → `/go-engineer` [TC-3b.1, TC-3b.2, TC-3b.3, TC-3b.4, TC-3b.5]
 - [x] `TASK-3b.8` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
@@ -47,8 +46,8 @@ manual has zero hits for CLUT, palette, MPEG, demux, video encoder or framebuffe
 
 **Interfaces:**
 - `Blitter.Execute(cmd) error` · `DMA.Run(ch int) error` · `OSD.Compose() *image.Paletted`
-- `Display.FrameHash() uint32` — via `platform/statehash`, so the framebuffer comparison and the
-  oracle checkpoint use one definition
+- `statehash.HashBytes(rawSurface) uint32` — used by the trace runner for the raw OSD surface, so
+  framebuffer comparison and oracle checkpoints use the same FNV-1a definition
 
 **Key patterns (non-obvious, measured):**
 - A bit-24-clear command is a **copy from a source packed at the blit width** (stride 480, measured
@@ -59,7 +58,7 @@ manual has zero hits for CLUT, palette, MPEG, demux, video encoder or framebuffe
   paints stripes. Decide deliberately what to show pre-programming rather than inheriting that.
 
 **Test checklist:**
-- [ ] Asserting bit 23 as the fill bit fails TC-3b.2
-- [ ] `+0x010` not reading back corrupts the enable set via the LISR's read-modify-write
-- [ ] Driving window 0 while the gate reads 0 does not wedge the machine
-- [ ] The drawn menu's framebuffer hash equals the oracle's at the same instruction count
+- [x] Asserting bit 23 as the fill bit fails TC-3b.2
+- [x] `+0x010` not reading back corrupts the enable set via the LISR's read-modify-write
+- [x] Driving window 0 while the gate reads 0 does not wedge the machine
+- [x] The drawn menu's framebuffer hash equals the oracle's at the same instruction count

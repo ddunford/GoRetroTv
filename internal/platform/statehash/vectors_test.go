@@ -31,6 +31,7 @@ func TestKnownVectors(t *testing.T) {
 		}{
 			{"the FNV offset basis", fnvOffset, 2166136261},
 			{"the FNV prime", fnvPrime, 16777619},
+			{"raw bytes used by the OSD surface", HashBytes([]byte{0x12, 0x34, 0x12, 0xff}), 0xD4A9E9C4},
 			{"mixOctet drops all but the low eight bits", mixOctet(fnvOffset, 0xFFFFFF41),
 				mixOctet(fnvOffset, 0x41)},
 			{"mixWord over an address the record quotes", mixWord(fnvOffset, 0x80081C58), 0xBE2386A9},

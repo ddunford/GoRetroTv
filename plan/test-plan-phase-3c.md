@@ -34,7 +34,8 @@
   `internal/device/i2c/controller_test.go` sets the indirect register pointer through the
   vbus-0 I²C path and reads register 75 as 0x17 through the controller data register.
 - [x] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
-  matching end to end. **SPEC success criterion 1.** `./ctl.sh oracle-gate` runs the real firmware
+  matching end to end. **SPEC success criterion 1.** **Result:** `tools/oracle-cold-boot-gate.sh`
+  (`./ctl.sh oracle-gate`) runs the real firmware
   to 470 million guest instructions, checks the guest-created task list contains 42 tasks, and
   compares all 4,700 checkpoint hashes with the clean browser trace through instruction
   469,900,000. The trace disables only the oracle's declared post-boot Sky menu patch, because

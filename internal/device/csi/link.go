@@ -166,10 +166,11 @@ func (l *Link) Pump(now, boardTicks uint64) {
 		l.data, l.reply = l.reply[0], l.reply[1:]
 		l.txSeen = false
 	case len(l.queue) > 0:
-		if now-l.lastByteAt < TrafficInstructions {
+		if !l.cardLive || !l.txSeen || now-l.lastByteAt < TrafficInstructions {
 			return
 		}
 		l.data, l.queue = l.queue[0], l.queue[1:]
+		l.txSeen = false
 	default:
 		period := uint64(IdleInstructions)
 		if l.boxBusy {

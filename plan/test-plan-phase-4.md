@@ -60,5 +60,11 @@
   overlap/removal and Ctrl-C. Evidence: `.artifacts/gdb-real-client.log`,
   `.artifacts/gdb-watch-client.log` and
   `docs/debugger.md`.
-- [ ] **TC-4.6: An instrument refuses to report on a wrong state** (covers: TASK-4.6, TASK-4.7) — a census
+- [x] **TC-4.6: An instrument refuses to report on a wrong state** (covers: TASK-4.6, TASK-4.7) — a census
   whose subject is absent reports a harness failure, not zero.
+  **Result:** `internal/instruments/instruments_test.go` covers empty windows, absent positive controls,
+  DRAM aliases, PC filters, data versus instruction reads, capped logs and o-code reads. A real
+  1.1B→1.12B firmware run exercised PC histogram/range, read and write watches, call trace and
+  o-code trace; counts and reproduction command are in `docs/instruments.md`. The same snapshot
+  with zero guest steps rejects the histogram, and a one-step wrong-address watch rejects its
+  absent subject. The instrumented run is captured in `.artifacts/instruments-real-1120m.log`.

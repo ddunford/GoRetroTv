@@ -144,6 +144,7 @@ type ObservedAccess struct {
 	Size    Size
 	Value   uint32
 	Write   bool
+	Fetch   bool
 }
 
 // SetObserver installs a synchronous access observer. Pass nil to remove it.
@@ -219,6 +220,16 @@ func (b *Bus) Attach(base, size uint32, d Device) error {
 // the firmware, so an invalid width is a mistake in our code; and silently reading some other
 // width is exactly the kind of plausible wrongness this machine does not report.
 func (b *Bus) Read(virt uint32, size Size) uint32 {
+	return b.read(virt, size, false)
+}
+
+// Fetch reads an instruction with the same bus behavior as Read, while marking
+// the observation as code fetch rather than a guest data load.
+func (b *Bus) Fetch(virt uint32, size Size) uint32 {
+	return b.read(virt, size, true)
+}
+
+func (b *Bus) read(virt uint32, size Size, fetch bool) uint32 {
 	if !size.Valid() {
 		panic(fmt.Sprintf("bus: read at %s with invalid size %d", hexfmt.Addr(virt), size))
 	}
@@ -232,7 +243,7 @@ func (b *Bus) Read(virt uint32, size Size) uint32 {
 		b.note(virt, phys, NoDevice, true)
 	}
 	if b.observer != nil {
-		b.observer(ObservedAccess{Virtual: virt, Size: size, Value: value})
+		b.observer(ObservedAccess{Virtual: virt, Size: size, Value: value, Fetch: fetch})
 	}
 	return value
 }

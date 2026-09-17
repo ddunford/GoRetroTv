@@ -42,6 +42,8 @@ func main() {
 
 func run() error {
 	var hits pcHits
+	var histogramRanges, readRanges, writeRanges instrumentRanges
+	var histogramControls, callTargets pcHits
 	var sections sectionInputs
 	dir := flag.String("firmware", "firmware", "verified firmware directory")
 	steps := flag.Uint64("steps", 100000, "maximum retired instructions")
@@ -79,13 +81,33 @@ func run() error {
 	replayIn := flag.String("replay-in", "", "replay and verify a prior input recording")
 	gdbAddr := flag.String("gdb-addr", "", "serve one GDB session on an explicit loopback TCP address")
 	stateHash := flag.Bool("state-hash", false, "print the exact final CPU and DRAM state hash")
+	pcHistogram := flag.Bool("pc-hist", false, "report hottest guest instruction PCs")
+	flag.Var(&histogramRanges, "pc-range", "executed PC range lo:hi (repeatable, half-open)")
+	flag.Var(&histogramControls, "pc-control", "required executed PC for histogram subject (repeatable)")
+	flag.Var(&readRanges, "read-watch", "guest data read range lo:hi[:fromPC:toPC] (repeatable)")
+	flag.Var(&writeRanges, "write-watch", "guest data write range lo:hi[:fromPC:toPC] (repeatable)")
+	flag.Var(&callTargets, "call-trace", "exact guest PC to trace with pre-instruction arguments (repeatable)")
+	ocodeTrace := flag.Bool("ocode-trace", false, "trace OpenTV CODE byte reads at the interpreter fetch PC")
+	instrumentMax := flag.Int("instrument-max", 4000, "maximum detailed records per instrument")
 	flag.Var(&hits, "pc-hit", "count guest executions of this PC (repeatable, hex or decimal)")
 	flag.Parse()
+	for _, spec := range histogramRanges {
+		if spec.toPC != 0 {
+			return fmt.Errorf("pc-range accepts only lo:hi")
+		}
+	}
+	traceInstruments, err := newInstrumentRun(*pcHistogram, histogramRanges, readRanges, writeRanges,
+		histogramControls, callTargets, *ocodeTrace, *instrumentMax)
+	if err != nil {
+		return err
+	}
+	instrumentActive := traceInstruments.requested()
+	accessActive := traceInstruments.observeAccesses()
 	if *recordOut != "" && *replayIn != "" {
 		return fmt.Errorf("record-out and replay-in are mutually exclusive")
 	}
-	if *gdbAddr != "" && (*recordOut != "" || *replayIn != "" || *key >= 0 || *sectionHex != "" || len(sections) != 0) {
-		return fmt.Errorf("gdb-addr cannot be combined with scheduled host inputs or recording")
+	if *gdbAddr != "" && (*recordOut != "" || *replayIn != "" || *key >= 0 || *sectionHex != "" || len(sections) != 0 || instrumentActive) {
+		return fmt.Errorf("gdb-addr cannot be combined with scheduled host inputs, recording or trace instruments")
 	}
 	if *recordOut != "" || *replayIn != "" {
 		if *ackAll || *ackCode >= 0 || *nvram != "" {
@@ -370,20 +392,36 @@ func run() error {
 				fmt.Fprintf(os.Stderr, "declared Sky menu gates applied after %d guest instructions\n", i)
 			}
 		}
-		if observe != nil {
-			busMap.SetObserver(observe)
+		if instrumentActive {
+			traceInstruments.ObserveInstruction(i, core.PC, core.GPR)
+		}
+		var accessObserver func(bus.ObservedAccess)
+		if accessActive || observe != nil {
+			pc := core.PC
+			accessObserver = func(access bus.ObservedAccess) {
+				if access.Fetch {
+					return
+				}
+				if accessActive {
+					traceInstruments.ObserveAccess(i, pc, access)
+				}
+				if observe != nil {
+					observe(access)
+				}
+			}
+			busMap.SetObserver(accessObserver)
 		}
 		interruptBoundary := pumpBoard
-		if observe != nil {
+		if accessObserver != nil {
 			interruptBoundary = func() error {
 				busMap.SetObserver(nil)
 				err := pumpBoard()
-				busMap.SetObserver(observe)
+				busMap.SetObserver(accessObserver)
 				return err
 			}
 		}
 		stepErr := core.StepWithInterruptBoundary(interruptBoundary)
-		if observe != nil {
+		if accessObserver != nil {
 			busMap.SetObserver(nil)
 		}
 		if err := stepErr; err != nil {
@@ -497,6 +535,9 @@ func run() error {
 	}
 	if len(hits) != 0 && retired == startRetired {
 		return instrument.MustFind("PC hit trace", "guest instructions", 0, 1)
+	}
+	if err := traceInstruments.Report(os.Stderr); err != nil {
+		return err
 	}
 	if *recordOut != "" || *replayIn != "" {
 		_, _, surfaceSHA, err := surfaceDigest(ram, surfaceBase, surfaceLength)

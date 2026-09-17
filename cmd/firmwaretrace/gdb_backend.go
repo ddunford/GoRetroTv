@@ -68,16 +68,9 @@ func (d *firmwareDebugBackend) WriteMemory(addr uint32, data []byte) error {
 }
 
 func (d *firmwareDebugBackend) Step() ([]gdbstub.MemoryAccess, error) {
-	pc := d.core.PC
-	fetchSize := bus.Word
-	if d.core.ISA {
-		fetchSize = bus.Half
-	}
 	var accesses []gdbstub.MemoryAccess
-	fetchSeen := false
 	observe := func(access bus.ObservedAccess) {
-		if !fetchSeen && !access.Write && access.Virtual == pc && access.Size == fetchSize {
-			fetchSeen = true
+		if access.Fetch {
 			return
 		}
 		accesses = append(accesses, gdbstub.MemoryAccess{

@@ -111,9 +111,12 @@ func TestObserverSeesGuestAccessWithoutChangingReadback(t *testing.T) {
 		accesses[1].Virtual != dramKseg0+4 || accesses[1].Value != 0x12345678 {
 		t.Fatalf("wrong observed accesses: %+v", accesses)
 	}
+	if got := b.Fetch(dramKseg0+4, bus.Word); got != 0x12345678 || len(accesses) != 3 || !accesses[2].Fetch {
+		t.Fatalf("instruction fetch lost readback or fetch identity: %#x %+v", got, accesses)
+	}
 	b.SetObserver(nil)
 	b.Read(dramKseg0+4, bus.Word)
-	if len(accesses) != 2 {
+	if len(accesses) != 3 {
 		t.Fatalf("observer kept reporting after removal: %+v", accesses)
 	}
 }

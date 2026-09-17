@@ -14,13 +14,13 @@ func sx16(v uint32, bits uint) uint32 { return bits32(signed32(v<<(32-bits)) >> 
 // MIPS16e SAVE/RESTORE and the 64-bit beta encodings are reserved on the VR4111.
 func (c *Core) execute16() (branch, uint32, error) {
 	pc := c.PC
-	h := c.bus.Read(pc, bus.Half) & 0xffff
+	h := c.bus.Fetch(pc, bus.Half) & 0xffff
 	length := uint32(2)
 	ext := uint32(0)
 	extended := h>>11 == 0x1e
 	if extended {
 		ext = h & 0x7ff
-		h = c.bus.Read(pc+2, bus.Half) & 0xffff
+		h = c.bus.Fetch(pc+2, bus.Half) & 0xffff
 		length = 4
 	}
 	op, rx, ry := h>>11, (h>>8)&7, (h>>5)&7

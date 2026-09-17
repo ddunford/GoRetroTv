@@ -122,7 +122,7 @@ func (c *Core) StepWithInterruptBoundary(beforeVector func() error) error {
 		if c.PC&3 != 0 {
 			return fmt.Errorf("cpu: unaligned MIPS32 PC %s", hexfmt.Addr(c.PC))
 		}
-		word := c.bus.Read(c.PC, bus.Word)
+		word := c.bus.Fetch(c.PC, bus.Word)
 		var err error
 		effect, err = c.execute32(word)
 		if err != nil {

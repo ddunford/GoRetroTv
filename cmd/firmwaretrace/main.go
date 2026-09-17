@@ -11,6 +11,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/cpu"
 	"github.com/ddunford/goretrotv/internal/device/blitter"
 	"github.com/ddunford/goretrotv/internal/device/csi"
+	"github.com/ddunford/goretrotv/internal/device/demod"
 	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/device/dma"
 	"github.com/ddunford/goretrotv/internal/device/eeprom"
@@ -91,6 +92,7 @@ func run() error {
 	store := eeprom.New()
 	mux := i2c.NewMux()
 	master := i2c.New(store, mux, interrupts)
+	master.BindDemod(demod.New())
 	if *nvram != "" {
 		if err := master.BindImage(*nvram); err != nil {
 			return err

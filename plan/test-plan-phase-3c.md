@@ -24,8 +24,12 @@
   separate TX completion interrupts, checks interrupt acknowledgement and the paced six-byte
   empty-slot response. **Blocked:** proving that guest CA init advances requires the real
   application handoff and complete Phase 3c boot; reopen after TASK-3c.9/3c.6.
-- [ ] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75 with bits 0x17
+- [x] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75 with bits 0x17
   set and register 78 = 0x02, which is what the driver polls.
+  **Result:** `internal/device/demod/model_test.go` checks the measured lock, identity, BER and
+  register-11 responses plus a 1 KiB port-5 microcode upload without changing readback;
+  `internal/device/i2c/controller_test.go` sets the indirect register pointer through the
+  vbus-0 I²C path and reads register 75 as 0x17 through the controller data register.
 - [ ] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
   matching end to end. **SPEC success criterion 1.**
 - [ ] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/demod"
 	"github.com/ddunford/goretrotv/internal/device/eeprom"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/platform/snapcodec"
@@ -19,6 +20,7 @@ type Controller struct {
 	addressBytes                         uint8
 	fault                                string
 	store                                *eeprom.Store
+	demod                                *demod.Model
 	mux                                  *Mux
 	interrupt                            *irq.Controller
 	imagePath                            string
@@ -28,6 +30,9 @@ type Controller struct {
 func New(store *eeprom.Store, mux *Mux, interrupt *irq.Controller) *Controller {
 	return &Controller{control: 0x99, store: store, mux: mux, interrupt: interrupt}
 }
+
+// BindDemod connects the satellite front-end on vbus 0.
+func (c *Controller) BindDemod(model *demod.Model) { c.demod = model }
 
 // BindImage makes completed EEPROM write transactions durable at path.
 func (c *Controller) BindImage(path string) error {
@@ -88,6 +93,8 @@ func (c *Controller) Write(off uint32, size bus.Size, value uint32) {
 			case c.active && c.isEEPROM() && c.slave&1 != 0 && c.store != nil:
 				c.data = c.store.Read(uint32(c.pointer), bus.Byte)
 				c.pointer = (c.pointer + 1) & (eeprom.Capacity - 1)
+			case c.active && c.isDemod() && c.slave&1 != 0 && c.demod != nil:
+				c.data = uint32(c.demod.ShiftRead())
 			case c.active:
 				c.data = 0
 			default:
@@ -117,6 +124,14 @@ func (c *Controller) isEEPROM() bool {
 	return connected && channel == 3 && c.slave&^uint8(1) == 0xa0
 }
 
+func (c *Controller) isDemod() bool {
+	if c.mux == nil {
+		return false
+	}
+	channel, connected := c.mux.Channel()
+	return connected && channel == 0 && c.slave&^uint8(1) == 0x18
+}
+
 func (c *Controller) writeData(value uint8) {
 	c.data = uint32(value)
 	if c.startArmed {
@@ -130,6 +145,9 @@ func (c *Controller) writeData(value uint8) {
 		c.active = connected && (channel == 3 && value&^uint8(1) == 0xa0 || channel == 0 && value&^uint8(1) == 0x18 || channel == 1 && value&^uint8(1) == 0xca || value == 0)
 		if c.isEEPROM() && value&1 == 0 {
 			c.addressBytes = 0
+		}
+		if c.isDemod() && c.demod != nil {
+			c.demod.Start()
 		}
 		c.complete(c.active)
 		return
@@ -149,6 +167,8 @@ func (c *Controller) writeData(value uint8) {
 				c.dirty = true
 			}
 		}
+	} else if c.active && c.isDemod() && c.demod != nil {
+		c.demod.ShiftWrite(value)
 	}
 	c.complete(c.active)
 }

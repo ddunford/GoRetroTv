@@ -6,6 +6,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/bus/bustest"
+	"github.com/ddunford/goretrotv/internal/device/demod"
 	"github.com/ddunford/goretrotv/internal/device/eeprom"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 )
@@ -88,6 +89,32 @@ func TestPageWriteWrapsWithin64Bytes(t *testing.T) {
 	}
 }
 
+func TestDemodIndirectRegisterReadOverI2C(t *testing.T) {
+	t.Parallel()
+	mux := NewMux()
+	mux.Write(0, bus.Word, 0)
+	model := demod.New()
+	c := New(eeprom.New(), mux, nil)
+	c.BindDemod(model)
+	for _, data := range [][]uint32{{0x18, 0, 75}, {0x18, 1, 0}, {0x18, 3}} {
+		c.Write(0, bus.Word, 0x9a)
+		for _, b := range data {
+			transferByte(t, c, b)
+		}
+		c.Write(0, bus.Word, 0x99)
+	}
+	c.Write(0, bus.Word, 0x9a)
+	transferByte(t, c, 0x19)
+	c.Write(0, bus.Word, 0xac)
+	if got := c.Read(0x40, bus.Word); got != 0x17 {
+		t.Fatalf("polled lock register 75 = %#x", got)
+	}
+	c.Write(0, bus.Word, 0xac)
+	if got := c.Read(0x40, bus.Word); got != 0 {
+		t.Fatalf("next BER register = %#x", got)
+	}
+}
+
 func TestControllerHoldsTheDeviceContract(t *testing.T) {
 	t.Parallel()
 	err := bustest.CheckSnapshot(bustest.Check{
@@ -99,7 +126,7 @@ func TestControllerHoldsTheDeviceContract(t *testing.T) {
 			c.slave, c.pointer, c.addressBytes, c.fault = 0xa0, 0x1234, 2, "test"
 		},
 		Disturb:  func(device bus.Device) { device.Reset() },
-		Constant: []string{"store.image", "mux.value", "interrupt", "imagePath"},
+		Constant: []string{"store.image", "mux.value", "interrupt", "imagePath", "demod"},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -34,3 +34,7 @@ digest: 353042451fcc488c045c3f0c49652779edae8e02a0083b4cf88f2058a9219413
   when: 2026-09-17T11:24:41Z
    why: Add links-gate to ctl.sh as the front door for repeatable Phase 3c guest handset, card, NVRAM and acknowledgement verification; architecture rule semantics are unchanged.
 
+digest: 3ecf653840c4a7f397d4a85134d6e60976a4bea17ca0cb1f4156500b73d7d3cd
+  when: 2026-09-17T11:50:22Z
+   why: Update ctl help to report the measured 470,000-checkpoint cold oracle gate; architecture checks and controls are unchanged.
+

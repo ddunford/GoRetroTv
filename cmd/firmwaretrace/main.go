@@ -6,10 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/cpu"
 	"github.com/ddunford/goretrotv/internal/device/blitter"
+	"github.com/ddunford/goretrotv/internal/device/boardlatch"
 	"github.com/ddunford/goretrotv/internal/device/csi"
 	"github.com/ddunford/goretrotv/internal/device/demod"
 	"github.com/ddunford/goretrotv/internal/device/demux"
@@ -51,6 +53,7 @@ func run() error {
 	skyGates := flag.Bool("sky-gates", false, "apply the oracle's declared post-boot Sky menu gate policy")
 	scheduler := flag.Bool("scheduler", false, "print guest current-task changes")
 	csiWire := flag.Bool("csi-wire", false, "print bytes the guest transmitted on CSI")
+	demodPolls := flag.Bool("demod-polls", false, "count guest I2C reads of the satellite demodulator")
 	surfaceHash := flag.Bool("surface-hash", false, "print the raw 720x576 OSD RAM hash and distinct byte count")
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	ackCode := flag.Int("ack-code", -1, "additional CSI command code to acknowledge (-1 keeps measured default)")
@@ -106,6 +109,9 @@ func run() error {
 			return err
 		}
 	}
+	if err := busMap.Attach(boardlatch.Base, boardlatch.Size, boardlatch.New()); err != nil {
+		return err
+	}
 	core := cpu.New(busMap, memory.FlashU202)
 	interrupts := irq.New(core.Interrupt)
 	if err := busMap.Attach(irq.Base, irq.Size, interrupts); err != nil {
@@ -135,7 +141,18 @@ func run() error {
 	store := eeprom.New()
 	mux := i2c.NewMux()
 	master := i2c.New(store, interrupts)
-	master.BindDemod(demod.New())
+	demodModel := demod.New()
+	var demodReadTotal uint64
+	demodReadCount := make(map[uint16]uint64)
+	demodReadValue := make(map[uint16]uint8)
+	if *demodPolls {
+		demodModel.SetReadObserver(func(register uint16, value uint8) {
+			demodReadTotal++
+			demodReadCount[register]++
+			demodReadValue[register] = value
+		})
+	}
+	master.BindDemod(demodModel)
 	if *nvram != "" {
 		if err := master.BindImage(*nvram); err != nil {
 			return err
@@ -314,6 +331,17 @@ func run() error {
 	}
 	if *csiWire {
 		fmt.Fprintf(os.Stderr, "CSI transmitted % X\n", serial.Transmitted())
+	}
+	if *demodPolls {
+		fmt.Fprintf(os.Stderr, "demod-read total=%d\n", demodReadTotal)
+		registers := make([]int, 0, len(demodReadCount))
+		for register := range demodReadCount {
+			registers = append(registers, int(register))
+		}
+		sort.Ints(registers)
+		for _, register := range registers {
+			fmt.Fprintf(os.Stderr, "demod-read register=%d count=%d value=%02X\n", register, demodReadCount[uint16(register)], demodReadValue[uint16(register)]) // #nosec G115 -- register came from uint16 map key.
+		}
 	}
 	for _, hit := range hits {
 		if *key >= 0 {

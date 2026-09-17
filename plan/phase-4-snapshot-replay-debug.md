@@ -19,6 +19,12 @@ Snapshot/restore, deterministic replay and a gdb stub. Every device already impl
 - [ ] `TASK-4.7` ⫘ Tests → `/go-engineer` [TC-4.1, TC-4.2, TC-4.3, TC-4.4, TC-4.5, TC-4.6]
 - [ ] `TASK-4.8` ⫘ Security audit — especially that the stub and instruments cannot be reached from outside → `/security-reviewer` [no-test: audit produces its own report]
 
+**Reconcile carry-over for TASK-4.1:** the Phase 3 diagnostic runner currently counts its own
+16-instruction device-pump phase. When the central machine and snapshot writer are assembled,
+schedule timer and device pumps through `internal/platform/clock`, include that clock's state in
+the snapshot, remove the runner-local phase, and preserve the measured oracle cadence. This is
+tracked in `gort-lbl.1` and `plan/reconcile-2026-09-17.md`.
+
 ## Key patterns
 - **A partially-correct snapshot does not fail; it produces a plausible machine.** Restore without
   the demux ring pointers and sections land at the wrong offset; without the I²C transaction state

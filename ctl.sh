@@ -270,7 +270,7 @@ Running
   gate           Boot gate: build, verify firmware, listen, /health, graceful stop
   cpu-gate       Real firmware CPU/oracle gate through the first unmodelled video RAM read
   handoff-gate   Prove declared handoff, guest loader and application entry
-  oracle-gate    Full 42-task cold boot and 4,700 matching browser checkpoints
+  oracle-gate    Full 42-task cold boot and 470,000 matching browser checkpoints
   links-gate     Guest handset, card, NVRAM and acknowledgement-policy checks
 
 Building and checking

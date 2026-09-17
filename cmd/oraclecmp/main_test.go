@@ -57,7 +57,8 @@ func TestDivergingStreamsExitOneAndNameTheWindow(t *testing.T) {
 	if code != exitDiverge {
 		t.Fatalf("exit %d, want %d\nstdout: %s\nstderr: %s", code, exitDiverge, out, errOut)
 	}
-	for _, want := range []string{"DIVERGE", "2000..2999", "0xDEADBEEF", "tier 2"} {
+	for _, want := range []string{"DIVERGE", "2000..2999", "0xDEADBEEF", "tier 2",
+		"re-run instructions 1001..2000"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("the report does not contain %q:\n%s", want, out)
 		}

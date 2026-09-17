@@ -27,20 +27,30 @@
   six TX completion interrupts and checks the paced six-byte empty-slot response.
   `./ctl.sh links-gate` observes 12 guest smartcard ISR hits at `0x8002CCA0`; the same cold boot creates
   42 tasks, with SCTask, ECM, EMM and the main task scheduled after the exchange.
-- [x] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75 with bits 0x17
-  set and register 78 = 0x02, which is what the driver polls.
+- [x] **TC-3c.5: The demodulator reports locked** (covers: TASK-3c.5, TASK-3c.7) — register 75
+  returns 0x17 and register 78 returns 0x02 when addressed through the guest I²C path.
   **Result:** `internal/device/demod/model_test.go` checks the measured lock, identity, BER and
   register-11 responses plus a 1 KiB port-5 microcode upload without changing readback;
   `internal/device/i2c/controller_test.go` sets the indirect register pointer through the
   vbus-0 I²C path and reads register 75 as 0x17 through the controller data register.
+  `./ctl.sh links-gate` also records all 11 real-firmware demodulator I²C reads during the
+  470-million-instruction cold boot: register 0 twice, 1 once, 2 once, 3 once, 4 twice, 5 once,
+  14 once, and 1025 twice; all returned 0x00. The guest does not read registers 75 or 78 in
+  this run. Their later use during SI acquisition remains tracked by TASK-3a.7/TC-3a.7.
 - [x] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
   matching end to end. **SPEC success criterion 1.** **Result:** `tools/oracle-cold-boot-gate.sh`
-  (`./ctl.sh oracle-gate`) runs the real firmware
-  to 470 million guest instructions, checks the guest-created task list contains 42 tasks, and
-  compares all 4,700 checkpoint hashes with the clean browser trace through instruction
-  469,900,000. The trace disables only the oracle's declared post-boot Sky menu patch, because
+  (`./ctl.sh oracle-gate`) runs the real firmware to 470 million guest instructions, checks the
+  guest-created task list contains 42 tasks, and matches all **470,000** checkpoint hashes with
+  the clean browser trace through instruction 469,999,000 at **1,000-instruction cadence**.
+  The trace disables only the oracle's declared post-boot Sky menu patch, because
   that host RAM/flash mutation is a separate presentation policy; capture provenance is in
   `internal/platform/statehash/testdata/README.md`.
+  Six transient differences exposed by the finer cadence were traced to the missing measured
+  readback word at `0xB200A000`; `internal/device/boardlatch/latch_test.go` covers its
+  read-modify-write and snapshot behavior. `tools/oracle-tier2-gate.sh` injects a Status bit in
+  a temporary browser trace after retired instruction 100,123. The comparator identifies the
+  first differing 1,000-step checkpoint at 101,000, then per-instruction comparison identifies
+  instruction 100,123 exactly. The checked-in oracle remains unchanged.
 - [x] **TC-3c.7: Declared application handoff** (covers: TASK-3c.9) — after 200,000 continuous
   idle instructions with `ready >= 0x100` and `current = 0`, compare the flash `JB` header to
   the ROM literal and apply the oracle's explicit one-time PC/ISA/RA handoff. The policy must

@@ -39,12 +39,25 @@ after_key() {
 # The first run starts with an absent NVRAM file. The guest creates the system
 # area and persists it through the model's real I2C STOP transactions.
 run_trace cold -steps 470000000 -nvram "$work/cold.nvram" \
-    -pc-hit 0x8002CCA0 -tasks
+    -pc-hit 0x8002CCA0 -demod-polls -tasks
 [[ -f "$work/cold.nvram" ]] || fail 'the guest did not create an NVRAM image'
 [[ "$(stat -c %s "$work/cold.nvram")" == 16384 ]] || fail 'NVRAM image has the wrong size'
 grep -Fqx 'tasks found: 42' "$work/cold.log" || fail 'cold guest boot did not create 42 tasks'
 card_hits="$(count_pc cold 8002CCA0)"
 [[ "$card_hits" =~ ^[0-9]+$ ]] && (( card_hits >= 12 )) || fail 'guest smartcard ISR did not complete the boot exchange'
+# The current cold boot reaches the demodulator over the guest's I2C path but
+# does not poll the fixed lock answers at registers 75 and 78. Pin the actual
+# read phases so a missing observer or dead bus cannot pass as zero traffic.
+grep -Fqx 'demod-read total=11' "$work/cold.log" || fail 'guest demodulator read count changed'
+for observed in \
+    '0 count=2 value=00' '1 count=1 value=00' '2 count=1 value=00' \
+    '3 count=1 value=00' '4 count=2 value=00' '5 count=1 value=00' \
+    '14 count=1 value=00' '1025 count=2 value=00'; do
+    grep -Fqx "demod-read register=$observed" "$work/cold.log" \
+        || fail "guest demodulator read register $observed changed"
+done
+[[ "$(grep -c '^demod-read register=' "$work/cold.log")" == 8 ]] \
+    || fail 'guest demodulator read additional registers'
 for task in SCTask ECM EMM TASK0; do
     grep -Eq "^task [0-9]+ .*name=\"$task\" .*runs=[1-9][0-9]*" "$work/cold.log" \
         || fail "guest CA task $task was not scheduled after the card exchange"
@@ -83,3 +96,4 @@ printf 'links gate: 42-task boot, %s card ISR hits, key dispatcher +%s, input ev
     "$card_hits" "$dispatcher" "$events"
 printf 'links gate: oracle surfaces 9825B318/12 -> F3634409/37; all-ack gate %s -> %s\n' \
     "$baseline_gate" "$allack_gate"
+printf 'links gate: 11 guest demod I2C reads across 8 registers; no 75/78 lock poll in this cold boot\n'

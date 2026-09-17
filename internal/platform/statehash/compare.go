@@ -104,12 +104,30 @@ type Comparison struct {
 	// all, and phase 2 would have no instrument to drive the first real divergence to zero.
 	FirstState *Finding
 
+	// LastEqualBeforeFirstState is the last checkpoint whose states matched before the first
+	// state difference. Tier 2 must trace instructions AFTER this state through the first
+	// differing checkpoint; the numeric window containing that checkpoint is too late.
+	LastEqualBeforeFirstState *Checkpoint
+
 	// ReachedA and ReachedB are how far each stream ran, so an "agree" can say over what.
 	ReachedA, ReachedB uint64
 }
 
 // Agreed reports whether the two matched over everything they share.
 func (c Comparison) Agreed() bool { return c.Kind == Agree }
+
+// Tier2Range is the inclusive instruction-state range that can contain the cause of the
+// first state difference. The last agreeing state itself needs no repeat; the first differing
+// checkpoint must be included. A missing earlier checkpoint means the search starts at reset.
+func (c Comparison) Tier2Range() (lo, hi uint64, ok bool) {
+	if c.FirstState == nil {
+		return 0, 0, false
+	}
+	if c.LastEqualBeforeFirstState != nil {
+		lo = c.LastEqualBeforeFirstState.ICount + 1
+	}
+	return lo, c.FirstState.AtA.ICount, true
+}
 
 // String renders the comparison the way the command prints it.
 func (c Comparison) String() string {
@@ -228,6 +246,9 @@ func Compare(a, b *Stream) (Comparison, error) {
 	}
 
 	var first, firstState *Finding
+	var lastEqual Checkpoint
+	var hasLastEqual bool
+	var lastEqualBeforeFirstState *Checkpoint
 	note := func(f Finding) {
 		if first == nil {
 			c := f
@@ -236,6 +257,10 @@ func Compare(a, b *Stream) (Comparison, error) {
 		if f.Kind == StateDiverged && firstState == nil {
 			c := f
 			firstState = &c
+			if hasLastEqual {
+				prior := lastEqual
+				lastEqualBeforeFirstState = &prior
+			}
 		}
 	}
 
@@ -271,6 +296,7 @@ func Compare(a, b *Stream) (Comparison, error) {
 
 		default:
 			out.Compared++
+			lastEqual, hasLastEqual = ca, true
 		}
 	}
 
@@ -279,6 +305,7 @@ func Compare(a, b *Stream) (Comparison, error) {
 		out.Window, out.Lo, out.Hi = first.Window, first.Lo, first.Hi
 		out.AtA, out.AtB, out.HasA, out.HasB = first.AtA, first.AtB, first.HasA, first.HasB
 		out.FirstState = firstState
+		out.LastEqualBeforeFirstState = lastEqualBeforeFirstState
 		return out, nil
 	}
 

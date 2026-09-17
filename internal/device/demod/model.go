@@ -14,11 +14,12 @@ const maxWrittenRegisters = 65536
 // Model records writes while returning the measured fixed lock and identity
 // responses. There is no RF source: the emulated front-end stays locked.
 type Model struct {
-	register uint16
-	selector uint8
-	index    uint16
-	writes   map[uint32]uint8
-	reads    uint64
+	register     uint16
+	selector     uint8
+	index        uint16
+	writes       map[uint32]uint8
+	reads        uint64
+	readObserver func(register uint16, value uint8)
 }
 
 // New creates a power-on front-end.
@@ -86,10 +87,20 @@ func (m *Model) ShiftWrite(value uint8) {
 
 // ShiftRead returns one indirect register byte and auto-increments the index.
 func (m *Model) ShiftRead() uint8 {
-	value := Answer(m.register)
+	register := m.register
+	value := Answer(register)
 	m.register++
 	m.reads++
+	if m.readObserver != nil {
+		m.readObserver(register, value)
+	}
 	return value
+}
+
+// SetReadObserver attaches a diagnostic sink to physical I²C read phases.
+// The observer is host instrumentation and does not affect guest state.
+func (m *Model) SetReadObserver(observer func(register uint16, value uint8)) {
+	m.readObserver = observer
 }
 
 // Written reports a value the firmware uploaded to a given port and register.

@@ -72,6 +72,19 @@ decision gets revisited then — not before.
   The rejected alternative was claiming a guest-only transfer from a ROM branch that has not
   produced one through 200 million measured instructions. Evidence: `reference/digibox-boot.html`
   `bootloaderHandoff`, `docs/reference/digibox-emulation.md` and `gort-f3f.10`.
+- **Sky menu presentation uses the oracle's declared post-boot gates, separately from hardware.**
+  A cold boot must first create all 42 Nucleus tasks. Only then may the optional policy answer
+  the application checks at RAM `0x80054F84` and flash offset `0x72FA1`, once, with the exact
+  expected flash byte checked before modification. The browser oracle does this by default; Go
+  keeps it explicit behind `-sky-gates`. Applying either answer before the RTOS boot was measured
+  to stop at 28 tasks, while leaving both unanswered makes the application unbind its screen.
+  A warm boot with persisted EEPROM and the declared policy draws the Box Office menu after Sky
+  key `0x7D`. This is a host presentation intervention, not evidence of a physical Digibox register
+  behavior. The clean no-gates checkpoint stream verifies hardware parity; the gated warm surface
+  comparison verifies the menu path. Rejected alternatives were an early firmware patch and
+  treating the menu answers as guest-produced hardware values. Evidence: `internal/machine/sky_gates.go`,
+  `tools/oracle-warm-surface.mjs`, `plan/test-plan-phase-3b.md` TC-3b.6, and the measured record
+  in `docs/reference/digibox-emulation.md`.
 
 ### The shared / platform layer
 `internal/platform/` holds `hexfmt`, `statehash`, `snapcodec`, `instrument` and `clock` — the full

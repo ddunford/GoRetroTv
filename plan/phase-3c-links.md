@@ -54,8 +54,8 @@ past CA init without them and will not remember anything without the EEPROM.
   neither stack. Diff the PC histogram instead.
 
 **Test checklist:**
-- [ ] The default and all-ack policies are shown to produce different guest-visible behaviour
-- [ ] NVRAM survives a full restart
-- [ ] The demodulator's polled registers are what the driver actually reads
-- [ ] A cold boot reaches 42 tasks and matches the oracle end to end
-- [ ] The declared host handoff fires only after the validated idle boundary; guest instructions then decompress the image to `0x800009F4`
+- [x] The default and all-ack policies are shown to produce different guest-visible behaviour
+- [x] NVRAM survives a full restart
+- [x] The demodulator's 11 cold-boot I²C reads match the measured register histogram; the fixed lock responses are tested through I²C, and their use during SI acquisition remains in TASK-3a.7
+- [x] A cold boot reaches 42 tasks and matches all 470,000 oracle checkpoints at 1,000-instruction cadence
+- [x] The declared host handoff fires only after the validated idle boundary; guest instructions then decompress the image to `0x800009F4`

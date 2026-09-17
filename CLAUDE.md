@@ -35,6 +35,9 @@ Full record with rationale and rejected alternatives: `plan/module-decisions.md`
 - **Application entry follows the oracle's declared handoff policy.** The host changes PC/ISA/RA
   once after the bootloader is idle and the flash header checks; guest code then decompresses and
   runs the application. Report the intervention explicitly, never as a guest-only ROM transfer.
+- **The Sky menu gates are a separate declared presentation policy.** After 42 guest tasks exist,
+  the optional policy answers two application checks by changing one RAM word and one flash byte.
+  Report this host intervention explicitly; keep clean hardware oracle runs free of it.
 - **No goroutine in the instruction loop.** Single-threaded and deterministic by construction;
   concurrency lives at the edges. This is what makes byte-identical replay possible at all.
 - **Errors are values; a bad guest instruction halts visibly.** It must never take the process down

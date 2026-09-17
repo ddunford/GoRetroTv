@@ -2,7 +2,9 @@
 
 ## Test Cases
 - [ ] **TC-4.1: The snapshot covers the inventory** (covers: TASK-4.1, TASK-4.7) — every device's state
-  round-trips; a device with a deliberately omitted field must fail.
+  round-trips; a device with a deliberately omitted field must fail. The central instruction
+  clock's current count and next device-pump deadline round-trip, with the first post-restore
+  pump at the same instruction as an uninterrupted run.
 - [ ] **TC-4.2: Restore is indistinguishable from not having stopped** (covers: TASK-4.2, TASK-4.7) — snapshot
   at N, restore, run to N+10,000,000; the state hash equals an uninterrupted run's. Omitting the
   flash command-sequencer state must fail this.

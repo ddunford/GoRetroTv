@@ -19,7 +19,9 @@
   appended byte; without it the task walks off the end of each section.
 - [ ] **TC-3a.6: The demux interrupt reaches its handler** (covers: TASK-3a.6, TASK-3a.8).
 - [ ] **TC-3a.7: Oracle agreement through acquisition** (covers: TASK-3a.7) — the box programs the
-  same filters as the oracle: TDT, SDT and NIT, enable `0xFFC00000`.
+  same filters as the oracle: TDT, SDT and NIT, enable `0xFFC00000`. Capture the guest demodulator
+  read histogram during acquisition and report whether it ever polls lock registers 75/78; the
+  Phase 3c cold boot observed neither.
 
 **Guest acceptance dependency:** TC-3a.5–3a.7 remain open until the real application handoff in
 TASK-3c.9. The hardware boundary already has committed tests in

@@ -205,6 +205,14 @@ on 30.
 | `0xB200A000` | `0xF4` | **flash controller** — the flash device descriptor in DRAM holds `0xB200A000` and `0xB200A010` | SOURCED |
 | `0xB4000000`, `0xB4080000`, `0xB4080100`, `0xB4180000`, `0xB4800000` | `0x10`/`0x4` | tiny blocks — latches or single registers | table only |
 
+The oracle's word at `0xB200A000` retains writes for read-modify-write use. At retired
+instruction 28,307,998, guest PC `0x80006780` reads that address into `a2`; the following
+oracle state has `a2=1`, while an unmapped Go bus returned zero. The difference lasted two
+instructions and disappeared before the next 100,000-step checkpoint. A one-word readback
+model resolves this and five other isolated differences: the full 470-million-instruction cold
+boot now matches all 470,000 browser checkpoints at 1,000-step cadence. This observation
+establishes the word's readback behavior, not the identity of the whole `0xF4`-byte block.
+
 **The technique that identifies a device without guessing: make the firmware say which one it
 means.** Raise an interrupt line with every register answering zero and log what it reads while
 servicing. It read `0xB0000040` and `0xB0000030` — so those are the status registers, told to us

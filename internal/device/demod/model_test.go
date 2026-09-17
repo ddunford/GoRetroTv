@@ -59,9 +59,30 @@ func TestModelHoldsTheDeviceContract(t *testing.T) {
 			m.ShiftWrite(0x77)
 			m.ShiftRead()
 		},
-		Disturb: func(device bus.Device) { device.Reset() },
+		Disturb:  func(device bus.Device) { device.Reset() },
+		Constant: []string{"readObserver"},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestReadObserverSeesIndirectReadWithoutChangingAnswer(t *testing.T) {
+	t.Parallel()
+	m := New()
+	var register uint16
+	var value uint8
+	var calls int
+	m.SetReadObserver(func(r uint16, v uint8) {
+		register, value = r, v
+		calls++
+	})
+	m.Start()
+	m.ShiftWrite(0)
+	m.ShiftWrite(75)
+	m.Start()
+	m.ShiftWrite(3)
+	if got := m.ShiftRead(); got != 0x17 || register != 75 || value != 0x17 || calls != 1 {
+		t.Fatalf("indirect read=%02X, observation=(%d, %02X, %d calls)", got, register, value, calls)
 	}
 }

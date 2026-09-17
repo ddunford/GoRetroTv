@@ -17,8 +17,11 @@
   blitter and row-two IP2, checks halfword completion, enable readback and write-one-to-clear
   acknowledgement; channel 8 uploads a plane and bootloader channel 5 completes without IP2.
   A zero-readback mutant fails the test.
-- [ ] **TC-3b.4: Window 0 is refused safely** (covers: TASK-3b.4, TASK-3b.7) — driving window 0 while the gate
+- [x] **TC-3b.4: Window 0 is refused safely** (covers: TASK-3b.4, TASK-3b.7) — driving window 0 while the gate
   reads 0 must not wedge the machine.
+  **Result:** `internal/device/osd/windows_test.go` builds two firmware-owned 100-byte records in
+  DRAM, verifies window 0 returns an immediate error with gate zero, reads the visible window's
+  depth, indices and background fields without mutation, and rejects an out-of-bounds table.
 - [ ] **TC-3b.5: Bit depths render** (covers: TASK-3b.5, TASK-3b.7) — 2, 4 and 8 bpp against known pixels.
 - [ ] **TC-3b.6: The menu matches the oracle** (covers: TASK-3b.6) — press sky; the framebuffer hash
   equals the oracle's for the same instruction count. 62 widgets, 37 colours is the known-good shape.

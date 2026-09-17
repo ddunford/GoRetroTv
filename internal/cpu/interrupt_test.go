@@ -2,6 +2,32 @@ package cpu_test
 
 import "testing"
 
+func TestInterruptBoundaryRunsBeforeVectorInstruction(t *testing.T) {
+	t.Parallel()
+	c, _ := machine(t, 0)
+	c.COP0[12] = 1 | 1<<10 // IE and IM2
+	c.Interrupt(2)
+	called := 0
+	if err := c.StepWithInterruptBoundary(func() error {
+		called++
+		if c.PC != 0x80000180 || c.COP0[12]&2 == 0 || c.COP0[14] != codeBase {
+			t.Fatalf("boundary before vector: PC=%#x Status=%#x EPC=%#x", c.PC, c.COP0[12], c.COP0[14])
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 || c.PC != 0x80000184 || c.COP0[9] != 2 {
+		t.Fatalf("boundary=%d PC=%#x Count=%d", called, c.PC, c.COP0[9])
+	}
+	if err := c.StepWithInterruptBoundary(func() error {
+		t.Fatal("ordinary instruction invoked interrupt boundary")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestInterruptWaitsUntilAfterBranchDelaySlot(t *testing.T) {
 	t.Parallel()
 	c, _ := machine(t, ri(4, 0, 0, 2), ri(9, 2, 2, 1), 0, 0)

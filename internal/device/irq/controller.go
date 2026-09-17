@@ -69,6 +69,13 @@ func (c *Controller) SetLine(mask uint32, asserted bool) {
 	}
 }
 
+// Pulse records a fresh device event even when its pending status bit was
+// already set. The board timer can expire again before firmware acknowledges it.
+func (c *Controller) Pulse(mask uint32) {
+	c.pending |= mask
+	c.signal()
+}
+
 func (c *Controller) signal() {
 	if c.raise != nil {
 		c.raise(2)

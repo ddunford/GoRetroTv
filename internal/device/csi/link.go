@@ -22,8 +22,8 @@ const (
 	MaxQueuedBytes = 4096
 	// IdleInstructions prevents empty wire clocking from starving the guest.
 	IdleInstructions = 320000
-	// PowerupInstructions is the measured 120 timer ticks before the reader starts.
-	PowerupInstructions = 120 * 20000
+	// PowerupTicks is the measured board timer delay before the reader starts.
+	PowerupTicks = 120
 )
 
 // Link is a one-byte receive register with a paced incoming wire. The card
@@ -38,7 +38,7 @@ type Link struct {
 	transmitted               []byte
 	lastByteAt                uint64
 	now                       uint64
-	powerAt                   uint64
+	powerAtTick, timerTicks   uint64
 	cardLive, boxBusy, txSeen bool
 	frame                     []byte
 	escaped                   bool
@@ -99,10 +99,10 @@ func (l *Link) Write(off uint32, size bus.Size, value uint32) {
 			l.updateLine()
 		}
 	case 0x30:
-		wasEnabled := l.enabled()
 		l.interruptEnable = value
-		if !wasEnabled && l.enabled() {
-			l.powerAt = l.now + PowerupInstructions
+		if value&1 != 0 {
+			l.powerAtTick = l.timerTicks + PowerupTicks
+			l.cardLive = false
 		}
 		l.updateLine()
 	}
@@ -149,13 +149,14 @@ func Encode(payload []byte) []byte {
 
 // Pump presents at most one byte per link interval. An acknowledged register
 // cannot be overwritten by a queued byte before the next instruction interval.
-func (l *Link) Pump(now uint64) {
+func (l *Link) Pump(now, boardTicks uint64) {
 	l.now = now
+	l.timerTicks = boardTicks
+	if l.powerAtTick != 0 && !l.cardLive && boardTicks >= l.powerAtTick {
+		l.cardLive = true
+	}
 	if !l.enabled() || l.ready || now < l.lastByteAt {
 		return
-	}
-	if !l.cardLive && now >= l.powerAt {
-		l.cardLive = true
 	}
 	switch {
 	case len(l.reply) > 0:
@@ -193,7 +194,7 @@ func (l *Link) Transmitted() []byte { return append([]byte(nil), l.transmitted..
 func (l *Link) Reset() {
 	l.control, l.interruptEnable, l.data, l.ready = 0, 0, 0, false
 	l.queue, l.transmitted, l.lastByteAt, l.now = nil, nil, 0, 0
-	l.reply, l.frame, l.powerAt = nil, nil, 0
+	l.reply, l.frame, l.powerAtTick, l.timerTicks = nil, nil, 0, 0
 	l.cardLive, l.boxBusy, l.txSeen, l.escaped = false, false, false, false
 	l.SetAckPolicy([]uint8{0x52, 0x18})
 	l.updateLine()
@@ -201,7 +202,7 @@ func (l *Link) Reset() {
 
 // Snapshot captures all device-owned register, queue and timing state.
 func (l *Link) Snapshot() ([]byte, error) {
-	w := snapcodec.NewWriter(l.Name(), 2)
+	w := snapcodec.NewWriter(l.Name(), 3)
 	w.Words([]uint32{l.control, l.interruptEnable})
 	w.Uint8(l.data)
 	w.Bool(l.ready)
@@ -210,7 +211,8 @@ func (l *Link) Snapshot() ([]byte, error) {
 	w.Bytes(l.transmitted)
 	w.Uint64(l.lastByteAt)
 	w.Uint64(l.now)
-	w.Uint64(l.powerAt)
+	w.Uint64(l.powerAtTick)
+	w.Uint64(l.timerTicks)
 	w.Bool(l.cardLive)
 	w.Bool(l.boxBusy)
 	w.Bool(l.txSeen)
@@ -228,12 +230,12 @@ func (l *Link) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
 	}
-	if err := r.Expect(l.Name(), 2, 2); err != nil {
+	if err := r.Expect(l.Name(), 3, 3); err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
 	}
 	regs, data, ready := r.Words(), r.Uint8(), r.Bool()
 	queue, reply, transmitted := r.Bytes(), r.Bytes(), r.Bytes()
-	lastByteAt, now, powerAt := r.Uint64(), r.Uint64(), r.Uint64()
+	lastByteAt, now, powerAtTick, timerTicks := r.Uint64(), r.Uint64(), r.Uint64(), r.Uint64()
 	cardLive, boxBusy, txSeen, escaped := r.Bool(), r.Bool(), r.Bool(), r.Bool()
 	frame := r.Bytes()
 	var ack [4]uint64
@@ -248,7 +250,7 @@ func (l *Link) Restore(blob []byte) error {
 	}
 	l.control, l.interruptEnable, l.data, l.ready = regs[0], regs[1], data, ready
 	l.queue, l.reply, l.transmitted = queue, reply, transmitted
-	l.lastByteAt, l.now, l.powerAt = lastByteAt, now, powerAt
+	l.lastByteAt, l.now, l.powerAtTick, l.timerTicks = lastByteAt, now, powerAtTick, timerTicks
 	l.cardLive, l.boxBusy, l.txSeen, l.escaped = cardLive, boxBusy, txSeen, escaped
 	l.frame, l.ack = frame, ack
 	l.updateLine()

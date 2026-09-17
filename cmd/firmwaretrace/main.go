@@ -178,10 +178,31 @@ func run() error {
 	var previousWord uint32
 	var handoff machine.Handoff
 	var handoffPumpPhase uint8 = 1
+	var boardPumpClock uint64
+	var instruction uint64
+	pumpBoard := func() error {
+		handoffPumpPhase--
+		if handoffPumpPhase != 0 {
+			return nil
+		}
+		handoffPumpPhase = 16
+		boardPumpClock += 16
+		boardTimer.Pump(boardPumpClock)
+		serial.Pump(instruction, boardTimer.Ticks())
+		applied, err := handoff.Tick(core, busMap)
+		if err != nil {
+			return fmt.Errorf("after %d instructions: %w", instruction, err)
+		}
+		if applied {
+			fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%08X\n", instruction, core.PC)
+		}
+		return nil
+	}
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
 	for i := uint64(0); i < *steps; i++ {
+		instruction = i
 		if *scheduler {
 			current := ram.Read(0x83d0, bus.Word)
 			if current != previousTask {
@@ -195,22 +216,12 @@ func run() error {
 				return err
 			}
 		}
-		serial.Pump(i)
-		boardTimer.Pump(i)
 		cardPort.Pump(i)
 		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
 		// Go executes them as two Steps, so the delay slot does not advance this phase.
 		if !core.HasPendingBranch() || core.ISA {
-			handoffPumpPhase--
-			if handoffPumpPhase == 0 {
-				handoffPumpPhase = 16
-				applied, err := handoff.Tick(core, busMap)
-				if err != nil {
-					return fmt.Errorf("after %d instructions: %w", i, err)
-				}
-				if applied {
-					fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%08X\n", i, core.PC)
-				}
+			if err := pumpBoard(); err != nil {
+				return err
 			}
 		}
 		if *trace && i >= *traceFrom && i < *traceTo {
@@ -219,7 +230,7 @@ func run() error {
 		if err := core.ObserveCheckpoint(emitter, i); err != nil {
 			return err
 		}
-		if err := core.Step(); err != nil {
+		if err := core.StepWithInterruptBoundary(pumpBoard); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
 			break
 		}

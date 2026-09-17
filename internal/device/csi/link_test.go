@@ -27,16 +27,16 @@ func TestHandsetFrameIsPacedThroughReceiveRegister(t *testing.T) {
 	got := make([]byte, 0, len(want))
 	for index := range want {
 		at := uint64(index+1) * TrafficInstructions
-		link.Pump(at - 1)
+		link.Pump(at-1, 0)
 		if link.Read(0x20, bus.Word) != 0 {
 			t.Fatal("byte arrived before its instruction deadline")
 		}
-		link.Pump(at)
+		link.Pump(at, 0)
 		if link.Read(0x20, bus.Word) != 1 || interrupts.Read(0x30, bus.Word) != IRQMask {
 			t.Fatal("ready byte failed to raise board IRQ")
 		}
 		got = append(got, byte(link.Read(0x10, bus.Word)))
-		link.Pump(at + 1)
+		link.Pump(at+1, 0)
 		if link.Pending() != len(want)-index-1 {
 			t.Fatal("unacknowledged receive register was overwritten")
 		}
@@ -76,7 +76,7 @@ func TestLinkHoldsTheDeviceContract(t *testing.T) {
 			l := device.(*Link)
 			l.control, l.interruptEnable, l.data, l.ready = 0x80, 1, 0x7d, true
 			l.queue, l.reply, l.transmitted = []byte{1, 2}, []byte{4}, []byte{3}
-			l.lastByteAt, l.now, l.powerAt = 2100, 2500, 2400000
+			l.lastByteAt, l.now, l.powerAtTick, l.timerTicks = 2100, 2500, 120, 37
 			l.cardLive, l.boxBusy, l.txSeen, l.escaped = true, true, true, true
 			l.frame = []byte{3, 1, 0x52}
 			l.AckAll()

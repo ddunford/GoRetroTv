@@ -74,7 +74,12 @@ func (c *Core) Interrupt(ip uint8) {
 }
 
 // Step retires one instruction or returns a visible halt error without advancing PC.
-func (c *Core) Step() error {
+func (c *Core) Step() error { return c.StepWithInterruptBoundary(nil) }
+
+// StepWithInterruptBoundary exposes the extra oracle pump iteration between an
+// accepted interrupt and its first vector instruction. The browser's interrupt
+// iteration retires no guest instruction, but device pumps still advance there.
+func (c *Core) StepWithInterruptBoundary(beforeVector func() error) error {
 	// The oracle retires a MIPS32 branch and its slot in one loop iteration and ticks Count
 	// once for that pair. Match that measured behaviour at checkpoints; MIPS16 slots tick twice.
 	if !c.delayed.armed || c.ISA {
@@ -85,6 +90,11 @@ func (c *Core) Step() error {
 			// The oracle's interrupt iteration retires nothing; it loops back, ticks Count
 			// again, then executes the first vector instruction at the same icount.
 			c.tickCount()
+			if beforeVector != nil {
+				if err := beforeVector(); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	var effect branch

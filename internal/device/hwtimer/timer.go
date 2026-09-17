@@ -22,10 +22,10 @@ const (
 
 // Timer has channel-zero status and acknowledge registers and an icount clock.
 type Timer struct {
-	regs      [Size / 4]uint32
-	now, next uint64
-	armed     bool
-	interrupt *irq.Controller
+	regs             [Size / 4]uint32
+	now, next, ticks uint64
+	armed            bool
+	interrupt        *irq.Controller
 }
 
 // New binds the timer to the board interrupt controller.
@@ -63,10 +63,17 @@ func (t *Timer) Pump(now uint64) {
 	if !t.armed || now < t.next {
 		return
 	}
-	t.next += ((now-t.next)/PeriodInstructions + 1) * PeriodInstructions
+	elapsed := (now-t.next)/PeriodInstructions + 1
+	t.ticks += elapsed
+	t.next += elapsed * PeriodInstructions
 	t.regs[0xD0/4] |= 1
-	t.updateLine()
+	if t.interrupt != nil {
+		t.interrupt.Pulse(IRQMask)
+	}
 }
+
+// Ticks reports board timer expirations, including ticks whose interrupt is still pending.
+func (t *Timer) Ticks() uint64 { return t.ticks }
 
 func (t *Timer) updateLine() {
 	if t.interrupt != nil {
@@ -82,11 +89,11 @@ func (t *Timer) Reset() {
 
 // Snapshot captures registers, the instruction clock, and the next deadline.
 func (t *Timer) Snapshot() ([]byte, error) {
-	w := snapcodec.NewWriter(t.Name(), 1)
-	words := make([]uint32, 0, len(t.regs)+5)
+	w := snapcodec.NewWriter(t.Name(), 2)
+	words := make([]uint32, 0, len(t.regs)+7)
 	words = append(words, t.regs[:]...)
 	// #nosec G115 -- splitting uint64 into its intentional high and low words.
-	words = append(words, uint32(t.now>>32), uint32(t.now), uint32(t.next>>32), uint32(t.next))
+	words = append(words, uint32(t.now>>32), uint32(t.now), uint32(t.next>>32), uint32(t.next), uint32(t.ticks>>32), uint32(t.ticks))
 	if t.armed {
 		words = append(words, 1)
 	} else {
@@ -102,19 +109,20 @@ func (t *Timer) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("hwtimer: restore: %w", err)
 	}
-	if err := r.Expect(t.Name(), 1, 1); err != nil {
+	if err := r.Expect(t.Name(), 2, 2); err != nil {
 		return fmt.Errorf("hwtimer: restore: %w", err)
 	}
 	words := r.Words()
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("hwtimer: restore: %w", err)
 	}
-	if len(words) != len(t.regs)+5 || words[len(words)-1] > 1 {
+	if len(words) != len(t.regs)+7 || words[len(words)-1] > 1 {
 		return fmt.Errorf("hwtimer: restore: invalid state")
 	}
 	copy(t.regs[:], words[:len(t.regs)])
 	t.now = uint64(words[len(t.regs)])<<32 | uint64(words[len(t.regs)+1])
 	t.next = uint64(words[len(t.regs)+2])<<32 | uint64(words[len(t.regs)+3])
+	t.ticks = uint64(words[len(t.regs)+4])<<32 | uint64(words[len(t.regs)+5])
 	t.armed = words[len(words)-1] == 1
 	t.updateLine()
 	return nil

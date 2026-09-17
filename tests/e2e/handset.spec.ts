@@ -194,6 +194,17 @@ test('phone keeps the screen visible while handset keys receive focus', async ({
     expect(positions.keyTop).toBeGreaterThanOrEqual(positions.televisionBottom);
   }
   await page.screenshot({ path: testInfo.outputPath('phone-screen-and-handset.png'), animations: 'disabled' });
+
+  await page.setViewportSize({ width: 760, height: 700 });
+  await page.getByRole('button', { name: 'select', exact: true }).scrollIntoViewIfNeeded();
+  const tablet = await page.evaluate(() => {
+    const screen = document.querySelector('#screen')!.getBoundingClientRect();
+    const select = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'select')!.getBoundingClientRect();
+    return { screenTop: screen.top, screenBottom: screen.bottom, selectTop: select.top, viewport: innerHeight };
+  });
+  expect(tablet.screenTop).toBeGreaterThanOrEqual(0);
+  expect(tablet.screenBottom).toBeLessThan(tablet.selectTop);
+  expect(tablet.selectTop).toBeLessThan(tablet.viewport);
 });
 
 test('touch activates a handset key at mobile width', async ({ browser }) => {
@@ -219,4 +230,27 @@ test('touch activates a handset key at mobile width', async ({ browser }) => {
   expect(screen!.y).toBeGreaterThanOrEqual(0);
   expect(screen!.y + screen!.height).toBeLessThan(select!.y);
   await context.close();
+});
+
+test('short landscape keeps screen beside usable handset', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 568, height: 320 });
+  await page.routeWebSocket('**/ws', ws => sendReady(ws));
+  await page.goto('/');
+  const select = page.getByRole('button', { name: 'select', exact: true });
+  await expect(select).toBeEnabled();
+  await select.scrollIntoViewIfNeeded();
+  const bounds = await page.evaluate(() => {
+    const screen = document.querySelector('#screen')!.getBoundingClientRect();
+    const key = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'select')!.getBoundingClientRect();
+    return { screenTop: screen.top, screenBottom: screen.bottom, screenRight: screen.right,
+      keyLeft: key.left, keyTop: key.top, keyBottom: key.bottom,
+      scrollWidth: document.documentElement.scrollWidth, viewportWidth: innerWidth, viewportHeight: innerHeight };
+  });
+  expect(bounds.scrollWidth).toBe(bounds.viewportWidth);
+  expect(bounds.screenTop).toBeGreaterThanOrEqual(0);
+  expect(bounds.screenBottom).toBeLessThan(bounds.viewportHeight);
+  expect(bounds.screenRight).toBeLessThan(bounds.keyLeft);
+  expect(bounds.keyTop).toBeGreaterThanOrEqual(0);
+  expect(bounds.keyBottom).toBeLessThan(bounds.viewportHeight);
+  await page.screenshot({ path: testInfo.outputPath('landscape-screen-and-handset.png'), animations: 'disabled' });
 });

@@ -131,7 +131,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   .era-tag { max-width: 130px; font-size: 10px; }
   .experience { grid-template-columns: 1fr; gap: 16px; padding-top: 32px; }
   .viewer { display: contents; }
-  .television { position: sticky; top: 8px; z-index: 3; }
+  .television { position: sticky; top: 8px; z-index: 3; width: min(100%, 400px); justify-self: center; }
   .intro-copy { margin-bottom: 22px; }
   .status-panel, .screen-help { margin-top: 0; }
   .controls { margin-top: 20px; }
@@ -140,6 +140,19 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 }
 @media (max-width: 760px) and (max-height: 600px) {
   .television { position: static; }
+}
+@media (max-width: 760px) and (max-height: 600px) and (orientation: landscape) {
+  html { scroll-padding-top: 0; }
+  .experience { grid-template-columns: minmax(0, 1fr) 260px; align-items: stretch; gap: 12px; }
+  .viewer { display: block; }
+  .television { position: sticky; top: 8px; width: 100%; }
+  .controls { margin-top: 0; }
+  .controls-heading { display: block; }
+  .controls-caption { display: block; max-width: none; margin-top: 8px; text-align: left; }
+  .remote { padding-inline: 14px; }
+  .remote-primary .key:not(.sky) { padding-inline: 2px; font-size: 10px; }
+  .remote-nav { margin-inline: 5px; }
+  .number-pad { padding-inline: 0; }
 }
 @media (max-width: 390px) {
   .site-shell { width: calc(100% - 24px); }

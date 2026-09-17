@@ -14,14 +14,14 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/ddunford/goretrotv/internal/wire"
 )
 
-// FrameWidth and FrameHeight are the Digibox display raster; Version is the
-// browser wire protocol revision.
+// FrameWidth and FrameHeight are the Digibox display raster from the shared
+// browser wire schema.
 const (
-	FrameWidth  = 720
-	FrameHeight = 576
-	Version     = 1
+	FrameWidth  = wire.FrameWidth
+	FrameHeight = wire.FrameHeight
 	framePeriod = 100 * time.Millisecond
 	writeLimit  = 10 * time.Second
 )
@@ -100,25 +100,6 @@ func (t *Transport) PushFrame(frame *image.Paletted) error {
 	return nil
 }
 
-type paletteMessage struct {
-	Type    string `json:"type"`
-	Version int    `json:"version"`
-	Epoch   uint64 `json:"epoch"`
-	RGB     []byte `json:"rgb"`
-}
-
-type frameMessage struct {
-	Type    string `json:"type"`
-	Version int    `json:"version"`
-	Seq     uint64 `json:"seq"`
-	X       int    `json:"x"`
-	Y       int    `json:"y"`
-	W       int    `json:"w"`
-	H       int    `json:"h"`
-	Epoch   uint64 `json:"epoch"`
-	Pixels  []byte `json:"pixels"`
-}
-
 // ServeHTTP upgrades one browser connection. The library's default same-origin
 // check rejects cross-site browser handshakes; no wildcard origin is configured.
 func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +166,7 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func writeFrame(ctx context.Context, conn *websocket.Conn, previous, current *frameData) error {
 	if previous == nil || previous.epoch != current.epoch {
-		if err := writeJSON(ctx, conn, paletteMessage{Type: "palette", Version: Version, Epoch: current.epoch, RGB: current.palette}); err != nil {
+		if err := writeJSON(ctx, conn, wire.PaletteMessage{Type: "palette", Version: wire.Version, Epoch: current.epoch, RGB: current.palette}); err != nil {
 			return err
 		}
 	}
@@ -198,8 +179,9 @@ func writeFrame(ctx context.Context, conn *websocket.Conn, previous, current *fr
 		copy(pixels[(y-rect.Min.Y)*rect.Dx():(y-rect.Min.Y+1)*rect.Dx()],
 			current.pixels[y*FrameWidth+rect.Min.X:y*FrameWidth+rect.Max.X])
 	}
-	return writeJSON(ctx, conn, frameMessage{Type: "frame", Version: Version, Seq: current.seq,
-		X: rect.Min.X, Y: rect.Min.Y, W: rect.Dx(), H: rect.Dy(), Epoch: current.epoch, Pixels: pixels})
+	return writeJSON(ctx, conn, wire.FrameMessage{Type: "frame", Version: wire.Version, Seq: current.seq,
+		X: uint32(rect.Min.X), Y: uint32(rect.Min.Y), W: uint32(rect.Dx()), H: uint32(rect.Dy()), // #nosec G115 -- frame rectangle is within 720x576.
+		Epoch: current.epoch, Pixels: pixels})
 }
 
 func dirtyRect(previous, current *frameData) image.Rectangle {

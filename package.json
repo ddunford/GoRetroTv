@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "wire:generate": "node tools/gen-wire.mjs",
+    "wire:check": "node tools/gen-wire.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "build:web": "tsc",
+    "test:wire": "npm run build:web && node --test tests/wire.test.mjs",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "typescript": "5.9.3"
+  }
+}

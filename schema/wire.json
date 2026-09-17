@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "raster": { "width": 720, "height": 576 },
+  "messages": {
+    "palette": {
+      "direction": "server",
+      "fields": {
+        "epoch": "uint64",
+        "rgb": "base64"
+      }
+    },
+    "frame": {
+      "direction": "server",
+      "fields": {
+        "seq": "uint64",
+        "x": "uint32",
+        "y": "uint32",
+        "w": "uint32",
+        "h": "uint32",
+        "epoch": "uint64",
+        "pixels": "base64"
+      }
+    },
+    "state": {
+      "direction": "server",
+      "fields": {
+        "phase": ["booting", "flash-check", "channel-list", "ready", "halted"],
+        "reason": "string"
+      }
+    },
+    "key": {
+      "direction": "client",
+      "fields": {
+        "raw": "uint8",
+        "source": "uint8"
+      }
+    }
+  }
+}

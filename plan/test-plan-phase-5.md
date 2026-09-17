@@ -20,10 +20,10 @@
 - [?] **TC-5.6: Developer surfaces are unreachable publicly** (covers: TASK-5.6, TASK-5.7) — the gdb port and
   instrument endpoints refuse from outside. Asserted against the deployed host.
   **Blocked:** The deployed route is not available (TASK-5.5 and owner gates gort-7g2.1/.2).
-- [?] **TC-5.7: The TS decoder is pinned to the Go encoder's actual bytes** (covers: TASK-5.7, TASK-5.9) — feed the decoder a fixture **captured from the running server** and assert the
+- [x] **TC-5.7: The TS decoder is pinned to the Go encoder's actual bytes** (covers: TASK-5.7, TASK-5.9) — feed the decoder a fixture **captured from the running server** and assert the
   projection. A hand-authored fixture passes while the wire differs, which is the failure mode where
   the contract test exists, is green, and still ships the bug.
-  **Blocked:** The TS decoder and running Go route are not built yet (TASK-5.9 and TASK-5.4).
+  **Proof:** `internal/web/wire_capture_test.go` captures palette and dirty-frame JSON from an HTTP-upgraded Go WebSocket transport and compares it byte for byte with `tests/fixtures/wire.jsonl`; `tests/wire.test.mjs` decodes the captured bytes and checks colour and pixel projection. `go test -race ./internal/web ./internal/wire`, `npm run wire:check`, and `npm run test:wire` pass.
 - [?] **TC-5.8: The page survives losing the box** (covers: TASK-5.10, TASK-5.7) — kill the socket
   mid-session: the page says so, reconnects, and resumes. Halt the machine: a readable reason, not a
   frozen canvas. Press a key while disconnected: refused visibly, never swallowed.

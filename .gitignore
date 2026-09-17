@@ -14,6 +14,7 @@ firmware/*.bin
 # Build output, caches, and the Go binary
 /bin/
 /dist/
+/web/dist/
 *.test
 __pycache__/
 .playwright-mcp/

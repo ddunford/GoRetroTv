@@ -65,8 +65,6 @@ func (d *Demux) Read(off uint32, size bus.Size) uint32 {
 		word = d.enable[(reg-0xD0)/4]
 	case reg == 0x128:
 		word = d.writePointer[d.selectedFilter] & 0x1fffff
-	case reg == 0x148:
-		word = d.matchWords[d.matchUnit][d.matchIndex]
 	default:
 		return 0
 	}

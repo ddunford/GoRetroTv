@@ -22,6 +22,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/osd"
 	"github.com/ddunford/goretrotv/internal/device/smartcard"
 	"github.com/ddunford/goretrotv/internal/firmware"
+	"github.com/ddunford/goretrotv/internal/machine"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
@@ -160,7 +161,6 @@ func run() error {
 		return err
 	}
 	dmaController := dma.New(ram, graphics, video, interrupts)
-	dmaController.BindTransport(flash0, sectionDemux)
 	if err := busMap.Attach(dma.Base, dma.Size, dmaController); err != nil {
 		return err
 	}
@@ -176,6 +176,8 @@ func run() error {
 	var retired uint64
 	var previousTask uint32
 	var previousWord uint32
+	var handoff machine.Handoff
+	var handoffPumpPhase uint8 = 1
 	if *watchWord != 0 {
 		previousWord = busMap.Read(uint32(*watchWord), bus.Word)
 	} // #nosec G115 -- checked above.
@@ -196,6 +198,21 @@ func run() error {
 		serial.Pump(i)
 		boardTimer.Pump(i)
 		cardPort.Pump(i)
+		// The oracle's MIPS32 branch and delay slot occupy one pump iteration.
+		// Go executes them as two Steps, so the delay slot does not advance this phase.
+		if !core.HasPendingBranch() || core.ISA {
+			handoffPumpPhase--
+			if handoffPumpPhase == 0 {
+				handoffPumpPhase = 16
+				applied, err := handoff.Tick(core, busMap)
+				if err != nil {
+					return fmt.Errorf("after %d instructions: %w", i, err)
+				}
+				if applied {
+					fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%08X\n", i, core.PC)
+				}
+			}
+		}
 		if *trace && i >= *traceFrom && i < *traceTo {
 			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
 		}
@@ -214,17 +231,17 @@ func run() error {
 				previousWord = value
 			}
 		}
-		// #nosec G115 -- stopPC was checked against the 32-bit address space.
-		if *stopPC != 0 && core.PC == uint32(*stopPC) {
-			fmt.Fprintf(os.Stderr, "reached PC=%08X after %d guest instructions; Cause=%08X EPC=%08X\n", core.PC, i+1, core.COP0[13], core.COP0[14])
-			break
-		}
 		if err := dmaController.Fault(); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
 			break
 		}
 		if err := master.Fault(); err != nil {
 			halt = fmt.Errorf("after %d instructions: %w", i, err)
+			break
+		}
+		// #nosec G115 -- stopPC was checked against the 32-bit address space.
+		if *stopPC != 0 && core.PC == uint32(*stopPC) {
+			fmt.Fprintf(os.Stderr, "reached PC=%08X after %d guest instructions; Cause=%08X EPC=%08X\n", core.PC, i+1, core.COP0[13], core.COP0[14])
 			break
 		}
 	}

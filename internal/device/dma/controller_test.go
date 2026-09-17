@@ -1,6 +1,7 @@
 package dma
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/bus"
@@ -10,13 +11,6 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/osd"
 	"github.com/ddunford/goretrotv/internal/memory"
 )
-
-type capturedTransport struct{ data []byte }
-
-func (c *capturedTransport) PushTransport(data []byte) error {
-	c.data = append(c.data, data...)
-	return nil
-}
 
 func testRAM(t *testing.T) *memory.RAM {
 	t.Helper()
@@ -77,18 +71,12 @@ func TestChannel12CompletesAndAcknowledges(t *testing.T) {
 	}
 }
 
-func TestChannel8UploadsPlaneAndBootChannel5DoesNotInterrupt(t *testing.T) {
+func TestChannel8UploadsPlaneAndUnmodelledChannel5DoesNotInterrupt(t *testing.T) {
 	t.Parallel()
 	ram := testRAM(t)
 	video := osd.NewVideo()
 	interrupts := irq.New(nil)
 	d := New(ram, nil, video, interrupts)
-	flash, err := memory.NewFlash("test-u202", make([]byte, memory.FlashSize))
-	if err != nil {
-		t.Fatal(err)
-	}
-	sink := &capturedTransport{}
-	d.BindTransport(flash, sink)
 	for i := uint32(0); i < 4; i++ {
 		ram.Write(0x4000+i, bus.Byte, 0x10+i)
 	}
@@ -100,38 +88,24 @@ func TestChannel8UploadsPlaneAndBootChannel5DoesNotInterrupt(t *testing.T) {
 		t.Fatalf("uploaded video plane = %#08x", got)
 	}
 	d.Write(0x40+5*0x10, bus.Word, descriptor(ram, 5, 0x80005000, 16))
+	before, err := ram.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
 	d.Write(0x10, bus.Word, (1<<8)|(1<<5))
+	after, err := ram.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("unmodelled channel 5 changed transport RAM")
+	}
 	if got := d.Read(0x120, bus.Word) & (1 << 5); got == 0 {
 		t.Fatal("bootloader channel 5 did not complete")
-	}
-	if len(sink.data) != 16 {
-		t.Fatalf("channel 5 moved %d transport bytes", len(sink.data))
 	}
 	d.Write(0x130, bus.Word, 1<<8)
 	if got := interrupts.Read(0x30, bus.Word); got != 0 {
 		t.Fatalf("channel 5 improperly raised board IP2 pending %#x", got)
-	}
-}
-
-func TestChannel5MovesROMBytesToTransport(t *testing.T) {
-	t.Parallel()
-	ram := testRAM(t)
-	image := make([]byte, 0x200)
-	copy(image[0x100:], []byte{0x47, 0x40, 0x00, 0x10})
-	flash, err := memory.NewFlash("test-u202", image)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sink := &capturedTransport{}
-	d := New(ram, nil, nil, nil)
-	d.BindTransport(flash, sink)
-	d.Write(0x90, bus.Word, descriptor(ram, 5, memory.FlashU202&0x1fffffff+0x100, 4))
-	d.Write(0x10, bus.Word, 1<<5)
-	if err := d.Fault(); err != nil {
-		t.Fatal(err)
-	}
-	if got := sink.data; len(got) != 4 || got[0] != 0x47 || got[1] != 0x40 || got[2] != 0 || got[3] != 0x10 {
-		t.Fatalf("transport bytes = %x", got)
 	}
 }
 
@@ -184,7 +158,7 @@ func TestControllerHoldsTheDeviceContract(t *testing.T) {
 			d.fault = "test fault"
 		},
 		Disturb:  func(device bus.Device) { device.Reset() },
-		Constant: []string{"ram", "blitter", "video", "flash", "transport", "interrupt"},
+		Constant: []string{"ram", "blitter", "video", "interrupt"},
 	})
 	if err != nil {
 		t.Fatal(err)

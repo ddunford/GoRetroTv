@@ -52,6 +52,16 @@ The flash images are not redistributable and are not in git. See firmware/MANIFE
 
 cmd_build() { make build; }
 
+# Build the published runtime image without starting a service. This also gives the firmware-image
+# conformance probe's Docker build an operator-visible diagnostic path when its captured output is
+# too short to show the compiler failure.
+cmd_image() {
+    export_build_args
+    docker build --progress=plain --target runtime \
+        --build-arg VERSION --build-arg COMMIT --build-arg BUILD_DATE \
+        -t "$PROJECT:local" .
+}
+
 require_env_file() {
     [[ -f "$ENV_FILE" ]] && return 0
     warn "no $ENV_FILE; copy it from $ENV_EXAMPLE and edit it (cp $ENV_EXAMPLE $ENV_FILE)"
@@ -116,6 +126,8 @@ cmd_gate() {
 }
 
 cmd_cpu_gate() { ./tools/cpu-gate.sh "$@"; }
+
+cmd_handoff_gate() { ./tools/handoff-gate.sh "$@"; }
 
 cmd_test() { make test-race; }
 
@@ -253,9 +265,11 @@ Running
   health         Probe the health endpoint and print what it says
   gate           Boot gate: build, verify firmware, listen, /health, graceful stop
   cpu-gate       Real firmware CPU/oracle gate through the first unmodelled video RAM read
+  handoff-gate   Prove declared handoff, guest loader and application entry
 
 Building and checking
   build          Build every binary into bin/
+  image          Build the firmware-free runtime container image
   test           Run the tests under the race detector
   conformance    Run architecture rules and their probes
   stop-gate      Neutralise each conformance detector and check probe independence
@@ -278,6 +292,7 @@ main() {
     shift || true
     case "$cmd" in
         build)   cmd_build "$@" ;;
+        image)   cmd_image "$@" ;;
         run)     cmd_run "$@" ;;
         up)      cmd_up "$@" ;;
         down)    cmd_down "$@" ;;
@@ -287,6 +302,7 @@ main() {
         health)  cmd_health "$@" ;;
         gate)    cmd_gate "$@" ;;
         cpu-gate) cmd_cpu_gate "$@" ;;
+        handoff-gate) cmd_handoff_gate "$@" ;;
         test)    cmd_test "$@" ;;
         conformance) cmd_conformance "$@" ;;
         stop-gate) cmd_conformance_stop_gate "$@" ;;

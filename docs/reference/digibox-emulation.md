@@ -461,8 +461,9 @@ The chain, every hop of which is now measured:
 | DMA | `0xB0009000` | 13 channels. Descriptor (40 bytes at `0x80108A60 + 40*ch`: +12 src, +16 dst, +20 len\|flags, +32 last byte) → physical address written to `+0x040 + 0x10*ch`, then `+0x220 = 1`, then bit `ch` set in `+0x010`. Channel destinations are hardwired; `dst` is unused. Completion: bit `ch` in status `+0x120` (read as a halfword at `+0x122`; second bank `+0x140/+0x142`), interrupt **mask `0x2`** (dispatch row 2, LISR `0x80005E29`), acknowledged write-1-to-clear at `+0x130/+0x150`, and the LISR clears the enable bit itself. `+0x010` must read back — the LISR read-modify-writes it |
 | blitter | `0xB0006000` | channel 12 lands the 60 bytes in **fifteen command registers `+0x00..+0x38`**; `0x80002851` zeroes exactly those and sets bits 0 and 4 of `+0x3C` around it; `+0x40` bit 0 is busy |
 
-The bootloader uses the same DMA controller — channel 5, 1524 bytes from flash — and **runs it
-with the ASIC enable register `0xB0000040` at zero**, polling status bit 5 instead. Raising IP2
+The bootloader submits a DMA channel-5 descriptor for 1,524 bytes from flash. The oracle models
+completion but no byte transfer behind that channel. The guest runs it **with the ASIC enable
+register `0xB0000040` at zero**, polling status bit 5 instead. Raising IP2
 for that completion sent the bootloader into a handler it had not armed and it never came back
 (30M spins at `0x9FC0DE4C`). So the line is gated on the enable register, which is what the ASIC
 does. Bit 5 of `0xB0009120` is channel 5's completion and not a global ready flag, which retires
@@ -5893,8 +5894,16 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
   4 and compares the section RAM bytes. The old DMA channel-5 model signalled completion without
   moving those bytes, so the test returned one and BOOTMain entered a service loop. With the
   transfer, indirect match-word readback, section assembly and MPEG CRC filtering modelled,
-  **normal guest instructions write zero to `[0x800081F8]`** and set `[0x800050BC]` to
-  `0x10000`; no host mutation is involved. The bootloader then waits on `SMTAck` for CSI command
+  guest instructions wrote zero to `[0x800081F8]` and set `[0x800050BC]` to
+  `0x10000`; no host mutation was involved in that diagnostic model. **This readback was later
+  withdrawn:** the unmodified browser oracle answers zero at demux `+0x148`; Go answered `0xFF`
+  there at retired instruction 3,209,923, creating its first checkpoint divergence. With the
+  oracle's read contract restored, Go records `[0x800081F8]=1` at 3.4 million instructions.
+  A second exact-state comparison found that the added DMA channel-5 transport path changed RAM
+  at retired instruction 3,210,573, while the oracle only signals channel completion. The Go
+  channel now follows that measured no-transfer behavior as well.
+  The declared host handoff fires soon after this first idle interval, before either image scan.
+  The earlier diagnostic branch then waited on `SMTAck` for CSI command
   `0x44`. A diagnostic peripheral reply using the oracle's synthetic all-buttons-released frame
   reaches scanner PC `0x9FC122B6` at instruction 19,193,163. Both JB images pass their header
   and payload CRC checks, with the second scan returning success at instruction 64,451,653.

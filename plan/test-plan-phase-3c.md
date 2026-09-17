@@ -32,16 +32,30 @@
   vbus-0 I²C path and reads register 75 as 0x17 through the controller data register.
 - [ ] **TC-3c.6: A full cold boot matches the oracle** (covers: TASK-3c.6) — 42 tasks, checkpoints
   matching end to end. **SPEC success criterion 1.**
-- [?] **TC-3c.7: Real application handoff** (covers: TASK-3c.9) — the bootloader decompresses
-  the application to `0x800009F4` and transfers control by executing guest instructions. The
-  test must fail if a host-side forced PC change or image copy is substituted for the handoff.
-  **Blocked on an acceptance decision or external boot evidence:** the ROM demux self-test now
-  passes through a guest-driven DMA channel-5 transfer, setting `[0x800081F8]` to zero and
-  flash scan step `[0x800050BC]` to
-  `0x10000` without host mutation. BOOTMain then waits for CSI command `0x44`; a diagnostic
+- [x] **TC-3c.7: Declared application handoff** (covers: TASK-3c.9) — after 200,000 continuous
+  idle instructions with `ready >= 0x100` and `current = 0`, compare the flash `JB` header to
+  the ROM literal and apply the oracle's explicit one-time PC/ISA/RA handoff. The policy must
+  never copy an application image or mutate RAM. Guest instructions must reach flash entry
+  `0xBFC2048C`, loader `0xBFC20618`, decompress to `0x800009F4`, and enter the application.
+  A broken header or interrupted idle period must prevent the handoff. Report the exact host
+  intervention separately from subsequent guest execution.
+  **Prior boot evidence:** an earlier Go model answered demux match-register `+0x148` reads with
+  stored values, allowing the ROM self-test to pass through a guest-driven DMA channel-5 transfer
+  and set `[0x800081F8]` to zero and flash scan step `[0x800050BC]` to `0x10000` without host
+  mutation. That readback contradicted the oracle at instruction 3,209,923 and has been removed;
+  the current model reports `[0x800081F8]=1` before the declared host handoff. In the earlier
+  diagnostic path BOOTMain then waited for CSI command `0x44`; a diagnostic
   synthetic peripheral reply reaches scanner PC `0x9FC122B6`. Both JB image scans and CRCs pass;
   the selected valid descriptor has a nonzero payload pointer, so BOOTMain enters a terminal
   sleep/service loop and reaches the browser oracle's idle handoff boundary
   (`ready=0x100`, `current=0`) by 100 million instructions. The guest never reaches flash entry
   `0x9FC2048C` or loader `0x9FC20618`,
-  and the application image at `0x800009F4` remains zero. See `gort-f3f.10` for trace PCs.
+  and the application image at `0x800009F4` remains zero before the declared policy fires. See
+  `gort-f3f.10` for trace PCs.
+  **Result:** `internal/machine/handoff_test.go` proves the one-shot idle gate, reset on interrupted
+  idle, bad-header refusal, unchanged application RAM, and snapshot/restore of the counter.
+  `./ctl.sh handoff-gate` runs the verified firmware and asserts the declared host jump, execution
+  at guest loader `0xBFC20618`, guest entry at `0x800009F4`, and the verified first application
+  word `0x63FF6201` in RAM. Go and oracle hand off at the same instruction, `3,465,308`; 148
+  saved checkpoints agree through 14.7 million instructions. The later 42-task boot remains
+  TC-3c.6.

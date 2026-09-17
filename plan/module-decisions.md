@@ -63,6 +63,15 @@ decision gets revisited then — not before.
 - **The instruction counter is the clock.** Every scheduled thing — timers, the broadcast carousel,
   device pumps — is driven off `icount`, never wall time. Wall-clock scheduling is what made the
   browser emulator non-deterministic between runs and caused at least one wrong conclusion.
+- **Application entry uses the oracle's declared host handoff.** The supplied ROM reaches an idle
+  bootloader state but does not execute the flash entry stub in measured runs; its valid image
+  descriptor instead selects a service loop. The browser oracle reaches the application by a
+  one-time PC/ISA/RA change after 200,000 idle instructions and a flash-header check. The Go
+  machine uses the same explicit policy, records its firing, and leaves decompression to guest
+  instructions. This is an emulator intervention, not evidence of a physical Digibox handoff.
+  The rejected alternative was claiming a guest-only transfer from a ROM branch that has not
+  produced one through 200 million measured instructions. Evidence: `reference/digibox-boot.html`
+  `bootloaderHandoff`, `docs/reference/digibox-emulation.md` and `gort-f3f.10`.
 
 ### The shared / platform layer
 `internal/platform/` holds `hexfmt`, `statehash`, `snapcodec`, `instrument` and `clock` — the full

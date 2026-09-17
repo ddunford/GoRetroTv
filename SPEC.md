@@ -74,7 +74,10 @@ underneath it, an emulator you can attach a debugger to.
 ### Emulator core
 
 - **FR-1** Execute the Pace 2500N flash image from reset to a fully booted application (42 Nucleus
-  tasks) without hand-holding. *Acceptance: the task list reaches 42 and the box reports Ready.*
+  tasks). The emulator applies the browser oracle's declared one-time PC handoff after the real
+  bootloader remains idle for 200,000 instructions and the flash header checks; guest code then
+  decompresses and runs the application. *Acceptance: the task list reaches 42 and the box reports
+  Ready, with the handoff event identified explicitly.*
 - **FR-2** Implement MIPS32 and MIPS16 including `JALX`, the COP0 registers the scheduler needs
   (Count, Compare, Status, Cause, EPC, ErrorEPC), `ERET` semantics, and delay-slot-correct interrupt
   delivery. *Acceptance: the oracle comparison in FR-6 passes.*

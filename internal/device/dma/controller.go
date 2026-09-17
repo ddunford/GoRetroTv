@@ -38,22 +38,12 @@ type Controller struct {
 	ram         *memory.RAM
 	blitter     *blitter.Blitter
 	video       *osd.Video
-	flash       *memory.Flash
-	transport   TransportSink
 	interrupt   *irq.Controller
 }
-
-// TransportSink accepts the transport bytes moved by DMA channel five.
-type TransportSink interface{ PushTransport([]byte) error }
 
 // New binds the controller to the devices its measured channels drive.
 func New(ram *memory.RAM, graphics *blitter.Blitter, video *osd.Video, interrupt *irq.Controller) *Controller {
 	return &Controller{ram: ram, blitter: graphics, video: video, interrupt: interrupt}
-}
-
-// BindTransport connects channel five's ROM source and demux destination.
-func (d *Controller) BindTransport(flash *memory.Flash, sink TransportSink) {
-	d.flash, d.transport = flash, sink
 }
 
 // Name is the snapshot key.

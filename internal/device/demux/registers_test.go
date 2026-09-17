@@ -99,19 +99,22 @@ func TestPIDChannelsAndMatchUnitsAreIndependent(t *testing.T) {
 	}
 }
 
-func TestPackedMatchWordPreservesBothMatchBanks(t *testing.T) {
+func TestPackedMatchWordIsStoredButNotReadBack(t *testing.T) {
 	t.Parallel()
 	d := New()
 	d.Write(0x148, bus.Word, 0x000001ff)
 	d.Write(0x144, bus.Word, 0xc020)
 	d.Write(0x144, bus.Word, 0x4020)
-	if got := d.Read(0x148, bus.Word); got != 0x000001ff {
-		t.Fatalf("indirect match read = %#x", got)
+	if got := d.Read(0x148, bus.Word); got != 0 {
+		t.Fatalf("indirect match register unexpectedly read back %#x", got)
 	}
-	d.Write(0x148, bus.Word, d.Read(0x148, bus.Word)|0x00ff0000)
+	if got, _ := d.Match(0, 2); got != (MatchByte{Value: 1, Mask: 0xff}) {
+		t.Fatalf("written low match bank = %+v", got)
+	}
+	d.Write(0x148, bus.Word, 0x00ff01ff)
 	d.Write(0x144, bus.Word, 0xc020)
-	if got := d.Read(0x148, bus.Word); got != 0x00ff01ff {
-		t.Fatalf("read-modify-write lost a match bank: %#x", got)
+	if got := d.Read(0x148, bus.Word); got != 0 {
+		t.Fatalf("indirect match register unexpectedly read back after second write %#x", got)
 	}
 	if got, _ := d.Match(0, 2); got != (MatchByte{Value: 1, Mask: 0xff}) {
 		t.Fatalf("low match bank = %+v", got)

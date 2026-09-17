@@ -14,3 +14,15 @@ digest: 1706914ef60f1dc6a5606c44b6811b96ced9b62a5e78015f9ad57ad2c409aace
   when: 2026-09-17T06:28:16Z
    why: Add a real-firmware Phase 2 CPU gate at the measured VRAM wall; update CI vulnerability count to match the audited baseline, without changing architecture checks.
 
+digest: 3ce71f0ae572d2b25539130b67636fd5dc5d0afb20a2e552c104191f258ac7dd
+  when: 2026-09-17T09:47:13Z
+   why: Add an image-only build command to diagnose the firmware-free runtime image checked by ARCH-FW-1; no detector or policy is weakened.
+
+digest: ac5555ed1e1edb259d549a2f9f7aaa87c3491f12f007c6c6ce06fe68d70313e8
+  when: 2026-09-17T09:57:54Z
+   why: Add a real-firmware handoff gate that proves the declared PC change reaches guest loader and application entry; expose it through the project control script without changing architecture detectors.
+
+digest: ac5555ed1e1edb259d549a2f9f7aaa87c3491f12f007c6c6ce06fe68d70313e8
+  when: 2026-09-17T09:59:04Z
+   why: Isolate the handoff gate build, require the verified application entry word, and check device faults before stop-PC success; detector behavior remains unchanged.
+

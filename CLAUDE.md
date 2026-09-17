@@ -32,6 +32,9 @@ Full record with rationale and rejected alternatives: `plan/module-decisions.md`
 - **The instruction counter is the clock.** Timers, the broadcast carousel and device pumps are all
   driven off `icount`, never wall time. Wall-clock scheduling is what made the predecessor
   non-deterministic between runs and caused a wrong conclusion about event counts.
+- **Application entry follows the oracle's declared handoff policy.** The host changes PC/ISA/RA
+  once after the bootloader is idle and the flash header checks; guest code then decompresses and
+  runs the application. Report the intervention explicitly, never as a guest-only ROM transfer.
 - **No goroutine in the instruction loop.** Single-threaded and deterministic by construction;
   concurrency lives at the edges. This is what makes byte-identical replay possible at all.
 - **Errors are values; a bad guest instruction halts visibly.** It must never take the process down

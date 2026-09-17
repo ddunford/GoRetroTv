@@ -76,6 +76,16 @@ func (c *Controller) Pulse(mask uint32) {
 	c.signal()
 }
 
+// SetStatus mirrors a device's current pending bit without creating a CPU
+// request. Some devices expose status continuously but pace CPU delivery.
+func (c *Controller) SetStatus(mask uint32, asserted bool) {
+	if asserted {
+		c.pending |= mask
+	} else {
+		c.pending &^= mask
+	}
+}
+
 func (c *Controller) signal() {
 	if c.raise != nil {
 		c.raise(2)

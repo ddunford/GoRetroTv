@@ -124,7 +124,7 @@ func run() error {
 	}
 	store := eeprom.New()
 	mux := i2c.NewMux()
-	master := i2c.New(store, mux, interrupts)
+	master := i2c.New(store, interrupts)
 	master.BindDemod(demod.New())
 	if *nvram != "" {
 		if err := master.BindImage(*nvram); err != nil {
@@ -189,6 +189,7 @@ func run() error {
 		boardPumpClock += 16
 		boardTimer.Pump(boardPumpClock)
 		serial.Pump(instruction, boardTimer.Ticks())
+		modemPort.Pump(boardTimer.Ticks())
 		applied, err := handoff.Tick(core, busMap)
 		if err != nil {
 			return fmt.Errorf("after %d instructions: %w", instruction, err)

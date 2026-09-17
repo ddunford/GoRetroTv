@@ -21,14 +21,14 @@ type Controller struct {
 	fault                                string
 	store                                *eeprom.Store
 	demod                                *demod.Model
-	mux                                  *Mux
 	interrupt                            *irq.Controller
 	imagePath                            string
 }
 
-// New binds the NVRAM, channel latch and board interrupt controller.
-func New(store *eeprom.Store, mux *Mux, interrupt *irq.Controller) *Controller {
-	return &Controller{control: 0x99, store: store, mux: mux, interrupt: interrupt}
+// New binds the NVRAM and board interrupt controller. The oracle acknowledges
+// known slave addresses independently of the separate channel latch.
+func New(store *eeprom.Store, interrupt *irq.Controller) *Controller {
+	return &Controller{control: 0x99, store: store, interrupt: interrupt}
 }
 
 // BindDemod connects the satellite front-end on vbus 0.
@@ -117,19 +117,11 @@ func (c *Controller) Write(off uint32, size bus.Size, value uint32) {
 }
 
 func (c *Controller) isEEPROM() bool {
-	if c.mux == nil {
-		return false
-	}
-	channel, connected := c.mux.Channel()
-	return connected && channel == 3 && c.slave&^uint8(1) == 0xa0
+	return c.slave&^uint8(1) == 0xa0
 }
 
 func (c *Controller) isDemod() bool {
-	if c.mux == nil {
-		return false
-	}
-	channel, connected := c.mux.Channel()
-	return connected && channel == 0 && c.slave&^uint8(1) == 0x18
+	return c.slave&^uint8(1) == 0x18
 }
 
 func (c *Controller) writeData(value uint8) {
@@ -137,12 +129,7 @@ func (c *Controller) writeData(value uint8) {
 	if c.startArmed {
 		c.startArmed = false
 		c.slave = value
-		var channel uint8
-		var connected bool
-		if c.mux != nil {
-			channel, connected = c.mux.Channel()
-		}
-		c.active = connected && (channel == 3 && value&^uint8(1) == 0xa0 || channel == 0 && value&^uint8(1) == 0x18 || channel == 1 && value&^uint8(1) == 0xca || value == 0)
+		c.active = value&^uint8(1) == 0xa0 || value&^uint8(1) == 0x18 || value&^uint8(1) == 0xca || value == 0
 		if c.isEEPROM() && value&1 == 0 {
 			c.addressBytes = 0
 		}

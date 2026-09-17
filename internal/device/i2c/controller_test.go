@@ -24,7 +24,7 @@ func TestEEPROMTransactionsPersistAcrossControllerRestart(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "nvram.img")
 	store, mux, interrupts := eeprom.New(), NewMux(), irq.New(nil)
-	c := New(store, mux, interrupts)
+	c := New(store, interrupts)
 	if err := c.BindImage(path); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestEEPROMTransactionsPersistAcrossControllerRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	store2, mux2 := eeprom.New(), NewMux()
-	c2 := New(store2, mux2, irq.New(nil))
+	c2 := New(store2, irq.New(nil))
 	if err := c2.BindImage(path); err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestEEPROMTransactionsPersistAcrossControllerRestart(t *testing.T) {
 func TestPageWriteWrapsWithin64Bytes(t *testing.T) {
 	t.Parallel()
 	store, mux := eeprom.New(), NewMux()
-	c := New(store, mux, nil)
+	c := New(store, nil)
 	mux.Write(0, bus.Word, 3<<4)
 	c.Write(0, bus.Word, 0x9a)
 	transferByte(t, c, 0xa0)
@@ -94,7 +94,7 @@ func TestDemodIndirectRegisterReadOverI2C(t *testing.T) {
 	mux := NewMux()
 	mux.Write(0, bus.Word, 0)
 	model := demod.New()
-	c := New(eeprom.New(), mux, nil)
+	c := New(eeprom.New(), nil)
 	c.BindDemod(model)
 	for _, data := range [][]uint32{{0x18, 0, 75}, {0x18, 1, 0}, {0x18, 3}} {
 		c.Write(0, bus.Word, 0x9a)
@@ -115,10 +115,18 @@ func TestDemodIndirectRegisterReadOverI2C(t *testing.T) {
 	}
 }
 
+func TestKnownSlaveAcknowledgesWithChannelLatchDisconnected(t *testing.T) {
+	t.Parallel()
+	c := New(eeprom.New(), nil)
+	c.Write(0, bus.Word, 0x9a)
+	transferByte(t, c, 0xca)
+	transferByte(t, c, 0x42)
+}
+
 func TestControllerHoldsTheDeviceContract(t *testing.T) {
 	t.Parallel()
 	err := bustest.CheckSnapshot(bustest.Check{
-		New: func() bus.Device { return New(eeprom.New(), NewMux(), nil) },
+		New: func() bus.Device { return New(eeprom.New(), nil) },
 		Mutate: func(device bus.Device) {
 			c := device.(*Controller)
 			c.control, c.status, c.clock, c.data, c.enable = 0xac, 4, 2, 0x56, 1
@@ -126,7 +134,7 @@ func TestControllerHoldsTheDeviceContract(t *testing.T) {
 			c.slave, c.pointer, c.addressBytes, c.fault = 0xa0, 0x1234, 2, "test"
 		},
 		Disturb:  func(device bus.Device) { device.Reset() },
-		Constant: []string{"store.image", "mux.value", "interrupt", "imagePath", "demod"},
+		Constant: []string{"store.image", "interrupt", "imagePath", "demod"},
 	})
 	if err != nil {
 		t.Fatal(err)

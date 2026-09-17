@@ -23,11 +23,14 @@ const (
 type UART struct {
 	ier, lcr, mcr, dll, dlm, msr, delta uint8
 	rx, tx                              []byte
+	lastTick                            uint64
 	interrupt                           *irq.Controller
 }
 
 // New connects the modem UART to the board interrupt controller.
-func New(interrupt *irq.Controller) *UART { return &UART{interrupt: interrupt} }
+func New(interrupt *irq.Controller) *UART {
+	return &UART{interrupt: interrupt, lastTick: ^uint64(0)}
+}
 
 // Name is the device's snapshot identity.
 func (*UART) Name() string { return "modem-uart0" }
@@ -46,7 +49,6 @@ func (u *UART) Read(off uint32, size bus.Size) uint32 {
 		}
 		b := u.rx[0]
 		u.rx = u.rx[1:]
-		u.updateLine()
 		return uint32(b)
 	case 0x10:
 		if u.lcr&0x80 != 0 {
@@ -77,7 +79,6 @@ func (u *UART) Read(off uint32, size bus.Size) uint32 {
 	case 0x60:
 		v := u.msr | u.delta
 		u.delta = 0
-		u.updateLine()
 		return uint32(v)
 	}
 	return 0
@@ -123,7 +124,6 @@ func (u *UART) Write(off uint32, size bus.Size, value uint32) {
 			u.delta |= 8
 		}
 	}
-	u.updateLine()
 }
 
 func (u *UART) accept(b byte) {
@@ -136,21 +136,41 @@ func (u *UART) accept(b byte) {
 	}
 }
 
-func (u *UART) updateLine() {
+func (u *UART) wantsIRQ() bool {
+	return u.ier&1 != 0 && len(u.rx) != 0 || u.ier&8 != 0 && u.delta != 0 || u.ier&2 != 0
+}
+
+// Pump updates pending status at the oracle's device cadence and requests IP2
+// at most once per board timer tick while an enabled UART cause remains.
+func (u *UART) Pump(boardTicks uint64) {
+	want := u.wantsIRQ()
 	if u.interrupt != nil {
-		u.interrupt.SetLine(IRQMask, u.ier&1 != 0 && len(u.rx) != 0 || u.ier&8 != 0 && u.delta != 0 || u.ier&2 != 0)
+		u.interrupt.SetStatus(IRQMask, want)
+	}
+	if want && boardTicks != u.lastTick {
+		u.lastTick = boardTicks
+		if u.interrupt != nil {
+			u.interrupt.Pulse(IRQMask)
+		}
 	}
 }
 
 // Reset clears the volatile UART state and its interrupt line.
-func (u *UART) Reset() { *u = UART{interrupt: u.interrupt}; u.updateLine() }
+func (u *UART) Reset() {
+	interrupt := u.interrupt
+	*u = UART{interrupt: interrupt, lastTick: ^uint64(0)}
+	if interrupt != nil {
+		interrupt.SetStatus(IRQMask, false)
+	}
+}
 
 // Snapshot captures the modem, registers, pending reply, and control-line changes.
 func (u *UART) Snapshot() ([]byte, error) {
-	w := snapcodec.NewWriter(u.Name(), 1)
+	w := snapcodec.NewWriter(u.Name(), 2)
 	w.Bytes([]byte{u.ier, u.lcr, u.mcr, u.dll, u.dlm, u.msr, u.delta})
 	w.Bytes(u.rx)
 	w.Bytes(u.tx)
+	w.Uint64(u.lastTick)
 	return w.Blob()
 }
 
@@ -160,10 +180,10 @@ func (u *UART) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("modem: restore: %w", err)
 	}
-	if err = r.Expect(u.Name(), 1, 1); err != nil {
+	if err = r.Expect(u.Name(), 2, 2); err != nil {
 		return fmt.Errorf("modem: restore: %w", err)
 	}
-	regs, rx, tx := r.Bytes(), r.Bytes(), r.Bytes()
+	regs, rx, tx, lastTick := r.Bytes(), r.Bytes(), r.Bytes(), r.Uint64()
 	if err = r.Done(); err != nil {
 		return fmt.Errorf("modem: restore: %w", err)
 	}
@@ -172,7 +192,10 @@ func (u *UART) Restore(blob []byte) error {
 	}
 	u.ier, u.lcr, u.mcr, u.dll, u.dlm, u.msr, u.delta = regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6]
 	u.rx, u.tx = append([]byte(nil), rx...), append([]byte(nil), tx...)
-	u.updateLine()
+	u.lastTick = lastTick
+	if u.interrupt != nil {
+		u.interrupt.SetStatus(IRQMask, u.wantsIRQ())
+	}
 	return nil
 }
 

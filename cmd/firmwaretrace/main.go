@@ -9,6 +9,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/cpu"
+	"github.com/ddunford/goretrotv/internal/device/blitter"
 	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/device/osd"
@@ -80,6 +81,9 @@ func run() error {
 		return err
 	}
 	if err := busMap.Attach(osd.DisplayBase, osd.WindowSize, osd.NewDisplay()); err != nil {
+		return err
+	}
+	if err := busMap.Attach(blitter.Base, blitter.Size, blitter.New(ram)); err != nil {
 		return err
 	}
 	hasher, err := statehash.New(ram)

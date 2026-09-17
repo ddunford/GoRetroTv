@@ -6,6 +6,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/cpu"
 	"github.com/ddunford/goretrotv/internal/gdbstub"
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 // firmwareDebugBackend runs on the GDB session goroutine only. The regular
@@ -45,7 +46,7 @@ func (d *firmwareDebugBackend) ReadMemory(addr, length uint32) ([]byte, error) {
 	for i := range result {
 		address := addr + uint32(i) // #nosec G115 -- range checked above.
 		if _, ok := bus.Physical(address); !ok {
-			return nil, fmt.Errorf("gdb: unmapped virtual address %#x", address)
+			return nil, fmt.Errorf("gdb: unmapped virtual address %s", hexfmt.Addr(address))
 		}
 		result[i] = byte(d.bus.Read(address, bus.Byte)) // #nosec G115 -- byte-sized bus read.
 	}
@@ -59,7 +60,7 @@ func (d *firmwareDebugBackend) WriteMemory(addr uint32, data []byte) error {
 	for i, value := range data {
 		address := addr + uint32(i) // #nosec G115 -- range checked above.
 		if _, ok := bus.Physical(address); !ok {
-			return fmt.Errorf("gdb: unmapped virtual address %#x", address)
+			return fmt.Errorf("gdb: unmapped virtual address %s", hexfmt.Addr(address))
 		}
 		d.bus.Write(address, bus.Byte, uint32(value))
 	}

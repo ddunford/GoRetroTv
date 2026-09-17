@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/ddunford/goretrotv/internal/platform/hexfmt"
 )
 
 type pcHit struct {
@@ -22,7 +24,7 @@ func (p *pcHits) Set(value string) error {
 	}
 	for _, probe := range *p {
 		if probe.address == uint32(address) {
-			return fmt.Errorf("guest PC %#x repeated", address)
+			return fmt.Errorf("guest PC %s repeated", hexfmt.Addr(uint32(address))) // #nosec G115 -- ParseUint limits address to 32 bits.
 		}
 	}
 	*p = append(*p, pcHit{address: uint32(address)}) // #nosec G115 -- ParseUint limits this to 32 bits.

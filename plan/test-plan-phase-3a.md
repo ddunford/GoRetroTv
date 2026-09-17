@@ -62,3 +62,8 @@
   demodulator state was omitted from whole-machine snapshots. I²C snapshot v2 now saves it and
   the EEPROM child; the regenerated 650M image also passes this oracle comparison without a
   demodulator histogram difference. The uninterrupted run remains the acquisition proof.
+  The PC-hit subject guard now rejects a snapshot run with `-steps=0` as a harness failure;
+  one real instruction at `0x800D35E0` reports one hit. Address formatting now uses the
+  canonical formatter internally while preserving the comparator's uppercase wire fields.
+  A fresh restored 650M→680M SI run in `.artifacts/go-si-hexfmt-680m.log` passed the
+  unchanged comparator at six samples, nine guest PCs and four match units.

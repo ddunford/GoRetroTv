@@ -29,6 +29,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/machine"
 	"github.com/ddunford/goretrotv/internal/memory"
 	"github.com/ddunford/goretrotv/internal/platform/clock"
+	"github.com/ddunford/goretrotv/internal/platform/instrument"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
 
@@ -214,7 +215,7 @@ func run() error {
 			demodReadCount[register]++
 			demodReadValue[register] = value
 			if *demodTraceTo != 0 && instruction >= *demodTraceFrom && instruction < *demodTraceTo {
-				fmt.Fprintf(os.Stderr, "demod-read-at instruction=%d register=%d value=%02X\n", instruction, register, value)
+				fmt.Fprintf(os.Stderr, "demod-read-at instruction=%d register=%d value=%s\n", instruction, register, wireByte(value))
 			}
 		})
 	}
@@ -287,7 +288,7 @@ func run() error {
 			return fmt.Errorf("after %d instructions: %w", instruction, err)
 		}
 		if applied {
-			fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%08X\n", instruction, core.PC)
+			fmt.Fprintf(os.Stderr, "declared host application handoff after %d guest instructions: PC=%s\n", instruction, wireWord(core.PC))
 		}
 		_, err = loopClock.At(now+16, pumpName, boardPump)
 		return err
@@ -335,6 +336,7 @@ func run() error {
 	if len(sections) != 0 && sections[0].at < retired {
 		return fmt.Errorf("section instruction %d precedes restored instruction count %d", sections[0].at, retired)
 	}
+	startRetired := retired
 	nextSection := 0
 	nextRecorded := 0
 	if *watchWord != 0 {
@@ -350,7 +352,7 @@ func run() error {
 			}
 		}
 		if *trace && i >= *traceFrom && i < *traceTo {
-			fmt.Fprintf(os.Stderr, "%d PC=%08X ISA=%v Count=%08X Status=%08X GPR=%08X\n", i, core.PC, core.ISA, core.COP0[9], core.COP0[12], core.GPR)
+			fmt.Fprintf(os.Stderr, "%d PC=%s ISA=%v Count=%s Status=%s GPR=%s\n", i, wireWord(core.PC), core.ISA, wireWord(core.COP0[9]), wireWord(core.COP0[12]), wireRegisters(core.GPR))
 		}
 		hits.Observe(core.PC)
 		if err := core.ObserveCheckpoint(emitter, i); err != nil {
@@ -403,7 +405,7 @@ func run() error {
 			return err
 		}
 		defer func() { _ = listener.Close() }()
-		fmt.Fprintf(os.Stderr, "GDB listening on %s; retired=%d PC=%08X\n", listener.Addr(), retired, core.PC)
+		fmt.Fprintf(os.Stderr, "GDB listening on %s; retired=%d PC=%s\n", listener.Addr(), retired, wireWord(core.PC))
 		backend := &firmwareDebugBackend{core: core, bus: busMap, retired: &retired, advance: advance}
 		if err := gdbstub.New(backend).ServeListener(listener); err != nil {
 			return err
@@ -415,7 +417,7 @@ func run() error {
 		if *scheduler {
 			current := ram.Read(0x83d0, bus.Word)
 			if current != previousTask {
-				fmt.Fprintf(os.Stderr, "scheduler %d PC=%08X from=%08X to=%08X ready=%08X\n", i, core.PC, previousTask, current, ram.Read(0x83cc, bus.Word))
+				fmt.Fprintf(os.Stderr, "scheduler %d PC=%s from=%s to=%s ready=%s\n", i, wireWord(core.PC), wireWord(previousTask), wireWord(current), wireWord(ram.Read(0x83cc, bus.Word)))
 				previousTask = current
 			}
 		}
@@ -450,18 +452,18 @@ func run() error {
 				last := func(filter uint8) uint32 {
 					return ram.Read((demux.RecordBase(filter)&0x1fffffff)+12, bus.Word)
 				}
-				fmt.Fprintf(os.Stderr, "section-sample at=%d enable=%08X status=%08X armed-pids=%v last22=%08X last23=%08X last24=%08X demod-reads=%d\n",
-					i, sectionDemux.Read(0xD8, bus.Word), sectionDemux.Read(0xB8, bus.Word),
-					sectionDemux.ArmedPIDs(), last(22), last(23), last(24), demodReadTotal)
+				fmt.Fprintf(os.Stderr, "section-sample at=%d enable=%s status=%s armed-pids=%v last22=%s last23=%s last24=%s demod-reads=%d\n",
+					i, wireWord(sectionDemux.Read(0xD8, bus.Word)), wireWord(sectionDemux.Read(0xB8, bus.Word)),
+					sectionDemux.ArmedPIDs(), wireWord(last(22)), wireWord(last(23)), wireWord(last(24)), demodReadTotal)
 				for _, hit := range hits {
-					fmt.Fprintf(os.Stderr, "section-sample-hit at=%d pc=%08X total=%d\n", i, hit.address, hit.total)
+					fmt.Fprintf(os.Stderr, "section-sample-hit at=%d pc=%s total=%d\n", i, wireWord(hit.address), hit.total)
 				}
 			}
 			section := sections[nextSection]
 			if err := sectionDemux.Push(section.pid, section.bytes); err != nil {
 				return fmt.Errorf("section delivery after %d guest instructions: %w", i, err)
 			}
-			fmt.Fprintf(os.Stderr, "section-inject icount=%d pid=%04X bytes=%d\n", i, section.pid, len(section.bytes))
+			fmt.Fprintf(os.Stderr, "section-inject icount=%d pid=%s bytes=%d\n", i, wireHalf(section.pid), len(section.bytes))
 			nextSection++
 		}
 		if err := advance(i, nil); err != nil {
@@ -471,13 +473,13 @@ func run() error {
 		if *watchWord != 0 {
 			value := busMap.Read(uint32(*watchWord), bus.Word) // #nosec G115 -- checked above.
 			if value != previousWord {
-				fmt.Fprintf(os.Stderr, "watch %d PC=%08X address=%08X before=%08X after=%08X\n", i+1, core.PC, uint32(*watchWord), previousWord, value) // #nosec G115 -- checked above.
+				fmt.Fprintf(os.Stderr, "watch %d PC=%s address=%s before=%s after=%s\n", i+1, wireWord(core.PC), wireWord(uint32(*watchWord)), wireWord(previousWord), wireWord(value)) // #nosec G115 -- checked above.
 				previousWord = value
 			}
 		}
 		// #nosec G115 -- stopPC was checked against the 32-bit address space.
 		if *stopPC != 0 && core.PC == uint32(*stopPC) {
-			fmt.Fprintf(os.Stderr, "reached PC=%08X after %d guest instructions; Cause=%08X EPC=%08X\n", core.PC, i+1, core.COP0[13], core.COP0[14])
+			fmt.Fprintf(os.Stderr, "reached PC=%s after %d guest instructions; Cause=%s EPC=%s\n", wireWord(core.PC), i+1, wireWord(core.COP0[13]), wireWord(core.COP0[14]))
 			break
 		}
 	}
@@ -492,6 +494,9 @@ func run() error {
 	}
 	if nextRecorded != len(recordedEvents) {
 		return fmt.Errorf("recorded input delivery was not reached before run stopped at %d instructions", retired)
+	}
+	if len(hits) != 0 && retired == startRetired {
+		return instrument.MustFind("PC hit trace", "guest instructions", 0, 1)
 	}
 	if *recordOut != "" || *replayIn != "" {
 		_, _, surfaceSHA, err := surfaceDigest(ram, surfaceBase, surfaceLength)
@@ -512,24 +517,24 @@ func run() error {
 			fmt.Fprintf(os.Stderr, "recorded inputs retired=%d surface-sha256=%x\n", retired, surfaceSHA)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "retired %d instructions; PC=%08X ISA=%v; unmapped accesses: %+v\n", retired, core.PC, core.ISA, busMap.UnmappedTotals())
+	fmt.Fprintf(os.Stderr, "retired %d instructions; PC=%s ISA=%v; unmapped accesses: %+v\n", retired, wireWord(core.PC), core.ISA, busMap.UnmappedTotals())
 	if *unmapped {
 		for _, site := range busMap.Unmapped() {
 			fmt.Fprintf(os.Stderr, "unmapped %+v\n", site)
 		}
 	}
 	if *bootState {
-		fmt.Fprintf(os.Stderr, "boot ready=%08X current=%08X handoff-gate=%08X image=%08X entry=%08X dram-main=%08X\n",
-			busMap.Read(0x800083CC, bus.Word), busMap.Read(0x800083D0, bus.Word),
-			busMap.Read(0x800050D0, bus.Word),
-			busMap.Read(0xBFC20000, bus.Word), busMap.Read(0xBFC2002C, bus.Word),
-			busMap.Read(0x800009F4, bus.Word))
-		fmt.Fprintf(os.Stderr, "flash descriptor base=%08X data=%08X step=%08X interrupt pending=%08X enable=%08X\n",
-			busMap.Read(0x800050B0, bus.Word), busMap.Read(0x800050B4, bus.Word),
-			busMap.Read(0x800050BC, bus.Word), interrupts.Read(0x30, bus.Word), interrupts.Read(0x40, bus.Word))
+		fmt.Fprintf(os.Stderr, "boot ready=%s current=%s handoff-gate=%s image=%s entry=%s dram-main=%s\n",
+			wireWord(busMap.Read(0x800083CC, bus.Word)), wireWord(busMap.Read(0x800083D0, bus.Word)),
+			wireWord(busMap.Read(0x800050D0, bus.Word)),
+			wireWord(busMap.Read(0xBFC20000, bus.Word)), wireWord(busMap.Read(0xBFC2002C, bus.Word)),
+			wireWord(busMap.Read(0x800009F4, bus.Word)))
+		fmt.Fprintf(os.Stderr, "flash descriptor base=%s data=%s step=%s interrupt pending=%s enable=%s\n",
+			wireWord(busMap.Read(0x800050B0, bus.Word)), wireWord(busMap.Read(0x800050B4, bus.Word)),
+			wireWord(busMap.Read(0x800050BC, bus.Word)), wireWord(interrupts.Read(0x30, bus.Word)), wireWord(interrupts.Read(0x40, bus.Word)))
 	}
 	if *probe != 0 {
-		fmt.Fprintf(os.Stderr, "probe %08X=%08X\n", uint32(*probe), busMap.Read(uint32(*probe), bus.Word)) // #nosec G115 -- checked above.
+		fmt.Fprintf(os.Stderr, "probe %s=%s\n", wireWord(uint32(*probe)), wireWord(busMap.Read(uint32(*probe), bus.Word))) // #nosec G115 -- checked above.
 	}
 	if *tasks {
 		if err := reportTasks(os.Stderr, ram); err != nil {
@@ -547,12 +552,12 @@ func run() error {
 		}
 		sort.Ints(registers)
 		for _, register := range registers {
-			fmt.Fprintf(os.Stderr, "demod-read register=%d count=%d value=%02X\n", register, demodReadCount[uint16(register)], demodReadValue[uint16(register)]) // #nosec G115 -- register came from uint16 map key.
+			fmt.Fprintf(os.Stderr, "demod-read register=%d count=%d value=%s\n", register, demodReadCount[uint16(register)], wireByte(demodReadValue[uint16(register)])) // #nosec G115 -- register came from uint16 map key.
 		}
 	}
 	if *sectionState {
-		fmt.Fprintf(os.Stderr, "section-state enable=%08X status=%08X armed-pids=%v\n",
-			sectionDemux.Read(0xD8, bus.Word), sectionDemux.Read(0xB8, bus.Word), sectionDemux.ArmedPIDs())
+		fmt.Fprintf(os.Stderr, "section-state enable=%s status=%s armed-pids=%v\n",
+			wireWord(sectionDemux.Read(0xD8, bus.Word)), wireWord(sectionDemux.Read(0xB8, bus.Word)), sectionDemux.ArmedPIDs())
 		for unit := uint8(0); unit < 16; unit++ {
 			table, _ := sectionDemux.Match(unit, 0)
 			if table.Mask == 0 {
@@ -560,21 +565,21 @@ func run() error {
 			}
 			extHi, _ := sectionDemux.Match(unit, 1)
 			extLo, _ := sectionDemux.Match(unit, 2)
-			fmt.Fprintf(os.Stderr, "section-match unit=%d table=%02X/%02X extension=%02X%02X/%02X%02X\n",
-				unit, table.Value, table.Mask, extHi.Value, extLo.Value, extHi.Mask, extLo.Mask)
+			fmt.Fprintf(os.Stderr, "section-match unit=%d table=%s/%s extension=%s%s/%s%s\n",
+				unit, wireByte(table.Value), wireByte(table.Mask), wireByte(extHi.Value), wireByte(extLo.Value), wireByte(extHi.Mask), wireByte(extLo.Mask))
 		}
 		for _, channel := range []uint8{21, 22, 23, 24} {
 			record := demux.RecordBase(channel) & 0x1fffffff
-			fmt.Fprintf(os.Stderr, "section-filter channel=%d ring=%08X record-start=%08X record-end=%08X record-current=%08X record-last=%08X context=%08X\n",
-				channel, demux.RingBase(channel), ram.Read(record, bus.Word), ram.Read(record+4, bus.Word),
-				ram.Read(record+8, bus.Word), ram.Read(record+12, bus.Word), ram.Read(record+16, bus.Word))
+			fmt.Fprintf(os.Stderr, "section-filter channel=%d ring=%s record-start=%s record-end=%s record-current=%s record-last=%s context=%s\n",
+				channel, wireWord(demux.RingBase(channel)), wireWord(ram.Read(record, bus.Word)), wireWord(ram.Read(record+4, bus.Word)),
+				wireWord(ram.Read(record+8, bus.Word)), wireWord(ram.Read(record+12, bus.Word)), wireWord(ram.Read(record+16, bus.Word)))
 		}
 	}
 	for _, hit := range hits {
 		if *key >= 0 {
-			fmt.Fprintf(os.Stderr, "pc-hit %08X total=%d before-key=%d after-key=%d\n", hit.address, hit.total, hit.before, hit.total-hit.before)
+			fmt.Fprintf(os.Stderr, "pc-hit %s total=%d before-key=%d after-key=%d\n", wireWord(hit.address), hit.total, hit.before, hit.total-hit.before)
 		} else {
-			fmt.Fprintf(os.Stderr, "pc-hit %08X total=%d\n", hit.address, hit.total)
+			fmt.Fprintf(os.Stderr, "pc-hit %s total=%d\n", wireWord(hit.address), hit.total)
 		}
 	}
 	if *surfaceHash {
@@ -582,14 +587,14 @@ func run() error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "surface hash=%08X distinct=%d bytes=%d base=%08X sha256=%x\n", hash, distinct, surfaceLength, surfaceBase, sha)
+		fmt.Fprintf(os.Stderr, "surface hash=%s distinct=%d bytes=%d base=%s sha256=%x\n", wireWord(hash), distinct, surfaceLength, wireWord(surfaceBase), sha)
 	}
 	if *stateHash {
 		value := hasher.Hash(core.State())
 		if err := hasher.Err(); err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "state-hash retired=%d hash=%08X\n", retired, value)
+		fmt.Fprintf(os.Stderr, "state-hash retired=%d hash=%s\n", retired, wireWord(value))
 	}
 	if *snapshotOut != "" {
 		if err := writeSnapshot(*snapshotOut, emulated); err != nil {

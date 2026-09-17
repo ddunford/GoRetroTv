@@ -31,13 +31,13 @@ func reportTasks(out io.Writer, ram *memory.RAM) error {
 			for pos := uint32(0); pos < 256 && len(codeWords) < 12; pos += 4 {
 				word := ram.Read(sp-memory.DRAMBase+pos, bus.Word)
 				if word >= 0x80000000 && word < 0x80120000 || word >= 0x9fc00000 && word < 0x9fc20000 || word >= 0xbfc00000 && word < 0xbfc20000 {
-					codeWords = append(codeWords, fmt.Sprintf("+%02X:%08X", pos, word))
+					codeWords = append(codeWords, fmt.Sprintf("+%s:%s", wireByte(uint8(pos)), wireWord(word))) // #nosec G115 -- pos is below 256.
 				}
 			}
 		}
 		cleanup := ram.Read(off+0x68, bus.Word)
 		suspend := ram.Read(off+0x6c, bus.Word)
-		if _, err := fmt.Fprintf(out, "task %d TCB=%08X name=%q status=%d runs=%d SP=%08X cleanup=%08X suspend=%08X stack-code-words=[%s]\n", count, memory.DRAMBase+off, name, status, runs, sp, cleanup, suspend, strings.Join(codeWords, " ")); err != nil {
+		if _, err := fmt.Fprintf(out, "task %d TCB=%s name=%q status=%d runs=%d SP=%s cleanup=%s suspend=%s stack-code-words=[%s]\n", count, wireWord(memory.DRAMBase+off), name, status, runs, wireWord(sp), wireWord(cleanup), wireWord(suspend), strings.Join(codeWords, " ")); err != nil {
 			return err
 		}
 	}
@@ -61,7 +61,7 @@ func reportTasks(out io.Writer, ram *memory.RAM) error {
 		if magic == 0x53454d41 && waiters == 0 {
 			continue
 		}
-		if _, err := fmt.Fprintf(out, "wait-object %08X %q name=%q count=%d waiters=%d head=%08X\n", memory.DRAMBase+off, string(magicBytes(magic)), strings.TrimRight(string(name[:]), "\x00"), ram.Read(off+0x18, bus.Word), waiters, ram.Read(off+0x24, bus.Word)); err != nil {
+		if _, err := fmt.Fprintf(out, "wait-object %s %q name=%q count=%d waiters=%d head=%s\n", wireWord(memory.DRAMBase+off), string(magicBytes(magic)), strings.TrimRight(string(name[:]), "\x00"), ram.Read(off+0x18, bus.Word), waiters, wireWord(ram.Read(off+0x24, bus.Word))); err != nil {
 			return err
 		}
 	}
@@ -90,10 +90,10 @@ func createdTaskOffsets(ram *memory.RAM) ([]uint32, error) {
 	var offsets []uint32
 	for at := seed; ; {
 		if at < memory.DRAMBase || at-memory.DRAMBase+0x70 > ram.Size() || at&3 != 0 {
-			return nil, fmt.Errorf("task census: created list left DRAM at %08X", at)
+			return nil, fmt.Errorf("task census: created list left DRAM at %s", wireWord(at))
 		}
 		if seen[at] {
-			return nil, fmt.Errorf("task census: created list repeated %08X before returning to seed", at)
+			return nil, fmt.Errorf("task census: created list repeated %s before returning to seed", wireWord(at))
 		}
 		if len(offsets) >= 200 {
 			return nil, fmt.Errorf("task census: created list exceeds 200 tasks")
@@ -101,7 +101,7 @@ func createdTaskOffsets(ram *memory.RAM) ([]uint32, error) {
 		seen[at] = true
 		off := at - memory.DRAMBase
 		if ram.Read(off+0x0c, bus.Word) != 0x5441534b {
-			return nil, fmt.Errorf("task census: created list points to non-task at %08X", at)
+			return nil, fmt.Errorf("task census: created list points to non-task at %s", wireWord(at))
 		}
 		offsets = append(offsets, off)
 		next := ram.Read(off+4, bus.Word)

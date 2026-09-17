@@ -274,7 +274,7 @@ Running
   oracle-gate    Full 42-task cold boot and 470,000 matching browser checkpoints
   links-gate     Guest handset, card, NVRAM and acknowledgement-policy checks
   snapshot-gate  Compare a restored real-firmware run with 10 million uninterrupted instructions
-  snapshot       Save, run or list named local machine snapshots
+  snapshot       Save, run, inspect, list or seed named local machine snapshots
 
 Building and checking
   build          Build every binary into bin/

@@ -58,3 +58,7 @@ digest: 043e4d54548f284a163d9fecec7ffab152db8a05d8b8ee0c2ebe8817ddb13ff1
   when: 2026-09-17T12:37:01Z
    why: Pin immutable supported builder and runtime images
 
+digest: c08655cece701a5ca3e6b8a168b1e834e4852c9ee0d6de35fbffe3eab1c7acce
+  when: 2026-09-17T13:12:53Z
+   why: Seed and verify a private post-acquisition snapshot
+

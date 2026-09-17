@@ -54,5 +54,6 @@
   `python3 tools/compare-si-acquisition.py --oracle .artifacts/oracle-si-clock-acquisition-verified.json
   --go-log .artifacts/go-si-clock-direct.log --go-baseline-log .artifacts/go-si-650m.log
   --require-acquired` passed. A separate snapshot run-on check exposed that the I²C-bound
-  demodulator state was omitted from whole-machine snapshots; that is tracked under Task 4.3
-  and is not used as acquisition evidence here.
+  demodulator state was omitted from whole-machine snapshots. I²C snapshot v2 now saves it and
+  the EEPROM child; the regenerated 650M image also passes this oracle comparison without a
+  demodulator histogram difference. The uninterrupted run remains the acquisition proof.

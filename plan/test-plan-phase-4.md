@@ -26,7 +26,18 @@
   `B24C2CD2`. `internal/machine/snapshot_test.go` completes a flash program command after a
   machine restore, then deliberately replaces the pending unlock state with the pristine flash
   state and proves the run-on state hash changes.
-- [ ] **TC-4.3: A post-acquisition snapshot reaches a pressable box in under a second** (covers: TASK-4.3, TASK-4.7) — SPEC success criterion 3.
+- [x] **TC-4.3: A post-acquisition snapshot reaches a pressable box in under a second** (covers: TASK-4.3, TASK-4.7) — SPEC success criterion 3.
+  **Result:** `./ctl.sh snapshot seed` built a private 38.8 MB v2 image from the real firmware:
+  verified cold EEPROM, warm 42-task boot, three TDT/TOT pairs, NIT/BAT/SDT and the finite
+  service-list rebuild. The independently seeded image was byte-identical to the earlier named
+  `post-acquisition` image (SHA-256 `4d12dab14717b558e3fc0827dbac5ba3fd0528f5491811920cb444b8cae12e0a`).
+  Restoring the named image with the built binary took **0.74 seconds**, including firmware
+  loading and state-hash calculation; it restored at instruction 1.1B with hash `04E99A24`.
+  Sky `0x7D` at that instruction reached guest PC `0x8006EA04` twice and drew the measured
+  Box Office surface by 1.12B (raw hash `F3634409`, 37 distinct bytes, final state hash
+  `F51114FC`). The seed command refuses an existing name, and both library directory and image
+  are private (`0700`/`0600`). Evidence: `.artifacts/si-warm-ready-v2.log`,
+  `.artifacts/post-acquisition-named-key.log`, and `docs/snapshots.md`.
 - [ ] **TC-4.4: Replay is byte-identical** (covers: TASK-4.4, TASK-4.7) — two replays of one recording produce
   identical framebuffer hashes and identical instruction counts.
 - [ ] **TC-4.5: gdb attaches and breaks** (covers: TASK-4.5, TASK-4.7) — break on a firmware address, read

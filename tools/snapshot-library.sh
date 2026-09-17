@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 usage() {
-    printf 'usage: ./ctl.sh snapshot {save|run|inspect|list} [name] [firmwaretrace options]\n' >&2
+    printf 'usage: ./ctl.sh snapshot {save|run|inspect|list|seed} [name] [firmwaretrace options]\n' >&2
     exit 2
 }
 
@@ -14,10 +14,15 @@ shift
 
 snapshot_dir="${GORETROTV_SNAPSHOT_DIR:-snapshots}"
 binary_dir="${BIN_DIR:-bin}"
+if [[ "$command" == seed ]]; then
+    (($# == 0)) || usage
+    exec ./tools/seed-post-acquisition.sh
+fi
 if [[ "$command" == list ]]; then
     (($# == 0)) || usage
     [[ -d "$snapshot_dir" ]] || exit 0
-    find "$snapshot_dir" -maxdepth 1 -type f -name '*.snapshot' -printf '%f\n' | sort
+    find "$snapshot_dir" -maxdepth 1 -type f -name '*.snapshot' -printf '%f\n' \
+        | sed 's/\.snapshot$//' | sort
     exit 0
 fi
 

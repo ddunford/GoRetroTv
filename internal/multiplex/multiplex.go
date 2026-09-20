@@ -56,6 +56,12 @@ type Multiplex struct {
 
 	onAir       func(Counters, []TitleRequest)
 	onAirCalled bool
+
+	onReload func(changed bool, err error)
+	// lastReloadErr keeps a malformed schedule from being reported on every
+	// pass. The file stays broken until somebody fixes it, and a line a second
+	// saying so is a log nobody reads.
+	lastReloadErr string
 }
 
 // Counters is what the transmitter has put on air.
@@ -135,6 +141,40 @@ func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 // Counts reports what has gone on air.
 func (m *Multiplex) Counts() Counters { return m.sent }
 
+// OnReload is called when a schedule edit is picked up, and when one is
+// rejected. A rejected edit is the more important of the two: the broadcast
+// carries on with the last good schedule, so without this the only symptom of
+// a typo is that nothing changes.
+func (m *Multiplex) OnReload(notify func(changed bool, err error)) { m.onReload = notify }
+
+// reload picks up an edit to the schedule, keeping the last good one if the
+// edit is malformed.
+//
+// The SI VERSION IS BUMPED when the schedule changes, and that is not
+// cosmetic: a receiver ignores a repeat of a version it has already parsed, so
+// an edited line-up broadcast under the old version number would be dropped by
+// the box and the edit would appear to have done nothing.
+func (m *Multiplex) reload() {
+	changed, err := m.guide.Reload()
+	switch {
+	case err != nil:
+		if problem := err.Error(); problem != m.lastReloadErr {
+			m.lastReloadErr = problem
+			if m.onReload != nil {
+				m.onReload(false, err)
+			}
+		}
+	case changed:
+		m.lastReloadErr = ""
+		m.version = (m.version + 1) & 0x1f
+		if m.onReload != nil {
+			m.onReload(true, nil)
+		}
+	default:
+		m.lastReloadErr = ""
+	}
+}
+
 // listings is the schedule for the day the broadcast is currently claiming.
 // It is looked up per wave rather than held, so a clock that crosses midnight
 // starts transmitting the next day's television without anything restarting.
@@ -203,6 +243,10 @@ func (m *Multiplex) clockWave(uint64) ([]broadcast.Emission, error) {
 // visible: the hardware never delivers it, and the box simply goes on not
 // having a channel list.
 func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
+	// On the line-up cadence, because this is the wave whose content an edit
+	// changes and because the loop is the only thread allowed to touch any of
+	// this.
+	m.reload()
 	sub, asking := m.subscription()
 	if !asking || !sub.SIArmed {
 		// Not an error: a box that is not asking, or has not armed PID 0x11

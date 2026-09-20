@@ -44,20 +44,10 @@ func TestTheBoxTakesProgrammesAddressedFromTheClockAlone(t *testing.T) {
 			}
 			registered := 0
 			const budget = 30_000_000
-			for i := 0; i < budget; i++ {
-				if err := transmitter.Pump(box.Machine.Retired); err != nil {
-					t.Fatal(err)
-				}
-				if box.Machine.Core.State().PC&^1 == pcPerEventRegister {
-					registered++
-				}
-				if err := box.Step(); err != nil {
-					t.Fatal(err)
-				}
-			}
+			doneAt := runUntil(t, box, transmitter, budget, registeringProgrammes(box, programmes, &registered))
 			counts := transmitter.Counts()
-			t.Logf("slot %d (MJD %d): %d derived waves, %d registered of %d",
-				mjd%8, mjd, counts.TitlesDerived, registered, programmes)
+			t.Logf("slot %d (MJD %d): %d derived waves, %d registered of %d by instruction %d",
+				mjd%8, mjd, counts.TitlesDerived, registered, programmes, doneAt)
 
 			if counts.TitlesDerived == 0 {
 				t.Fatal("nothing was derived, so this says nothing about the derived path")

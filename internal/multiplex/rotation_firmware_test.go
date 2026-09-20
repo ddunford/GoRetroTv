@@ -43,28 +43,19 @@ func TestOnlyThreeDaysInEightProgramAListingsFilter(t *testing.T) {
 			// subscribing slots act on it within about 725,000 more, so this
 			// is a margin of more than ten -- and the positive cases assert
 			// that margin below rather than leaving it to be believed.
-			const budget = 20_000_000
+			const budget = 14_000_000
 			var after multiplex.Subscription
-			subscribedAt := -1
-			for i := 0; i < budget; i++ {
-				if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			subscribedAt := runUntil(t, box, transmitter, budget, func(i int) bool {
+				if i%4096 != 0 {
+					return false
+				}
+				read, err := multiplex.Read(box.Demux)
+				if err != nil {
 					t.Fatal(err)
 				}
-				if i%4096 == 0 {
-					read, err := multiplex.Read(box.Demux)
-					if err != nil {
-						t.Fatal(err)
-					}
-					after = read
-					if len(read.Titles) > 0 {
-						subscribedAt = i
-						break
-					}
-				}
-				if err := box.Step(); err != nil {
-					t.Fatal(err)
-				}
-			}
+				after = read
+				return len(read.Titles) > 0
+			})
 			mjd := multiplex.MJDOf(day)
 			slot := mjd % 8
 
@@ -83,9 +74,14 @@ func TestOnlyThreeDaysInEightProgramAListingsFilter(t *testing.T) {
 				t.Fatalf("slot %d (MJD %d) programmed no listings filter, and it is one of the three that does", slot, mjd)
 			}
 			t.Logf("slot %d (MJD %d) subscribed after %d instructions", slot, mjd, subscribedAt)
-			if subscribedAt > budget/2 {
-				t.Errorf("subscribing took %d of a %d-instruction budget; the five negative slots are no "+
-					"longer demonstrably long enough to have subscribed", subscribedAt, budget)
+			// The three that subscribe do so at about 8.6 million, so the
+			// five that do not are given several million more than that
+			// before they are believed. If subscribing ever creeps close to
+			// the budget, the negative cases stop meaning anything and this
+			// says so rather than going quietly green.
+			if margin := budget - subscribedAt; margin < 4_000_000 {
+				t.Errorf("subscribing took %d of a %d-instruction budget, leaving %d; the five negative "+
+					"slots are no longer demonstrably long enough to have subscribed", subscribedAt, budget, margin)
 			}
 			request := after.Titles[0]
 			if request.MJD() != mjd {

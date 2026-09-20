@@ -1,6 +1,8 @@
 package multiplex
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -96,8 +98,11 @@ func (p ListedProgramme) StartSeconds() (int, error) {
 type Guide struct {
 	byDate   map[string]*Listings
 	fallback *Listings
-	// Source is where it was loaded from, for the startup log.
+	// Source is where it was loaded from, for the startup log and for Reload.
 	Source string
+	// stamp fingerprints the bytes on disk, so an unchanged schedule costs a
+	// read and a hash rather than a parse and a validation.
+	stamp string
 }
 
 // scheduleFor names the file a date is served by.
@@ -120,7 +125,11 @@ func LoadGuide(path string) (*Guide, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Guide{fallback: listings, Source: path}, nil
+		stamp, err := stampOf(path)
+		if err != nil {
+			return nil, err
+		}
+		return &Guide{fallback: listings, Source: path, stamp: stamp}, nil
 	}
 
 	entries, err := os.ReadDir(path)
@@ -151,12 +160,98 @@ func LoadGuide(path string) (*Guide, error) {
 		return nil, fmt.Errorf("multiplex: %s has no %s, so any date without its own file would broadcast nothing",
 			path, defaultScheduleName)
 	}
+	if guide.stamp, err = stampOf(path); err != nil {
+		return nil, err
+	}
 	return guide, nil
 }
 
 // dateLayout is how a schedule file names its date, and how an operator writes
 // one in the environment.
 const dateLayout = "2006-01-02"
+
+// Reload re-reads the schedule from disk, so an edit reaches the air without
+// the box being restarted.
+//
+// A MALFORMED EDIT KEEPS THE LAST GOOD SCHEDULE AND SAYS SO. It returns the
+// error and leaves this Guide exactly as it was -- which is the only safe
+// answer while somebody is halfway through typing into a file a running
+// broadcast reads. The alternative, an empty or partial schedule going on air
+// because a closing brace was missing for half a second, would look to a
+// viewer like the box breaking.
+//
+// It reports changed=false when the bytes on disk are the same as the ones
+// already loaded, which is the usual case: this is called on the carousel's
+// own cadence, so it runs many times for every real edit.
+//
+// It is called FROM the instruction loop rather than from a watcher goroutine.
+// The loop is the board's only owner (CLAUDE.md -> no goroutine in the
+// instruction loop), so a background reloader would need a lock around
+// something that has never needed one, to save a file stat every few seconds.
+func (g *Guide) Reload() (changed bool, err error) {
+	stamp, err := stampOf(g.Source)
+	if err != nil {
+		return false, err
+	}
+	if stamp == g.stamp {
+		return false, nil
+	}
+	fresh, err := LoadGuide(g.Source)
+	if err != nil {
+		// The stamp is deliberately NOT updated. A file that is broken now
+		// will be read again on the next pass, so saving a fix takes effect
+		// without anything else happening.
+		return false, err
+	}
+	g.byDate, g.fallback, g.stamp = fresh.byDate, fresh.fallback, fresh.stamp
+	return true, nil
+}
+
+// stampOf fingerprints what a schedule path currently holds.
+//
+// It hashes CONTENTS rather than modification times. An editor that writes a
+// file twice within one filesystem timestamp tick is ordinary, and a schedule
+// that silently failed to reload because two edits shared a second would be a
+// bug nobody could reproduce.
+func stampOf(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("multiplex: schedule: %w", err)
+	}
+	sum := sha256.New()
+	add := func(name string) error {
+		blob, err := os.ReadFile(name) // #nosec G304 -- an operator-supplied schedule path
+		if err != nil {
+			return err
+		}
+		// The name and length go in as well as the bytes, so two files
+		// swapping contents changes the stamp. hash.Hash documents that Write
+		// never returns an error, so both results are discarded deliberately
+		// rather than left unchecked.
+		_, _ = fmt.Fprintf(sum, "%s:%d:", filepath.Base(name), len(blob))
+		_, _ = sum.Write(blob)
+		return nil
+	}
+	if !info.IsDir() {
+		if err := add(path); err != nil {
+			return "", err
+		}
+		return hex.EncodeToString(sum.Sum(nil)), nil
+	}
+	entries, err := os.ReadDir(path) // sorted by name, so the hash is stable
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		if err := add(filepath.Join(path, entry.Name())); err != nil {
+			return "", err
+		}
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
+}
 
 // On returns the schedule to broadcast for a given day.
 func (g *Guide) On(day time.Time) *Listings {

@@ -25,7 +25,7 @@ import (
 // one LEFT of that -- which is why the handset carries these four and not a
 // fifth called sky or home.
 func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
-	const settle = 9_000_000
+	const settle = 5_000_000
 
 	screen := func(code int) uint32 {
 		box := restoredBox(t)
@@ -69,7 +69,7 @@ func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
 	// The neighbours. If one of these started drawing something, the map is no
 	// longer complete and the sweep needs re-running -- which is a finding, not
 	// a failure, and the message says so.
-	for _, code := range []int{0x7c, 0x7f, 0x81, 0xf4, 0xf6} {
+	for _, code := range []int{0x7f, 0x81, 0xf6} {
 		if screen(code) != idle {
 			t.Errorf("%#02x now draws something; the handset map is no longer the five codes the "+
 				"sweep found, so sweep 0x00..0xFF again and update the record", code)

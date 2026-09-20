@@ -1,6 +1,7 @@
 package multiplex_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -32,6 +33,18 @@ func demoSchedule() broadcast.Schedule {
 	}
 }
 
+// The flash images and the snapshot, read once for the whole package.
+//
+// This file builds a couple of dozen boxes, and re-reading five megabytes of
+// flash and verifying it against its manifest for each one is pure overhead:
+// the images are immutable and board.New copies what it needs. Caching them is
+// what keeps this package inside Go's per-package timeout under the race
+// detector.
+var (
+	cachedImages   *firmware.Set
+	cachedSnapshot []byte
+)
+
 func restoredBox(t *testing.T) *board.Runtime {
 	t.Helper()
 	dir := filepath.Join("..", "..", "firmware")
@@ -42,23 +55,22 @@ func restoredBox(t *testing.T) *board.Runtime {
 	if _, err := os.Stat(snapshot); os.IsNotExist(err) {
 		t.Skip("private post-acquisition snapshot is not installed")
 	}
-	images, err := firmware.Load(context.Background(), dir)
+	if cachedImages == nil {
+		images, err := firmware.Load(context.Background(), dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		blob, err := os.ReadFile(snapshot) // #nosec G304 -- fixed local private test fixture
+		if err != nil {
+			t.Fatal(err)
+		}
+		cachedImages, cachedSnapshot = images, blob
+	}
+	box, err := board.New(cachedImages, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	box, err := board.New(images, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	file, err := os.Open(snapshot) // #nosec G304 -- fixed local private test fixture
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := box.Restore(file); err != nil {
-		file.Close()
-		t.Fatal(err)
-	}
-	if err := file.Close(); err != nil {
+	if err := box.Restore(bytes.NewReader(cachedSnapshot)); err != nil {
 		t.Fatal(err)
 	}
 	return box
@@ -107,22 +119,13 @@ func TestTheBoxTakesProgrammesOffTheModelledMultiplex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	registered, firstAt := 0, 0
-	const budget = 120_000_000
-	for i := 0; i < budget; i++ {
-		if err := transmitter.Pump(box.Machine.Retired); err != nil {
-			t.Fatal(err)
-		}
-		if box.Machine.Core.State().PC&^1 == pcPerEventRegister {
-			if registered == 0 {
-				firstAt = i
-			}
-			registered++
-		}
-		if err := box.Step(); err != nil {
-			t.Fatal(err)
-		}
+	programmes := 0
+	for _, service := range guide.On(day).Services {
+		programmes += len(service.Programmes)
 	}
+	registered := 0
+	const budget = 40_000_000
+	doneAt := runUntil(t, box, transmitter, budget, registeringProgrammes(box, programmes, &registered))
 
 	counts := transmitter.Counts()
 	t.Logf("on air: %d clock waves, %d line-up waves, %d title waves, %d title waves with nowhere to go",
@@ -163,8 +166,8 @@ func TestTheBoxTakesProgrammesOffTheModelledMultiplex(t *testing.T) {
 			t.Errorf("listings PID %#02x for MJD %d, want %#02x", request.PID, request.MJD(), want)
 		}
 	}
-	if registered == 0 {
-		t.Fatal("the box registered no programmes at all")
+	if doneAt < 0 {
+		t.Fatalf("the box registered %d of %d programmes in %d instructions", registered, programmes, budget)
 	}
-	t.Logf("the box registered %d programmes, the first %d instructions in", registered, firstAt)
+	t.Logf("the box took all %d programmes by instruction %d of a %d budget", programmes, doneAt, budget)
 }

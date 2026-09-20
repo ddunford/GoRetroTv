@@ -273,6 +273,17 @@ func transmitterFor(air *broadcastConfig, box *board.Runtime, logger *slog.Logge
 	}
 	transmitter, err := multiplex.New(box, air.guide, air.dict, air.clock, air.schedule)
 	if err == nil {
+		transmitter.OnReload(func(changed bool, problem error) {
+			if problem != nil {
+				// The broadcast carries on with the last good schedule, so
+				// without this line the only symptom of a typo is that the
+				// edit appears to have done nothing.
+				logger.Error("the edited schedule was refused; the last good one stays on air",
+					"err", problem)
+				return
+			}
+			logger.Info("schedule reloaded", "schedule", air.guide.Source)
+		})
 		transmitter.OnAir(func(counts multiplex.Counters, requests []multiplex.TitleRequest) {
 			pids := make([]string, 0, len(requests))
 			for _, request := range requests {

@@ -31,8 +31,19 @@ run: build ## Build and run the emulator server
 test: ## Run the tests
 	go test ./...
 
+# Go's default per-package timeout is ten minutes, and it exists to catch a
+# HUNG test. It is not the right guard here: internal/broadcast and
+# internal/multiplex run real firmware for hundreds of millions of instructions,
+# and under the race detector that is legitimately several minutes.
+#
+# Their own loops are the hang detector now. Every firmware loop runs under a
+# budget and fails BY NAME when the machine does not do what it was waiting for
+# -- see internal/multiplex/rununtil_test.go -- so a hang is reported as "the
+# box never asked" rather than as a timeout, which is a better failure anyway.
+# Raising this stops a slow but healthy run being reported as a hang; it does
+# not remove a guard, because the guard moved inside.
 test-race: ## Run the tests under the race detector
-	go test -race ./...
+	go test -race -timeout 20m ./...
 
 test-cover: ## Run the tests with coverage
 	go test -cover ./...

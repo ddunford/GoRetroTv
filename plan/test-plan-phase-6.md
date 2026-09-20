@@ -146,11 +146,29 @@
   days in eight the programmes are stored and the guide does not draw them, so `now` gives a correct
   clock and an empty guide most of the week. The server says so at startup rather than leaving it
   to be found.
-- [ ] **TC-6.8: A live edit reaches the guide; a broken one does not break it** (covers: TASK-6.8, TASK-6.9).
+- [x] **TC-6.8: A live edit reaches the guide; a broken one does not break it** (covers: TASK-6.8, TASK-6.9)
+  — `TestAnEditReachesARunningBox` against the real firmware: the box takes the first schedule's 3
+  programmes, the file is edited to 6 while it runs, and the box takes all 6 about one line-up
+  period later. Then the file is truncated mid-object and the transmitter names the fault and keeps
+  broadcasting the last good schedule.
+
+  **The version bump is the part that would have been missed.** A receiver ignores a repeat of an SI
+  version it has already parsed, so an edited line-up sent under the old version number is dropped
+  and the edit appears to do nothing. Falsified: with the bump removed the box takes **1 of 6** and
+  the loader tests all still pass — which is exactly why this case is against the box rather than
+  against the loader.
+
+  The loader half is `TestAnEditIsPickedUpAndAMalformedOneKeepsTheLastGood` (including that a broken
+  file stays retryable, so saving a fix works without a restart),
+  `TestAScheduleThatParsesButIsWrongAlsoKeepsTheLastGood` (a duplicate listings id is refused too —
+  it parses and would broadcast plausibly wrong), and `TestADatedFileAddedWhileRunningIsPickedUp`.
 - [ ] **TC-6.13: Every day in the eight-day rotation DRAWS listings** (covers: TASK-6.13) — note the
   verb. Delivery is already solved: `TestTheBoxTakesProgrammesAddressedFromTheClockAlone` shows all
   five non-subscribing slots registering 67 of 67 programmes from sections the transmitter addresses
   itself. What is not solved is that the guide does not DRAW them, which is the distinction this
   case exists to keep — an earlier version of this work counted the per-event register and called it
   working. The instrument must end at the screen.
+- [ ] **TC-6.14: A title draws on screen with its spaces** (covers: TASK-6.14) — read the drawn text,
+  not the round trip. An encoder checked against its own decoder agrees with itself whatever they
+  both get wrong, which is why this shipped.
 - [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10) — SPEC success criterion 4.

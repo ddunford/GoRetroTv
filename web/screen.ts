@@ -2,6 +2,15 @@
 // Every byte outside the six menu rows, the palette, and each complete row must
 // agree before naming a menu item. A partial redraw or a new firmware screen is
 // deliberately unknown until its pixels have been measured.
+//
+// The screen this recognises is the SKY MENU, and naming it "the Box Office menu"
+// was wrong in a way that mattered: the firmware draws a tab bar across the top --
+// TV GUIDE, BOX OFFICE, SERVICES, INTERACTIVE, each with its icon -- and the six
+// rows belong to whichever tab is selected. Pressing sky lands on BOX OFFICE, so a
+// description that mentioned only those six rows told a screen-reader user they
+// were in a Box Office menu and left the other three sections invisible to them,
+// when left and right reach all four. Rendered and read at
+// .artifacts/key-sky.png (2026-09-20).
 const menuPalette = 'eea2702c0ae09542b1348318f896e22700d2d6d7ad73fa7c854b789462740ce2';
 const menuOutside = 'aea24907c13449b4f64890c9415f4147a4dcebbca43463970bea3c9f3a45ac28';
 const menuRows = [
@@ -12,6 +21,11 @@ const menuRows = [
   { name: 'Specialist', selected: '7eefd0a4fc323df953d612205829e59c7ae25a4e8da790f3a9455c358d436451', plain: '3612aa555f96e1ecb5ebfbba4e63a6768c54e68eb4e8adfecb173ba16c43f4df' },
   { name: 'Free Previews', selected: '2b96d6356bcf3cf7475944866684c8310156ef45028b2ab9908755e61b210a44', plain: '0de1e1682f226aa5b6be92da5262ddc3e23693a913c5e1e5f0ea8bed811466f4' },
 ] as const;
+
+// The tab bar the outside-the-rows hash covers. Naming these is describing
+// pixels that were verified, not adding a claim on top of them.
+const sections = ['TV Guide', 'Box Office', 'Services', 'Interactive'] as const;
+const selectedSection = 'Box Office';
 
 export const unknownScreen = 'Digibox screen changed. A text description of this firmware screen is unavailable.';
 
@@ -54,5 +68,7 @@ export async function describeScreen(pixels: Uint8Array, palette: Uint8Array): P
     }
   }
   if (selected === -1) return unknownScreen;
-  return `Box Office menu. Six options: ${menuRows.map((row, index) => `${index + 1}, ${row.name}`).join('; ')}. Selected: ${menuRows[selected].name}.`;
+  const options = menuRows.map((row, index) => `${index + 1}, ${row.name}`).join('; ');
+  return `Sky menu. Four sections: ${sections.join(', ')}; ${selectedSection} shown. ` +
+    `Six options: ${options}. Selected: ${menuRows[selected].name}.`;
 }

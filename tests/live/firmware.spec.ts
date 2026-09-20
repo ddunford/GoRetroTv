@@ -84,7 +84,10 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
   await expect.poll(() => indexedHash(livePixels),
   { timeout: 45_000, intervals: [500, 1000] }).toBe(0xFE8D1CCC); // Pinned by board's post-Sky Compose test.
   await expect(page.locator('#box-status')).toContainText('ready');
-  await expect(screen).toHaveAttribute('aria-label', /Box Office menu.*Selected: Movies by Start Time\./);
+  // The four sections must be named, not just the six rows: the tab bar is on
+  // screen and a description that omits it hides three quarters of the menu.
+  await expect(screen).toHaveAttribute('aria-label',
+    /Sky menu\. Four sections: TV Guide, Box Office, Services, Interactive; Box Office shown\..*Selected: Movies by Start Time\./);
   const changedChrome = Buffer.from(livePixels);
   changedChrome[0] ^= 1;
   expect(await describeScreen(changedChrome, palette!)).toBe(unknownScreen);

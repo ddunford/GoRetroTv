@@ -1,32 +1,15 @@
 package broadcast_test
 
 import (
-	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/broadcast"
 	"github.com/ddunford/goretrotv/internal/bus"
-	"github.com/ddunford/goretrotv/internal/firmware"
 )
 
 // The private snapshot must parse a NIT addressed to its live match unit. A
 // neighboring ID reaches the guest parser but is discarded after its header.
 func TestGuestAcceptsRequestedNITAndRejectsDifferentNetwork(t *testing.T) {
-	firmwareDir := filepath.Join("..", "..", "firmware")
-	if _, err := os.Stat(filepath.Join(firmwareDir, firmware.FileU202)); os.IsNotExist(err) {
-		t.Skip("private firmware is not installed")
-	}
-	snapshotPath := filepath.Join("..", "..", "snapshots", "post-acquisition.snapshot")
-	if _, err := os.Stat(snapshotPath); os.IsNotExist(err) {
-		t.Skip("private post-acquisition snapshot is not installed")
-	}
-	images, err := firmware.Load(context.Background(), firmwareDir)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, tc := range []struct {
 		name         string
 		networkDelta uint16
@@ -37,24 +20,7 @@ func TestGuestAcceptsRequestedNITAndRejectsDifferentNetwork(t *testing.T) {
 		{"different network", 1, 9, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			runtime, err := board.New(images, true)
-			if err != nil {
-				t.Fatal(err)
-			}
-			f, err := os.Open(snapshotPath) // #nosec G304 -- fixed local private test fixture
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := runtime.Restore(f); err != nil {
-				f.Close()
-				t.Fatal(err)
-			}
-			if err := f.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if runtime.Machine.Retired != 1_100_000_000 {
-				t.Fatalf("unexpected fixture state: %d retired", runtime.Machine.Retired)
-			}
+			runtime := restoredBox(t)
 			table, ok := runtime.Demux.Match(1, 0)
 			if !ok || table.Value != 0x40 || table.Mask != 0xfe {
 				t.Fatalf("fixture lacks NIT subscription: %+v", table)

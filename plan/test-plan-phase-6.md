@@ -183,7 +183,27 @@
   transcription of the reference decoder" — an encoder checked against a decoder, which is one
   instrument and not two. They have been regenerated and their provenance comment now says the
   authority is the screen.
-- [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10)
+- [x] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10) — `tests/live/guide.spec.ts`
+  against the real firmware. It proves the thing the Go tests cannot: THE WHOLE BROWSER PATH. A
+  click in the page, over the WebSocket, into the CSI link, and the drawn frame back out. The
+  framebuffer is reconstructed from the socket rather than read off the canvas, so the assertions
+  are about the pixels the box sent.
+
+  Two claims. The banner is DRAWN — the band across the bottom is not a flat colour, and its digest
+  is taken only once something new has been drawn and has held still, because a digest at a fixed
+  moment catches a mid-redraw and one taken after the screen settles catches the blank picture the
+  banner returns to. And it FOLLOWS THE SCHEDULE — the test edits the live schedule mid-run, lets
+  TASK-6.8's reload carry it on air, requires the banner to change, then restores it and requires
+  the original back. Falsified by disabling the reload: the test fails.
+
+  The live box broadcasts from a COPY of `listings/` under `.artifacts/`, so a run that fails half
+  way through cannot leave the repository dirty.
+
+  **What it does not do is read the words.** Verifying the literal text off the canvas needs glyph
+  recognition against the firmware's OSD font, which does not exist here. The text itself is
+  established by `TestTheDrawnTitleDistinguishesWhatTheEncoderCouldGetWrong`, which requires
+  `Dream Team`, `DreamTeam` and `Dream Teams` to draw three different screens. This case is about
+  the path and the plumbing; that one is about the characters.
 - [x] **TC-6.15: The encoder is cross-checked against the BOX, not against another decoder**
   (covers: TASK-6.9) — `TestTheDrawnTitleDistinguishesWhatTheEncoderCouldGetWrong`. It broadcasts
   `Dream Team`, `DreamTeam` and `Dream Teams` on otherwise identical screens and requires all three

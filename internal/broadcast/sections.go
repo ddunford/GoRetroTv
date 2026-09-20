@@ -172,6 +172,11 @@ func SDT(transportID, networkID uint16, version byte, services []Service) ([]byt
 // declared namespace: a 0x5F private_data_specifier carrying value 2 goes ahead
 // of it in the same loop, and with any other specifier the guest walks straight
 // past the 0xB1 without reading a byte of it.
+//
+// Every loop also carries a 0x4A linkage of type 0x91, because the guide asks
+// its database exactly ONE question and that is the question. Without an
+// answer it takes its not-answered arm and draws nothing, which is why a box
+// fed a perfectly good line-up still reports no schedule information.
 func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([]byte, error) {
 	bouquetName, err := ascii(name)
 	if err != nil {
@@ -180,7 +185,17 @@ func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([
 	if len(bouquetName) > 255 {
 		return nil, fmt.Errorf("broadcast: bouquet name too long")
 	}
+	if len(transports) == 0 {
+		return nil, fmt.Errorf("broadcast: a BAT must announce at least one transport")
+	}
 	bouquetLoop := append([]byte{0x47, byte(len(bouquetName))}, bouquetName...) // #nosec G115 -- length checked above
+	// The bouquet-level linkage names a service the same BAT declares, on the
+	// first transport it announces.
+	bouquetLinkage, err := linkageDescriptor(transports[0])
+	if err != nil {
+		return nil, err
+	}
+	bouquetLoop = append(bouquetLoop, bouquetLinkage...)
 
 	var tsLoop []byte
 	for _, tr := range transports {
@@ -193,6 +208,11 @@ func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([
 			return nil, err
 		}
 		descriptors = append(descriptors, services...)
+		linkage, err := linkageDescriptor(tr)
+		if err != nil {
+			return nil, err
+		}
+		descriptors = append(descriptors, linkage...)
 		if len(descriptors) > 0xfff {
 			return nil, fmt.Errorf("broadcast: transport descriptors exceed twelve bits")
 		}
@@ -210,6 +230,43 @@ func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([
 	payload = append(payload, tsLoop...)
 	return longSection(0x4a, bouquetID, version, payload)
 }
+
+// linkageDescriptor builds the one thing the TV guide asks for. A guide press
+// makes a single database call, and the callback behind it reads exactly these
+// fields off any descriptor tagged 0x4A:
+//
+//	desc[2..3] transport_stream_id   desc[4..5] original_network_id
+//	desc[6..7] service_id            desc[8]    linkage_type
+//
+// The caller then requires the search to have succeeded AND the type to be
+// 0x91. Give it that and the answered arm runs -- measured as 14,944 more
+// o-code instructions and three more events on the same press -- and the box
+// goes on to ask for PID 0x30, the first of Sky's title PIDs, which it had
+// never asked for before. Give it anything else and the guide reaches its
+// not-answered arm and draws nothing, which looks exactly like a box with no
+// listings rather than like a section it rejected.
+//
+// IT MUST BE IN BOTH OF THE BAT'S DESCRIPTOR LOOPS. Which structure the search
+// walks is not established, and the measurement that proved the mechanism put
+// it in both; in the transport loop alone it changed nothing. A descriptor in
+// the wrong loop is a section the box accepts and silently ignores.
+func linkageDescriptor(tr Transport) ([]byte, error) {
+	if len(tr.Services) == 0 {
+		// The linkage has to name a service this BAT declares. Emitting one
+		// that names nothing, or a plausible default, would be a BAT the guide
+		// answers with a service that does not exist.
+		return nil, fmt.Errorf("broadcast: transport %#x declares no service for its linkage to name", tr.ID)
+	}
+	desc := []byte{0x4a, 7}
+	desc = appendU16(desc, tr.ID)
+	desc = appendU16(desc, tr.NetworkID)
+	desc = appendU16(desc, tr.Services[0].ID)
+	return append(desc, linkageGuideSchedule), nil
+}
+
+// linkageGuideSchedule is the linkage_type the guide demands. It is outside
+// DVB's assigned range, which is why it is here and not in a public table.
+const linkageGuideSchedule = 0x91
 
 // lineupGate is the halfword the guest tests before it will read a single
 // entry. Anything else and it re-reads those two bytes and returns, decoding

@@ -38,8 +38,31 @@
   `lineupDescriptors()` output (`5f0400000002b114ffff…`), so the builder matches an implementation
   a box has already been measured accepting. `go test -race ./...`, `ctl.sh lint` and the boot gate
   pass.
-- [ ] **TC-6.3: The linkage makes the guide ask and be answered** (covers: TASK-6.3, TASK-6.9) — with it the
+- [x] **TC-6.3: The linkage makes the guide ask and be answered** (covers: TASK-6.3, TASK-6.9) — with it the
   answered arm runs; without it the not-answered arm does. Both directions asserted.
+  **Result:** `internal/broadcast/linkage_firmware_test.go` feeds a real BAT to the restored
+  post-acquisition snapshot, presses `tv guide`, and counts the two arms of the guide's single
+  database question at the addresses the record read off the firmware — `0x800A4040` on success,
+  `0x800AC774` on failure:
+
+  | linkage_type | answered arm | not-answered arm |
+  |---|---|---|
+  | `0x91` | **1** | 0 |
+  | `0x90` | 0 | **2** |
+
+  Both directions, because both arms end in a drawn screen and "the guide showed something" is not
+  evidence of anything. The negative case patches the linkage_type byte and repairs the CRC rather
+  than removing the descriptor, so the section keeps every length and the only thing that differs is
+  the one byte the firmware actually tests. It patches **both** loops and fails the test if it finds
+  fewer than two, since changing one would leave the other answering and the run would prove nothing.
+  `TestBATCarriesTheLinkageInBothDescriptorLoops` holds the both-loops requirement structurally, and
+  `TestLinkageCarriesTheFieldsTheGuideReads` pins the bytes to the field offsets the callback reads
+  (`4a0712340020006491`) rather than to a public table. A transport that declares no service is
+  refused outright: a linkage naming a plausible default would answer the guide with a service that
+  does not exist. `go test -race ./...`, `ctl.sh lint` and the boot gate pass.
+  **Not yet visible on the demo host.** Nothing wires `internal/broadcast` to the running machine —
+  only its own tests import it — so the live box still receives no SI at all. The remaining phase-6
+  tasks are that work.
 - [ ] **TC-6.4: Twelve records arrive as twelve** (covers: TASK-6.4, TASK-6.9) — and with the length field
   computed openTVtoXML's way, the box must read two. The wrong version has to be shown failing.
 - [ ] **TC-6.5: Clock first changes the request** (covers: TASK-6.5, TASK-6.9) — with a clock the box asks for a

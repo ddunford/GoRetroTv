@@ -153,7 +153,11 @@ func TestGuestIgnoresTheLineupWithoutTheDeclaredNamespace(t *testing.T) {
 
 	section, err := broadcast.BAT(bouquetID, 4, "Sky", []broadcast.Transport{{
 		ID: networkID, NetworkID: networkID,
-		Lineup: []broadcast.LineupEntry{{ServiceID: 0x0064, Listings: 0x0bb8, Channel: 101}},
+		// The service is here for the linkage to name, not for this test: a
+		// BAT whose transport declares nothing has no service to point the
+		// guide at, and the builder refuses to invent one.
+		Services: []broadcast.Service{{ID: 0x0064}},
+		Lineup:   []broadcast.LineupEntry{{ServiceID: 0x0064, Listings: 0x0bb8, Channel: 101}},
 	}})
 	if err != nil {
 		t.Fatal(err)

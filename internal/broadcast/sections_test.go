@@ -356,3 +356,64 @@ func TestBATFramesTheBouquetAndItsTransport(t *testing.T) {
 		t.Fatal("the transport loop does not declare the private namespace")
 	}
 }
+
+// The guide asks one question and this is it, so the descriptor's bytes are
+// the firmware's own field offsets rather than a public table's: desc[2..3]
+// tsid, desc[4..5] onid, desc[6..7] service_id, desc[8] linkage_type.
+func TestLinkageCarriesTheFieldsTheGuideReads(t *testing.T) {
+	t.Parallel()
+	got, err := linkageDescriptor(Transport{ID: 0x1234, NetworkID: 0x0020,
+		Services: []Service{{ID: 0x0064}, {ID: 0x0065}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "4a0712340020006491"
+	if hex.EncodeToString(got) != want {
+		t.Fatalf("linkage\n got %s\nwant %s", hex.EncodeToString(got), want)
+	}
+}
+
+// In BOTH loops. Which structure the guide's search walks is not established,
+// and the measurement that proved the mechanism put it in both; in the
+// transport loop alone it changed nothing.
+func TestBATCarriesTheLinkageInBothDescriptorLoops(t *testing.T) {
+	t.Parallel()
+	transport := sampleTransport()
+	transport.Lineup = sampleLineup()
+	section, err := BAT(0x1000, 3, "Sky", []Transport{transport})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bouquetLen := int(section[8]&0x0f)<<8 | int(section[9])
+	bouquetLoop := section[10 : 10+bouquetLen]
+	transportLoop := section[10+bouquetLen:]
+	linkage := []byte{0x4a, 7}
+	if !bytes.Contains(bouquetLoop, linkage) {
+		t.Error("the bouquet loop carries no linkage descriptor")
+	}
+	if !bytes.Contains(transportLoop, linkage) {
+		t.Error("the transport loop carries no linkage descriptor")
+	}
+	if n := bytes.Count(section, []byte{0x4a, 7}); n != 2 {
+		t.Fatalf("%d linkage descriptors, want one per loop", n)
+	}
+	// The type is the whole point: the caller requires 0x91 and takes its
+	// not-answered arm for anything else.
+	for i := 0; i+8 < len(section); i++ {
+		if section[i] == 0x4a && section[i+1] == 7 && section[i+8] != 0x91 {
+			t.Fatalf("linkage_type %#x at %d, want 0x91", section[i+8], i)
+		}
+	}
+}
+
+// The linkage must name a service the same BAT declares. Emitting a plausible
+// default would answer the guide with a service that does not exist.
+func TestBATRefusesATransportWithNoServiceToLink(t *testing.T) {
+	t.Parallel()
+	if _, err := BAT(0x1000, 0, "Sky", []Transport{{ID: 1, NetworkID: 2}}); err == nil {
+		t.Error("built a BAT whose linkage names nothing")
+	}
+	if _, err := BAT(0x1000, 0, "Sky", nil); err == nil {
+		t.Error("built a BAT announcing no transport at all")
+	}
+}

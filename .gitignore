@@ -31,3 +31,9 @@ node_modules/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# The Sky EPG Huffman dictionary is third-party data of uncertain provenance -- the
+# implementations that publish it (loadepg, openTVtoXML, tvheadend) are GPL and the copy we
+# have carries no licence header. It is treated exactly like the firmware: required to build a
+# listings feed, supplied locally, never committed. See dictionaries/MANIFEST.md.
+/dictionaries/*.dict

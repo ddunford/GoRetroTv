@@ -63,8 +63,30 @@
   **Not yet visible on the demo host.** Nothing wires `internal/broadcast` to the running machine —
   only its own tests import it — so the live box still receives no SI at all. The remaining phase-6
   tasks are that work.
-- [ ] **TC-6.4: Twelve records arrive as twelve** (covers: TASK-6.4, TASK-6.9) — and with the length field
+- [?] **TC-6.4: Twelve records arrive as twelve** (covers: TASK-6.4, TASK-6.9) — and with the length field
   computed openTVtoXML's way, the box must read two. The wrong version has to be shown failing.
+  **Proved, at the byte level:** `internal/broadcast/titles_test.go` builds a twelve-record section
+  and walks it twice. The firmware's arithmetic — `local_84 += local_8a + 4` with
+  `memcpy(dst, section + local_84 + 4, local_8a)`, which tvheadend reads the same way — finds
+  **12 of 12**. openTVtoXML's, advancing by the field alone, finds **1 of 12, silently**, on the
+  identical bytes. The count the broken walk lands on is deliberately **not** pinned: where it
+  falls apart depends on how long the records happen to be, and the record's own measurement saw
+  two with its records. Asserting an exact number would be attaching a figure from one fixture to
+  another, which is the failure this file keeps recording. What is invariant is that the reference
+  reads a fraction of what was broadcast and reports nothing.
+  The codec is pinned byte-for-byte to the validated Python encoder it is a port of
+  (`TestHuffmanMatchesTheValidatedEncoder`), which was itself checked by round-tripping through a
+  transcription of the reference decoder — and separately round-trips here, because an encoder can
+  be self-consistently wrong: pack eight bits into byte 0 instead of six and encode/decode still
+  agree while the box reads nonsense.
+  **BLOCKED, the half that says "the box must read two":** `titles_firmware_test.go` is written and
+  skips with its reason. Measured 2026-09-20: after a TDT, NIT, SDT and four BAT versions carrying a
+  line-up, the box arms PID `0x36` — one of Sky's title PIDs, and new since before the line-up — but
+  programs **no match unit** for table `0xA0` or `0xA1` in any of its thirty-two. Sections pushed to
+  `0x36` are accepted by the demux and the guest registers **zero** records from them, across all
+  four addressings the record names for a clocked box. What is missing is **TASK-6.6**, addressing
+  each section with the table id, PID and MJD the box is *currently* asking for. This case reopens
+  when that lands.
 - [ ] **TC-6.5: Clock first changes the request** (covers: TASK-6.5, TASK-6.9) — with a clock the box asks for a
   real MJD; without one it asks for 40587.
 - [ ] **TC-6.6: Sections are addressed as the box asks** (covers: TASK-6.6, TASK-6.9).

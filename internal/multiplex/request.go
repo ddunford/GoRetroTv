@@ -15,6 +15,7 @@ package multiplex
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/ddunford/goretrotv/internal/device/demux"
@@ -28,17 +29,49 @@ type Subscription struct {
 	// SIArmed is whether PID 0x11 is armed, i.e. whether a BAT pushed there
 	// would reach the guest at all.
 	SIArmed bool
-	// ListingsPID is the title PID the box has armed, or zero.
+	// ListingsPIDs are the title PIDs the box has armed, in ascending order.
 	//
-	// It is separate from Titles because THE BOX ARMS IT ON EVERY DAY while it
-	// programs a match unit on only three days in eight (TASK-6.13). The PID is
-	// therefore the reliable half of the subscription and the match unit is
-	// not, which is what makes a derived request possible at all.
-	ListingsPID uint16
+	// THERE IS USUALLY MORE THAN ONE, AND TAKING WHICHEVER CAME LAST IS A COIN
+	// TOSS THAT LOSES ONE DAY IN EIGHT. A box in the evening arms today's PID
+	// and tomorrow's, which are adjacent on seven days and 0x37 and 0x30 on
+	// the eighth -- so "the last armed PID" is today's on some days, tomorrow's
+	// on others, and on MJD mod 8 == 7 it silently transmitted the whole
+	// schedule on tomorrow's PID and the box registered none of it. Which PID
+	// a day's listings belong on is not a matter of choice: it is TitlePID.
+	//
+	// It is separate from Titles because THE BOX ARMS A PID ON EVERY DAY while
+	// it programs a match unit only for days whose slot is one of three
+	// (TASK-6.13). The PID is therefore the reliable half of the subscription
+	// and the match unit is not, which is what makes a derived request
+	// possible at all.
+	ListingsPIDs []uint16
 	// Titles is every listings request the box has programmed, one per match
-	// unit. It is empty until the box acquires, and on five days in eight it
-	// stays empty even after it has.
+	// unit. It is empty until the box acquires, and on the days it programs
+	// nothing it stays empty even after it has.
 	Titles []TitleRequest
+}
+
+// Arms reports whether the box has armed a PID, i.e. whether a section pushed
+// there would reach the guest at all.
+func (s Subscription) Arms(pid uint16) bool {
+	for _, armed := range s.ListingsPIDs {
+		if armed == pid {
+			return true
+		}
+	}
+	return false
+}
+
+// TitlePID is the PID a day's listings are carried on: Sky's eight title PIDs
+// are a day-of-eight rotation, 0x30 | (MJD mod 8).
+//
+// Measured on sixteen days across two months and two times of day: every box
+// armed exactly this PID for the day its clock was in, and an evening box also
+// armed the one this function gives for the following day. It is a function of
+// the day and nothing else, which is why the transmitter computes it rather
+// than picking one off the box.
+func TitlePID(mjd int) uint16 {
+	return uint16(0x30 | ((mjd%8)+8)%8) // #nosec G115 -- three bits
 }
 
 // DerivedTitleRequest is the request to use when the box has armed a listings
@@ -48,34 +81,36 @@ type Subscription struct {
 // match unit is what admits a section, and this port's Push routes by PID
 // alone -- so a section sent this way reaches the guest here and might not
 // reach it on a Digibox. Every field is nevertheless measured rather than
-// invented: the table id is 0xA3 on all three days the box does programme a
-// unit, the extension is the channel's own listings id, and the MJD is the day
-// the broadcast is claiming. The guest's parser then accepts them exactly as
-// it accepts a filtered day -- 67 of 67 programmes registered on slots 2, 4
-// and 7, which are three of the five that programme nothing.
-func DerivedTitleRequest(pid uint16, mjd int, listingsID uint16) TitleRequest {
+// invented: the extension is the channel's own listings id, the PID is the
+// day's own place in the eight-PID rotation, and the MJD is the day the
+// broadcast is claiming. The guest's parser then accepts them exactly as it
+// accepts a filtered day -- the box registers the blocks it is listening to,
+// and the title reaches the screen, on every one of the eight slots and at
+// every hour the schedule has television in.
+func DerivedTitleRequest(mjd int, listingsID uint16) TitleRequest {
 	return TitleRequest{
-		TableID:       derivedTitleTable,
-		TableMask:     0xfe,
+		// No unit matched, so there is no matched table id to report. The
+		// blocks the sections are stamped with are TitleTableID's business
+		// and are the same on a derived day as on a filtered one.
 		Extension:     listingsID,
 		ExtensionMask: 0xffff,
 		Filter:        [2]byte{byte(mjd >> 8), byte(mjd)}, // #nosec G115 -- an MJD is sixteen bits
-		PID:           pid,
+		PID:           TitlePID(mjd),
 	}
 }
-
-// derivedTitleTable is the table id the box asks for whenever it asks at all.
-// Measured constant across every subscribing day and every slot: 0xA3 with a
-// 0xFE mask, so 0xA2 would also be admitted -- but the parser takes tableId & 3
-// as part of its day-slot key, so the pair are not interchangeable and this is
-// the one that was observed.
-const derivedTitleTable = 0xa3
 
 // TitleRequest is one programmed listings filter: which table, which service's
 // listings id, which day, and the PID it will arrive on.
 type TitleRequest struct {
 	// TableID is the value the unit matches, and TableMask is how much of it
-	// the hardware compares.
+	// the hardware compares. Both are zero on a derived request, where no unit
+	// matched anything.
+	//
+	// THEY ARE A MEASUREMENT, NOT AN ADDRESS. The low two bits of a title
+	// table id are which six-hour block of the day the section carries, and
+	// the unit names the one block the box's hardware would admit; the guide
+	// listens for the block it is in. The transmitter sends every block and
+	// stamps each with TitleTableID, so nothing downstream reads these.
 	//
 	// THE MASK IS NOT CONSTANT. It has been measured as both 0xFE, where the
 	// unit accepts a PAIR of table ids, and 0xFF, where it accepts exactly
@@ -103,8 +138,10 @@ type TitleRequest struct {
 	ExtensionMask uint16
 	// Filter is data[8..9], the MJD of the day the box wants.
 	Filter [2]byte
-	// PID is where it must be transmitted. Measured: 0x30 | (MJD mod 8), Sky's
-	// eight title PIDs being a day-of-eight rotation.
+	// PID is where it must be transmitted: TitlePID of the day this request
+	// names, which is the whole of the rule. It is NOT read off the box's
+	// armed-PID list, because a box arms more than one and the list says
+	// nothing about which day each belongs to.
 	PID uint16
 }
 
@@ -194,15 +231,15 @@ func Read(d *demux.Demux) (Subscription, error) {
 	}
 	sub.NetworkID = uint16(networkHigh.Value)<<8 | uint16(networkLow.Value)
 
-	listingsPID := uint16(0)
 	for _, pid := range d.ArmedPIDs() {
 		if pid == 0x11 {
 			sub.SIArmed = true
 		}
 		if !standardPIDs[pid] {
-			listingsPID = pid
+			sub.ListingsPIDs = append(sub.ListingsPIDs, pid)
 		}
 	}
+	sort.Slice(sub.ListingsPIDs, func(i, j int) bool { return sub.ListingsPIDs[i] < sub.ListingsPIDs[j] })
 
 	for unit := uint8(0); unit < matchUnits; unit++ {
 		table, ok := d.Match(unit, 0)
@@ -213,20 +250,73 @@ func Read(d *demux.Demux) (Subscription, error) {
 		extLow, _ := d.Match(unit, 2)
 		mjdHigh, _ := d.Match(unit, 6)
 		mjdLow, _ := d.Match(unit, 7)
-		sub.Titles = append(sub.Titles, TitleRequest{
+		request := TitleRequest{
 			TableID:       table.Value,
 			TableMask:     table.Mask,
 			Extension:     uint16(extHigh.Value)<<8 | uint16(extLow.Value),
 			ExtensionMask: uint16(extHigh.Mask)<<8 | uint16(extLow.Mask),
 			Filter:        [2]byte{mjdHigh.Value, mjdLow.Value},
-			PID:           listingsPID,
-		})
+		}
+		// THE UNIT'S DAY IS NOT ALWAYS TODAY. A box in the evening programmes
+		// its filter for TOMORROW as often as for today -- 0xA0 with the next
+		// MJD rather than 0xA3 with this one -- so the PID follows the day the
+		// unit names rather than the day the broadcast is claiming.
+		request.PID = TitlePID(request.MJD())
+		sub.Titles = append(sub.Titles, request)
 	}
-	// A filter with no armed PID is half a subscription: there is nowhere to
-	// deliver it, so it is not something the box is asking for.
-	sub.ListingsPID = listingsPID
-	if listingsPID == 0 {
-		sub.Titles = nil
-	}
+	// Reported as measured, including a request whose PID the box has not
+	// armed. Deliverability is the transmitter's decision and it counts what
+	// it could not send; a reader that quietly dropped half the subscription
+	// would make a box that asked wrongly look like a box that never asked.
 	return sub, nil
+}
+
+// A DAY OF LISTINGS IS BROADCAST IN FOUR SIX-HOUR BLOCKS, AND THE TABLE ID
+// SAYS WHICH. This is the whole of TASK-6.13 and it had been mistaken for a
+// day-of-eight problem for a week.
+//
+// The guide registers its notification slot for the block its own clock is in
+// -- measured across eleven times of day on one date, with the boundaries
+// pinned at 06:00, 12:00 and 18:00 local:
+//
+//	00:00-05:59 -> 0    06:00-11:59 -> 1    12:00-17:59 -> 2    18:00-23:59 -> 3
+//
+// and 0x800C579C fires a slot only when the arriving section's tableID & 3
+// equals it. A transmitter that stamps every section 0xA3 therefore files a
+// whole day of television in the evening block: at 19:00 the guide draws it,
+// and at every other hour the box says FURTHER SCHEDULE INFORMATION IS NOT
+// AVAILABLE with 67 of 67 programmes sitting in its store. That is what made
+// this look like a rotation: the demo pins 19:00, and the days that "worked"
+// were the days somebody happened to look at in the evening.
+//
+// The box's match unit names ONE block -- 0xA3 by day, 0xA1 in the small hours
+// -- and on a Digibox that is the only one the hardware would admit. This port
+// delivers by PID and sends all four, which is the same declared host
+// intervention as DerivedTitleRequest and is declared here for the same
+// reason.
+//
+// Sending all four covers the block the guide is in and the rest of its day.
+// It does NOT cover the second slot the guide registers, which is the block
+// AFTER the one it is in: in the evening that belongs to tomorrow, and this
+// transmitter broadcasts one day. See gort-k1z.
+const (
+	// TitleQuarters is how many blocks a broadcast day is cut into.
+	TitleQuarters = 4
+	// titleTableBase is the table id of the first block; the low two bits are
+	// the block.
+	titleTableBase    = 0xa0
+	secondsPerQuarter = 24 * 60 * 60 / TitleQuarters
+)
+
+// QuarterOf is the block a local time of day falls in, given as seconds since
+// local midnight. It wraps rather than refusing, so a schedule that has been
+// converted round a day boundary still lands somewhere real.
+func QuarterOf(secondsOfDay int) int {
+	const secondsPerDay = TitleQuarters * secondsPerQuarter
+	return ((secondsOfDay%secondsPerDay + secondsPerDay) % secondsPerDay) / secondsPerQuarter
+}
+
+// TitleTableID is the table id a block's listings are carried under.
+func TitleTableID(quarter int) byte {
+	return byte(titleTableBase | quarter%TitleQuarters) // #nosec G115 -- two bits
 }

@@ -84,6 +84,14 @@ modelling any device.** This section is only for patterns discovered while build
   Where both are wrong in the same way they agree. Inherited errors are caught only by the measured
   record.
 
+- **A day of listings is four six-hour blocks, and the guide only hears the one its clock is in.**
+  The low two bits of a title table id are the block (`hour / 6`), the guide subscribes to its own
+  block and the box's acquisition asks for a different one, so a transmitter that stamps one table
+  id fills the guide for six hours a day and leaves 67 stored programmes invisible for the other
+  eighteen. This is also a cautionary tale about correlation: because the demo pins 19:00, it
+  presented for a week as "the guide draws on three days in eight" and was chased as a day-of-eight
+  rotation. **When a symptom correlates with the variable you are already holding, check the one you
+  are not** — here, the hour on the clock.
 - **"The box is not asking for it" is a SYMPTOM, not a finding.** Four distinct causes have produced
   it: a demux read that took the low halfword of every match unit, a census that assumed the table
   mask was `0xFE`, a reader that ignored the extension mask, and a genuine firmware defect. It is

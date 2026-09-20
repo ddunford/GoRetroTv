@@ -162,12 +162,17 @@
   file stays retryable, so saving a fix works without a restart),
   `TestAScheduleThatParsesButIsWrongAlsoKeepsTheLastGood` (a duplicate listings id is refused too —
   it parses and would broadcast plausibly wrong), and `TestADatedFileAddedWhileRunningIsPickedUp`.
-- [ ] **TC-6.13: Every day in the eight-day rotation DRAWS listings** (covers: TASK-6.13) — note the
-  verb. Delivery is already solved: `TestTheBoxTakesProgrammesAddressedFromTheClockAlone` shows all
-  five non-subscribing slots registering 67 of 67 programmes from sections the transmitter addresses
-  itself. What is not solved is that the guide does not DRAW them, which is the distinction this
-  case exists to keep — an earlier version of this work counted the per-event register and called it
-  working. The instrument must end at the screen.
+- [x] **TC-6.13: Every day in the eight-day rotation DRAWS listings** (covers: TASK-6.13) — note the
+  verb, which is what the case was for: an earlier version of this work counted the per-event
+  register and called it working. The instrument ends at the screen, and it had to, because the
+  answer was not about days at all — a day's listings are broadcast in four six-hour blocks and the
+  guide listens to the block its clock is in, so one section stamped `0xA3` filled the guide at
+  19:00 and left it empty at every other hour on every day. Pinned by
+  `TestTheOnAirTitleReachesTheScreenOutsideTheEveningBlock` (two different midday titles must draw
+  two different screens, which a box showing FURTHER SCHEDULE INFORMATION IS NOT AVAILABLE cannot
+  do) and `TestTheGuideSubscribesForTheBlockOfTheDayItIsIn` (the block read off the box's own
+  notification slot at noon and at seven). Swept while closing: all eight day-slots draw at midday,
+  where none did before, and every block of the day draws when the schedule has television in it.
 - [x] **TC-6.14: A title draws on screen with its spaces** (covers: TASK-6.14) — the guide draws
   `Dream Team` and `Walker Texas Ranger`, where it drew `DreamTeams` and `WalkerTexasRangers`.
   Pinned by `TestTheDictionaryIsReadTheWayAnEncoderNeedsIt` (shortest-code-wins, and `=` parsed as a

@@ -233,14 +233,6 @@ func loadBroadcast(cfg *config.Config, logger *slog.Logger) (*broadcastConfig, e
 		"bouquet", listings.Bouquet, "channels", len(listings.Services), "programmes", programmes,
 		"dictionary_entries", dict.Entries(),
 		"broadcast_date", cfg.BroadcastDate, "in_world_now", day.Format("2006-01-02 15:04 MST"))
-	if slot := multiplex.MJDOf(day) % 8; slot != 1 && slot != 3 && slot != 6 {
-		// Named rather than corrected. This is the one setting whose wrong
-		// value produces a demo that looks like it is working -- clock right,
-		// menus right, guide empty -- so it says so at startup instead of
-		// leaving it to be discovered.
-		logger.Warn("this box programs no listings filter on this day, so the guide will not draw programmes",
-			"date", day.Format("2006-01-02"), "slot", slot, "drawing_slots", "1, 3, 6", "issue", "TASK-6.13")
-	}
 	return &broadcastConfig{guide: guide, dict: dict, clock: clock, schedule: airSchedule}, nil
 }
 
@@ -289,9 +281,19 @@ func transmitterFor(air *broadcastConfig, box *board.Runtime, logger *slog.Logge
 			for _, request := range requests {
 				pids = append(pids, fmt.Sprintf("%#02x(MJD %d)", request.PID, request.MJD()))
 			}
+			// "filters: none" is the ordinary case rather than a fault: the
+			// box only programmes a title filter for a day whose slot is one
+			// of three, and the transmitter addresses the rest from its own
+			// clock. Saying which of the two happened is the whole value of
+			// this line to somebody looking at an empty guide.
+			filters := strings.Join(pids, " ")
+			if filters == "" {
+				filters = "none (addressed from the clock)"
+			}
 			logger.Info("programmes on air",
 				"clock_waves", counts.Clock, "lineup_waves", counts.Lineup,
-				"filters", strings.Join(pids, " "))
+				"title_waves", counts.Titles, "derived_waves", counts.TitlesDerived,
+				"filters", filters)
 		})
 	}
 	if err != nil {

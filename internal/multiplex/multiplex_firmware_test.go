@@ -76,6 +76,41 @@ func restoredBox(t *testing.T) *board.Runtime {
 	return box
 }
 
+// programmesInTheBlock is how many of a day's programmes the box will take.
+//
+// A DAY IS BROADCAST IN FOUR SIX-HOUR BLOCKS AND THE BOX REGISTERS THE ONE IT
+// IS LISTENING TO (TASK-6.13). Counting a whole day and waiting for it is how
+// every firmware test in this package started failing the moment the blocks
+// were introduced: the box took its block, discarded the rest, and the loop
+// ran its whole budget waiting for programmes that were never going to be
+// stored.
+//
+// It is a LOWER BOUND, not the total. The box also takes whichever block its
+// own match unit named -- 0xA3 by day, so a midday box takes the afternoon
+// block and the evening one -- and a test that asserted equality would be
+// pinning a second, unrelated firmware behaviour by accident.
+func programmesInTheBlock(t *testing.T, guide *multiplex.Guide, day time.Time) int {
+	t.Helper()
+	block := multiplex.QuarterOf(day.Hour()*3600 + day.Minute()*60)
+	count := 0
+	for _, service := range guide.On(day).Services {
+		for _, programme := range service.Programmes {
+			start, err := programme.StartSeconds()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if multiplex.QuarterOf(start) == block {
+				count++
+			}
+		}
+	}
+	if count == 0 {
+		t.Fatalf("no programme in the schedule falls in the %02d:00 block, so a box that took "+
+			"everything correctly would still register nothing", day.Hour())
+	}
+	return count
+}
+
 func demoGuide(t *testing.T) *multiplex.Guide {
 	t.Helper()
 	guide, err := multiplex.LoadGuide(filepath.Join("..", "..", "listings"))
@@ -119,10 +154,7 @@ func TestTheBoxTakesProgrammesOffTheModelledMultiplex(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	programmes := 0
-	for _, service := range guide.On(day).Services {
-		programmes += len(service.Programmes)
-	}
+	programmes := programmesInTheBlock(t, guide, day)
 	registered := 0
 	const budget = 40_000_000
 	doneAt := runUntil(t, box, transmitter, budget, registeringProgrammes(box, programmes, &registered))
@@ -167,7 +199,9 @@ func TestTheBoxTakesProgrammesOffTheModelledMultiplex(t *testing.T) {
 		}
 	}
 	if doneAt < 0 {
-		t.Fatalf("the box registered %d of %d programmes in %d instructions", registered, programmes, budget)
+		t.Fatalf("the box registered %d of its block's %d programmes in %d instructions",
+			registered, programmes, budget)
 	}
-	t.Logf("the box took all %d programmes by instruction %d of a %d budget", programmes, doneAt, budget)
+	t.Logf("the box took the %d programmes of its block by instruction %d of a %d budget",
+		programmes, doneAt, budget)
 }

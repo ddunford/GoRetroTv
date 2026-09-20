@@ -6372,7 +6372,7 @@ This invalidates the method of every earlier measurement in this project that se
 TDT and then read a day off the box. Those runs were reading the day the box already had. The
 `__siTDT(…)` instrument name is part of why it went unnoticed for so long.
 
-### 2. The box asks for its clock's OWN day, not the day after.
+### 2. The box asks for its clock's OWN day, not the day after — **and in the evening, for both**
 
 The entry above (*"Where it actually stops"*) reads *"The box asks for the day **after** its clock,
 so the day it wants never contains 'now'."* Measured here with the TOT, the requested MJD equals the
@@ -6387,6 +6387,12 @@ TOT's MJD exactly:
 
 The earlier +1 reading was almost certainly the same TDT-does-nothing artefact: a box left on its own
 resting day while the instrument believed it had been moved.
+
+**Amended 2026-09-20, and the amendment is the whole of the next section.** Every row above was
+measured at midday. Swept again at 19:00 on the same dates, a box asks for **tomorrow** as readily as
+for today — `0xA0` with the next MJD rather than `0xA3` with this one — and arms both days' PIDs.
+So "its own day" is right about a daytime box and incomplete about an evening one, and neither
+reading was ever about the calendar: *the time of day is the variable this whole area turned on.*
 
 ### 3. The listings PID is `0x30 | (MJD mod 8)`.
 
@@ -6403,7 +6409,7 @@ observation this rule explains.
 **The PID arms on every one of the eight days**, including the ones in the next paragraph. The
 rotation is not conditional on anything.
 
-### The open question: five days in eight arm the PID and then program no filter
+### ANSWERED 2026-09-20: five days in eight arm the PID and then program no filter
 
 On MJD ≡ 0, 2, 4, 5, 7 (mod 8) the box arms the correct listings PID and then programs **no title
 match unit at all**, within 200 million instructions. On ≡ 1, 3, 6 it programs one within about
@@ -6414,8 +6420,14 @@ match unit at all**, within 200 million instructions. On ≡ 1, 3, 6 it programs
                                  unit 7: a3/fe 0b/ff b8/ff 00/00 00/00 00/00 c6/ff bb/ff
 
 `0xc6bb` is 50875 — the unit carries the day it asked for. **A box with an armed PID and no filter
-receives nothing**, so five days in eight currently cannot be fed listings at all. Tracked as its
-own issue rather than guessed at.
+receives nothing**, so five days in eight cannot be fed *through the hardware filter* at all.
+
+The finding above stands and is still worth having — but it was never why the guide was empty. It is
+re-measured and put in its place two sections down: the box only ever filters for a day whose slot is
+one of the three, and in the evening it will do so for TOMORROW, which is how the same box programs a
+unit on six days in eight at 19:00 and three at noon. What the derived addressing then delivers is
+registered on all eight. **The empty guide was a different fault entirely, and the day-of-eight rule
+is what it was wearing.**
 
 ### The methodological note
 
@@ -6433,6 +6445,95 @@ So the lesson is not the usual one. The census was too narrow, the answer it gav
 right, and the cost of the narrowness was a missing observation rather than a wrong one. Widening it
 was still the right move, and the unconditional dump is what made the day-of-eight rotation
 provable. The census now accepts the whole OpenTV title family.
+
+---
+
+## A day of listings is FOUR SIX-HOUR BLOCKS, and the table id's low two bits say which
+
+*20 Sep 2026, in the Go port, against the real firmware. This is the answer to TASK-6.13, and the
+task's own title is wrong: nothing about it is a day-of-eight problem.*
+
+**The guide registers its notification slot for the block its own clock is in.** Read off one date
+(MJD 51171) at eleven times of day, with the transmitter and the schedule identical in every run:
+
+| local time | slot's `tableIdLow` | | local time | slot's `tableIdLow` |
+|---|---|---|---|---|
+| 00:00, 05:00 | **0** | | 12:00, 15:00, 17:00 | **2** |
+| 06:00, 09:00, 11:00 | **1** | | 18:00, 21:00, 23:00 | **3** |
+
+The three edges are 06:00, 12:00 and 18:00, so the rule is `hour / 6`, and `0x800C579C` fires a slot
+only when the arriving section's `tableId & 3` equals it. The day key is the clock's own day in all
+eleven. A second slot registers moments later for the NEXT block — at 19:00 it reads day+1 with
+`tableIdLow` 0, which is exactly the block after 18:00–24:00.
+
+**So a transmitter that stamps every section `0xA3` broadcasts a whole day of television into the
+evening block.** At 19:00 the guide draws it. At every other hour the box stores all 67 programmes,
+raises nothing, and the banner says:
+
+    101 Sky One                              12.00pm Thu 24
+    Further schedule information is not available
+          Search Channel · Search Favourite
+
+— with *Search Time* absent, which is the tell: that option only exists when there is a schedule to
+search. **This is what "the guide does not draw them" was, on every one of the five days.** The demo
+pins 19:00, so the days that looked as though they worked were the days somebody looked at in the
+evening; the correlation with MJD mod 8 was real but incidental, and it cost a week.
+
+### What the box takes, and why 67 of 67 is no longer the right number
+
+With the day cut into four blocks and all four broadcast, the box registers **only the blocks it is
+listening to** — the one its guide is in, and the one its own match unit named:
+
+| clock | registered | which blocks |
+|---|---|---|
+| 19:30 | 21 of 67 | block 3 alone (the unit names `0xA3`, which is also the guide's) |
+| 12:00 | 45 of 67 | blocks 2 and 3 (the guide's, plus the `0xA3` the unit asks for by day) |
+
+Both numbers are the schedule's own per-block counts to the programme. A firmware test that waits for
+a whole day to register therefore waits for ever, which is how this change first presented: five
+green tests turning red at once, each reporting a plausible fraction.
+
+### The acquisition's block is not the guide's
+
+The match unit asks for `0xA3` at every hour measured except the small ones, where it asks `0xA1` —
+so the box's *acquisition* fetches the evening (and, overnight, the morning) block regardless of the
+time, while the *guide* listens for the block it is in. The two are separate mechanisms with separate
+policies, and reading either one as the other is the mistake this section exists to prevent.
+
+### And the PID is a function of the day, not a choice off the box
+
+An evening box arms TWO listings PIDs — today's and tomorrow's. They are adjacent on seven days in
+eight and `0x37` with `0x30` on the eighth, so "the last armed PID" is today's on some days,
+tomorrow's on others, and on MJD mod 8 == 7 the transmitter sent the entire schedule on tomorrow's
+PID: 0 of 67 registered, no error anywhere. `0x30 | (MJD mod 8)` is the whole rule, now verified on
+sixteen days across two months and two times of day, and the port computes it rather than picking one
+off the armed list.
+
+### The screens
+
+Midday, after the fix, with the committed six-channel line-up:
+
+    101 Sky One                              12.00pm Thu 24
+    NOW      Dream Team
+    1:00pm   Dream Team
+      Search Time · Search Channel · Search Favourite
+
+All four blocks draw when the schedule has programmes in them — the overnight block needed a schedule
+with overnight television to prove it, because the demo line-up starts at 06:00 and an empty block is
+honestly empty. All eight day-slots draw at midday, where before the fix none of them did.
+
+### The instrument
+
+`multiplex.GuideSlots` is the Go port of the oracle's `__siGuideSlot`: it walks the two tables at
+`0x80165048` (0x10-byte headers, u16 count at +0, slot pointer at +8, slots of 0x2C) and dumps every
+active one. Two things cost time and are worth carrying:
+
+- **The active flag at +0x00 is a BYTE.** Read as a word it is `0x01xxxxxx`, which is not 1, so every
+  slot in a fully populated table reads as inactive and the instrument reports a guide that
+  subscribed to nothing. It reported exactly that, twice, on a box that had two live slots.
+- **A key pressed the instant the last record registers does nothing at all** — no slot, and the
+  screen never changes. The press has to follow a settle, and a measurement taken without one is a
+  measurement of a box that never opened its guide.
 
 ---
 

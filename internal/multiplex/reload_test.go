@@ -22,7 +22,11 @@ func schedule(t *testing.T, dir, name string, programmes int) {
 		if i > 0 {
 			body.WriteString(",")
 		}
-		body.WriteString(`{"start":"` + [...]string{"06", "07", "08", "09", "10", "11"}[i%6] +
+		// EVENING programmes, because the firmware test that shares this
+		// fixture runs a 19:00 clock and the box registers the six-hour block
+		// its clock is in. A morning schedule is broadcast, parsed and
+		// discarded, which looks exactly like an edit that never arrived.
+		body.WriteString(`{"start":"` + [...]string{"18", "19", "20", "21", "22", "23"}[i%6] +
 			`:00","minutes":60,"title":"Programme"}`)
 	}
 	body.WriteString(`]}]}`)

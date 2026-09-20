@@ -80,12 +80,12 @@ type Config struct {
 	// file per date, so a real listings page keeps the date it was printed for
 	// and every other day falls back to default.json.
 	//
-	// One caveat belongs with this setting rather than in a commit message.
-	// The box programs its listings filter on only three days in eight (MJD
-	// mod 8 in 1, 3 or 6, TASK-6.13). On the other five the transmitter
-	// addresses the sections itself and the programmes are stored but the
-	// guide does not draw them -- so "now" gives a correct clock and an empty
-	// guide five days a week, while a pinned date in the set always draws.
+	// ANY DATE AND ANY TIME DRAW, and that is recent enough to be worth
+	// saying. Until TASK-6.13 the guide filled on three days in eight and
+	// only in the evening, because a day's listings were broadcast as one
+	// section stamped for the 18:00-24:00 block; the demo's pinned 19:00 hid
+	// it. The day is now cut into the four six-hour blocks the box files them
+	// under, so the only empty guide left is a genuinely empty schedule.
 	BroadcastDate string `env:"GORETROTV_BROADCAST_DATE"`
 
 	// ServiceName labels log lines.

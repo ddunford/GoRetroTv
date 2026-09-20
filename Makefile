@@ -33,17 +33,27 @@ test: ## Run the tests
 
 # Go's default per-package timeout is ten minutes, and it exists to catch a
 # HUNG test. It is not the right guard here: internal/broadcast and
-# internal/multiplex run real firmware for hundreds of millions of instructions,
-# and under the race detector that is legitimately several minutes.
+# internal/multiplex run real firmware for hundreds of millions of instructions
+# -- a couple of dozen boxes restored from a snapshot -- and the race detector
+# costs that about twelve times its plain runtime, so a minute and a quarter
+# here is a quarter of an hour there. It is sized for internal/multiplex, which
+# is the slowest, and it has needed raising twice as that package grew.
 #
 # Their own loops are the hang detector now. Every firmware loop runs under a
 # budget and fails BY NAME when the machine does not do what it was waiting for
 # -- see internal/multiplex/rununtil_test.go -- so a hang is reported as "the
 # box never asked" rather than as a timeout, which is a better failure anyway.
 # Raising this stops a slow but healthy run being reported as a hang; it does
-# not remove a guard, because the guard moved inside.
+# not remove a guard, because the guard moved inside. That is only true while
+# the guard holds, so BEFORE RAISING IT AGAIN, check that every firmware loop
+# still early-exits: the two occasions this package crossed ten minutes were
+# both fixed budgets, not slow machines, and a timeout raised over one of those
+# is hiding a bug rather than paying for the detector.
+#
+# CI is unaffected either way: the firmware is not redistributable, so these
+# tests skip there.
 test-race: ## Run the tests under the race detector
-	go test -race -timeout 20m ./...
+	go test -race -timeout 30m ./...
 
 test-cover: ## Run the tests with coverage
 	go test -cover ./...

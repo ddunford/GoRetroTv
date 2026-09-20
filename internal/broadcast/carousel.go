@@ -14,10 +14,11 @@ import (
 // programs the request ONCE, during acquisition, so a line-up that arrives
 // before the clock leaves the box asking for the wrong day for ever, with no
 // error anywhere. Set the clock first and the whole request moves together:
-// the requested MJD becomes the clock's own day and the listings PID becomes
-// 0x30 | (MJD mod 8), Sky's eight title PIDs being a day-of-eight rotation.
-// Both were measured across eight consecutive days on 2026-09-20; the record
-// carries the sweep.
+// the requested MJD becomes a day the clock has reached -- its own, or the one
+// after when the clock is in the evening -- and the listings PID becomes
+// 0x30 | (MJD mod 8) for whichever day that is, Sky's eight title PIDs being a
+// day-of-eight rotation. Both were measured across sixteen days in two months
+// and two times of day on 2026-09-20; the record carries the sweep.
 //
 // **The rate is not load-bearing.** Sixteen sections pushed by hand acquire a
 // line-up with no rate involved at all, measured twice. So the periods here

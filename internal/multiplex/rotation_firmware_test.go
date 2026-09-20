@@ -8,7 +8,17 @@ import (
 )
 
 // subscribingSlots are the day-of-eight slots on which this box programs a
-// listings match unit. The other five arm the right PID and program nothing.
+// listings match unit FOR THE DAY IT IS IN. The other five arm the right PID
+// and program nothing.
+//
+// THE TIME OF DAY IS PART OF THIS CLAIM AND THE SWEEP BELOW RUNS AT NOON. An
+// evening box also programmes a unit for TOMORROW when tomorrow's slot is one
+// of these three, so at 19:00 the same box subscribes on six days in eight.
+// That is not a contradiction and it is not this test's subject -- but a
+// reading of "three days in eight" taken as a fact about the calendar is what
+// sent TASK-6.13 after a rotation for a week, when the real variable was the
+// hour on the clock (docs/reference/digibox-emulation.md -> 'A day of listings
+// is FOUR SIX-HOUR BLOCKS').
 //
 // This test PINS A FIRMWARE BEHAVIOUR the product routes around, and it is
 // written to fail the moment that behaviour changes. It is worth having for
@@ -24,7 +34,7 @@ import (
 //     Without this test that re-measurement is a paragraph nobody re-runs.
 var subscribingSlots = map[int]bool{1: true, 3: true, 6: true}
 
-// TASK-6.13. Eight consecutive days, one box each.
+// TASK-6.13. Eight consecutive days, one box each, all of them at noon.
 func TestOnlyThreeDaysInEightProgramAListingsFilter(t *testing.T) {
 	guide := demoGuide(t)
 	for d := 0; d < 8; d++ {

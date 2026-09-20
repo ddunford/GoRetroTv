@@ -315,10 +315,21 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 	}
 	listings := m.listings()
 	mjd := MJDOf(m.clock.Now())
+	// THE DAY DECIDES THE PID, AND THE BOX MUST HAVE ARMED IT. A box arms the
+	// PID for the day it is in and, in the evening, for the day after; a
+	// section pushed at a PID it has not armed reaches nothing and reports no
+	// error, which is the one failure in this package that looks exactly like
+	// success.
+	pid := TitlePID(mjd)
+	if !sub.Arms(pid) {
+		m.sent.TitlesUnaddressed++
+		return nil, nil
+	}
 	// Only a filter for the day the broadcast is CLAIMING is worth honouring.
 	// The box programs its request once and never re-subscribes, so after
 	// midnight its filter still names yesterday -- and answering that would
-	// fill the guide with a day that has gone.
+	// fill the guide with a day that has gone. An evening box also programmes
+	// one for TOMORROW, which is a day this transmitter has no clock for yet.
 	var requests []TitleRequest
 	for _, request := range sub.Titles {
 		if request.MJD() == mjd {
@@ -326,16 +337,12 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 		}
 	}
 	if len(requests) == 0 {
-		// The box has acquired and armed its listings PID but programmed no
-		// match unit -- which it does on five days in eight (TASK-6.13). The
-		// PID is armed on every day, so the request is derived and the
-		// intervention is counted rather than hidden.
-		if sub.ListingsPID == 0 {
-			m.sent.TitlesUnaddressed++
-			return nil, nil
-		}
+		// The box has acquired and armed the day's PID but programmed no match
+		// unit for it -- which it does on most days (TASK-6.13), because it
+		// only ever filters for a day whose slot is one of three. The request
+		// is derived and the intervention is counted rather than hidden.
 		for _, service := range listings.Services {
-			requests = append(requests, DerivedTitleRequest(sub.ListingsPID, mjd, service.ListingsID))
+			requests = append(requests, DerivedTitleRequest(mjd, service.ListingsID))
 		}
 		m.sent.TitlesDerived++
 	}
@@ -356,19 +363,26 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 			if !request.Wants(service.ListingsID) {
 				continue
 			}
-			records, err := m.records(service)
+			quarters, err := m.records(service)
 			if err != nil {
 				return nil, err
 			}
-			// The section is addressed with the CHANNEL's own listings id, not
-			// the request's: the filter admits the whole set, and the guide
-			// files what arrives by the id in the section.
-			section, err := broadcast.TitleSection(request.TableID, service.ListingsID, request.Filter,
-				m.version, 0, 0, m.dict, records)
-			if err != nil {
-				return nil, err
+			for quarter, records := range quarters {
+				if len(records) == 0 {
+					continue
+				}
+				// The section is addressed with the CHANNEL's own listings id,
+				// not the request's: the filter admits the whole set, and the
+				// guide files what arrives by the id in the section. The TABLE
+				// ID is the quarter's, not the match unit's -- see
+				// TitleTableID.
+				section, err := broadcast.TitleSection(TitleTableID(quarter), service.ListingsID,
+					request.Filter, m.version, 0, 0, m.dict, records)
+				if err != nil {
+					return nil, err
+				}
+				wave = append(wave, broadcast.Emission{PID: request.PID, Section: section})
 			}
-			wave = append(wave, broadcast.Emission{PID: request.PID, Section: section})
 		}
 	}
 	if len(wave) > 0 {
@@ -377,7 +391,8 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 	return wave, nil
 }
 
-// records turns one channel's day into title records.
+// records turns one channel's day into title records, split into the four
+// quarters the box files them under.
 //
 // THE SCHEDULE IS WRITTEN IN THE BOX'S LOCAL TIME AND THE WIRE CARRIES UTC.
 // Measured: the box adds its declared offset to the programme times as well as
@@ -391,24 +406,35 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 // day's 23:30 UTC is exactly what is on air at 23:30 UTC on the day being
 // broadcast.
 //
-// A section has a hard length limit, and a day of television will exceed it on
-// a busy channel. The overflow is DROPPED rather than split across
-// section_number here, and that is a stated limitation rather than an
-// oversight: multi-section title tables are their own measurement, and a
-// half-understood split would file programmes under the wrong section number
+// A section has a hard length limit, and the overflow is DROPPED rather than
+// split across section_number here -- a stated limitation rather than an
+// oversight, because multi-section title tables are their own measurement and
+// a half-understood split would file programmes under the wrong section number
 // silently. The builder refuses an over-long section, so this cannot ship a
-// truncated one by accident -- it ships fewer programmes, visibly.
-func (m *Multiplex) records(service *ListedService) ([]broadcast.TitleRecord, error) {
+// truncated one by accident: it ships fewer programmes, visibly. Cutting the
+// day into blocks made that far less likely than it was -- each section now
+// carries a sixth of a day rather than all of it -- and a programme that will
+// not fit in its own block no longer stops the rest of the day being built,
+// which it did when the whole day was one section.
+func (m *Multiplex) records(service *ListedService) ([TitleQuarters][]broadcast.TitleRecord, error) {
 	const secondsPerDay = 24 * 60 * 60
+	var quarters [TitleQuarters][]broadcast.TitleRecord
 	offset := londonOffset(m.clock.Now()).OffsetMinutes * 60
-	records := make([]broadcast.TitleRecord, 0, len(service.Programmes))
+	total := 0
 	for i, programme := range service.Programmes {
 		local, err := programme.StartSeconds()
 		if err != nil {
-			return nil, err
+			return quarters, err
 		}
+		// THE QUARTER IS THE LOCAL ONE. The wire carries UTC, so in summer a
+		// programme's transmitted start is in the quarter before its local
+		// one -- and the guide asks for the quarter ITS OWN CLOCK is in, which
+		// is local. Filing by the UTC start would put an hour of every summer
+		// evening in the block the box is not listening to.
+		quarter := QuarterOf(local)
 		start := ((local-offset)%secondsPerDay + secondsPerDay) % secondsPerDay
-		records = append(records, broadcast.TitleRecord{
+		candidate := quarters[quarter]
+		candidate = append(candidate, broadcast.TitleRecord{
 			EventID:  uint16(i + 1), // #nosec G115 -- a day's programmes, bounded by the section length below
 			Start:    start,
 			Duration: programme.Minutes * 60,
@@ -416,18 +442,20 @@ func (m *Multiplex) records(service *ListedService) ([]broadcast.TitleRecord, er
 			Genre:    programme.Genre,
 			Rating:   programme.Rating,
 		})
-		// Ask the builder whether what we now hold still fits, and put the
-		// last one back if it does not. Trying it on a copy would be the same
-		// question asked of a slice that may share this one's backing array.
-		if _, err := broadcast.TitleSection(0xa0, service.ListingsID, [2]byte{}, 0, 0, 0, m.dict, records); err != nil {
-			records = records[:len(records)-1]
-			break
+		// Ask the builder whether what this quarter now holds still fits, and
+		// put the last one back if it does not. Trying it on a copy would be
+		// the same question asked of a slice that may share this one's backing
+		// array.
+		if _, err := broadcast.TitleSection(0xa0, service.ListingsID, [2]byte{}, 0, 0, 0, m.dict, candidate); err != nil {
+			continue
 		}
+		quarters[quarter] = candidate
+		total++
 	}
-	if len(records) == 0 {
-		return nil, fmt.Errorf("multiplex: %q: not even one programme fits in a title section", service.Name)
+	if total == 0 {
+		return quarters, fmt.Errorf("multiplex: %q: not even one programme fits in a title section", service.Name)
 	}
-	return records, nil
+	return quarters, nil
 }
 
 // subscription reads the box.

@@ -24,6 +24,14 @@ import (
 // opens the menu on TV GUIDE -- 0x7D opens it on BOX OFFICE, and TV GUIDE is
 // one LEFT of that -- which is why the handset carries these four and not a
 // fifth called sky or home.
+// The four codes the handset sends, named once so tests say what they mean.
+const (
+	tvGuideKey     = 0x80
+	boxOfficeKey   = 0x7d
+	servicesKey    = 0x7e
+	interactiveKey = 0xf5
+)
+
 func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
 	const settle = 5_000_000
 
@@ -52,10 +60,10 @@ func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
 		name string
 		code int
 	}{
-		{"tv guide", 0x80},
-		{"box office", 0x7d},
-		{"services", 0x7e},
-		{"interactive", 0xf5},
+		{"tv guide", tvGuideKey},
+		{"box office", boxOfficeKey},
+		{"services", servicesKey},
+		{"interactive", interactiveKey},
 	} {
 		hash := screen(key.code)
 		if other, clash := seen[hash]; clash {

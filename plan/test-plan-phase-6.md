@@ -183,4 +183,22 @@
   transcription of the reference decoder" — an encoder checked against a decoder, which is one
   instrument and not two. They have been regenerated and their provenance comment now says the
   authority is the screen.
-- [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10) — SPEC success criterion 4.
+- [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10)
+- [x] **TC-6.15: The encoder is cross-checked against the BOX, not against another decoder**
+  (covers: TASK-6.9) — `TestTheDrawnTitleDistinguishesWhatTheEncoderCouldGetWrong`. It broadcasts
+  `Dream Team`, `DreamTeam` and `Dream Teams` on otherwise identical screens and requires all three
+  to draw DIFFERENTLY. Under either encoder defect two of them are the same picture, which no
+  agreement between our encoder and our decoder can hide. Falsified both ways: restore the
+  keep-the-last-duplicate bug and the first pair collide; restore the zero-fill and the second pair
+  do.
+
+  **TASK-6.9 asked for a cross-check against the reference DECODER and it is deliberately not that.**
+  That instrument is the one that failed: a round trip, byte-for-byte vectors and a transcribed
+  reference decoder all share the encoder's reading of the dictionary, so they are one instrument
+  and they agreed with each other for as long as the guide was drawing `DreamTeams`. The box is the
+  independent one.
+
+  Reading pixels needed two instruments of its own, both in `rununtil_test.go`: `drawnScreen` waits
+  for something NEW to be drawn and to hold still, because a frame hashed at a chosen instruction
+  catches the banner mid-redraw, and a frame hashed once the screen has settled catches the blank
+  picture it returns to after the banner times out. — SPEC success criterion 4.

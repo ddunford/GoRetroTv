@@ -6600,3 +6600,33 @@ byte-for-byte vector test, and to a decoder transcribed from the reference — b
 those instruments shared the encoder's reading of the dictionary. The only instrument that
 disagreed was the box drawing the text on a screen, and it had been disagreeing in plain sight for
 as long as there have been titles to draw.
+
+---
+
+## Reading the screen as an instrument
+
+*Built 2026-09-20 for the encoder cross-check. Two mistakes were made getting it right, and both
+are the same mistake in different clothes: hashing a frame at a chosen instruction.*
+
+**A frame hashed at a guessed moment catches the box MID-REDRAW.** The now/next banner paints in
+stages, and a capture landed on `NOW Dream Team` rendering over the *Further schedule information is
+not available* line it was replacing — one picture containing both states, and a hash that says
+nothing about either.
+
+**A frame hashed once the screen has SETTLED catches the wrong screen entirely.** The banner is
+transient: wait for the picture to stop changing and the answer is the plain blue it returns to when
+the banner times out, which is identical whatever the title said. The first version of the
+cross-check "passed" three different titles as one screen, and was only caught because it carried a
+third assertion — that two titles differing in two ways must not draw alike — which is the guard
+worth copying.
+
+So a screen instrument needs both halves: **ignore what was already up, and wait for something new
+to hold still.** `internal/multiplex/rununtil_test.go` has `drawnScreen` doing exactly that, and
+`screenNow` to capture the before.
+
+### And it is the only independent check the codecs have
+
+An encoder tested against a decoder written from the same reading of a format is one instrument
+wearing two hats. The Huffman defects above prove it: a round trip, byte-for-byte vectors and a
+transcribed reference decoder all agreed for as long as the guide was drawing `DreamTeams`. When a
+codec's output is eventually DRAWN, the drawing is the check.

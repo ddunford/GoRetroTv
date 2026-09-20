@@ -5,6 +5,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/multiplex"
+	"github.com/ddunford/goretrotv/internal/platform/statehash"
 )
 
 // runUntil steps the box, transmitting as it goes, until observe reports that
@@ -39,6 +40,62 @@ func runUntil(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex
 		}
 	}
 	return -1
+}
+
+// drawnScreen returns the hash of a screen the box PUT UP and finished
+// drawing, ignoring the one it was showing before.
+//
+// Two things make this harder than hashing a frame at a chosen instruction,
+// and the first attempt at it got both wrong. The box can be caught MID-REDRAW
+// -- "NOW Dream Team" painting over the line it replaces -- so the frame has
+// to be stable before it means anything. And the banner is TRANSIENT: wait for
+// the screen to reach its final state and the answer is the blank picture it
+// returns to, which is the same whatever the title said.
+//
+// So: sample, ignore the frame that was already up, and take the first one
+// that holds still. It fails by name when nothing new is ever drawn, because a
+// box that draws nothing is a finding rather than a hash.
+func drawnScreen(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex,
+	budget int, before uint32) uint32 {
+	t.Helper()
+	const sample = 250_000
+	const stableSamples = 4 // a million instructions with nothing redrawn
+	var candidate uint32
+	steady := 0
+	found := runUntil(t, box, transmitter, budget, func(i int) bool {
+		if i%sample != 0 {
+			return false
+		}
+		picture, err := box.Compose()
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash := statehash.HashBytes(picture.Pix)
+		if hash == before {
+			candidate, steady = 0, 0
+			return false
+		}
+		if hash == candidate {
+			steady++
+		} else {
+			candidate, steady = hash, 0
+		}
+		return steady >= stableSamples
+	})
+	if found < 0 {
+		t.Fatalf("nothing new was drawn and held still within %d instructions", budget)
+	}
+	return candidate
+}
+
+// screenNow is what the box is showing at this instant.
+func screenNow(t *testing.T, box *board.Runtime) uint32 {
+	t.Helper()
+	picture, err := box.Compose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return statehash.HashBytes(picture.Pix)
 }
 
 // registeringProgrammes counts the box's own per-event register and reports

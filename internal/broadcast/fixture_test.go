@@ -1,6 +1,7 @@
 package broadcast_test
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -9,6 +10,19 @@ import (
 	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/firmware"
 )
+
+// cachedLineup holds a machine that has already been given a clock and a
+// channel list, so the tests that need that state restore it instead of
+// re-deriving it.
+//
+// Deriving it costs ~38 million emulated instructions, and running that once
+// per subtest took internal/broadcast past Go's ten-minute timeout under the
+// race detector -- which is how `ctl.sh test` went from fitting in the quality
+// hook's budget to not finishing at all. Snapshot and restore exist for
+// precisely this: phase 4's justification was that a hypothesis costing six
+// minutes of boot should cost seconds from a snapshot, and a test suite is the
+// same hypothesis run repeatedly.
+var cachedLineup []byte
 
 // restoredBox gives a machine in the verified post-acquisition state, or skips.
 // Neither the flash images nor the snapshot are redistributable, so a machine
@@ -87,4 +101,25 @@ func guestSubscription(t *testing.T, box *board.Runtime) (bouquetID, networkID u
 		t.Fatal("PID 0x11 is not armed, so a BAT pushed to it would never reach the guest")
 	}
 	return bouquetID, networkID
+}
+
+// boxWithLineup returns a machine that has a clock and a channel list, and so
+// is asking for its listings. The first call derives that state and snapshots
+// it; every later call restores it.
+func boxWithLineup(t *testing.T, feed func(*testing.T, *board.Runtime)) *board.Runtime {
+	t.Helper()
+	box := restoredBox(t)
+	if cachedLineup != nil {
+		if err := box.Restore(bytes.NewReader(cachedLineup)); err != nil {
+			t.Fatal(err)
+		}
+		return box
+	}
+	feed(t, box)
+	var state bytes.Buffer
+	if err := box.Machine.Snapshot(&state); err != nil {
+		t.Fatal(err)
+	}
+	cachedLineup = state.Bytes()
+	return box
 }

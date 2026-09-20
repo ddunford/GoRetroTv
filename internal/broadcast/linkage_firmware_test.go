@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/broadcast"
 	"github.com/ddunford/goretrotv/internal/dvb"
 )
@@ -18,11 +19,58 @@ const (
 	pcLinkageNotFound = 0x800ac774
 )
 
+// Budgets, not durations. Every run below stops at the event it is waiting
+// for, so a generous cap costs nothing when the machine behaves and is the
+// only thing that turns a hang into a named failure when it does not.
+//
+// They are caps BECAUSE the first version of this test ran fixed windows --
+// twenty million instructions to settle, then sixty million to watch -- and a
+// fixed window is wrong in both directions at once. Too long and the package
+// walked past Go's ten-minute timeout under the race detector; too short and
+// the result did not merely weaken, it INVERTED: at an eight-million settle
+// the 0x91 section reported the not-answered arm and the 0x90 section reported
+// the answered one. A window that observes a machine mid-parse is not
+// measuring the thing it names.
+const (
+	batParseBudget     = 40_000_000
+	guideAnswerBudget  = 80_000_000
+	batParseEntryCount = 2
+)
+
+// runUntilTheLineupIsParsed steps until the guest's channel-list parser has
+// decoded every entry of the BAT just pushed, and fails if it never does.
+//
+// This replaces "run twenty million instructions and hope": the settle is over
+// when an observable thing has happened, and if it has not happened the test
+// says so instead of quietly measuring a half-parsed machine.
+func runUntilTheLineupIsParsed(t *testing.T, box *board.Runtime, entries int) {
+	t.Helper()
+	decoded := 0
+	for i := 0; i < batParseBudget; i++ {
+		if box.Machine.Core.State().PC == pcEntryServiceID {
+			decoded++
+			if decoded == entries {
+				t.Logf("the BAT's %d line-up entries were parsed by instruction %d", entries, i)
+				return
+			}
+		}
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Fatalf("the guest decoded %d of %d line-up entries in %d instructions, so the BAT was never parsed "+
+		"and anything measured after this point is about a mid-parse machine", decoded, entries, batParseBudget)
+}
+
 // TC-6.3. Both directions, because "the guide drew something" is not evidence:
 // the answered and not-answered arms both end in a screen, and the difference
 // between them is the whole task. The linkage_type is patched rather than the
 // descriptor removed, so the section keeps its lengths and only the one byte
 // the firmware tests actually changes.
+//
+// The record measured that the guide asks its database EXACTLY ONCE per press,
+// so the first arm to run is the answer and there is nothing to gain by
+// watching for more of them.
 func TestGuideTakesTheAnsweredArmOnlyWithLinkageType91(t *testing.T) {
 	lineup := []broadcast.LineupEntry{
 		{ServiceID: 0x0064, Kind: 1, Listings: 0x0bb8, Extra: 0x1770, Channel: 101, Flags: 0},
@@ -53,36 +101,31 @@ func TestGuideTakesTheAnsweredArmOnlyWithLinkageType91(t *testing.T) {
 			if err := box.Demux.Push(0x11, section); err != nil {
 				t.Fatal(err)
 			}
-			// Let the BAT be parsed before asking the guide anything.
-			for i := 0; i < 20_000_000; i++ {
-				if err := box.Step(); err != nil {
-					t.Fatal(err)
-				}
-			}
+			runUntilTheLineupIsParsed(t, box, batParseEntryCount)
+
 			if err := box.CSI.Key(pcGuideKey, 0); err != nil {
 				t.Fatal(err)
 			}
-			answered, notFound := 0, 0
-			for i := 0; i < 60_000_000; i++ {
+			answered, asked := false, false
+			for i := 0; i < guideAnswerBudget && !asked; i++ {
 				switch box.Machine.Core.State().PC {
 				case pcLinkageAnswered:
-					answered++
+					answered, asked = true, true
+					t.Logf("the guide took the ANSWERED arm %d instructions after the key", i)
 				case pcLinkageNotFound:
-					notFound++
+					asked = true
+					t.Logf("the guide took the not-answered arm %d instructions after the key", i)
 				}
 				if err := box.Step(); err != nil {
 					t.Fatal(err)
 				}
 			}
-			t.Logf("answered arm %d, not-answered arm %d", answered, notFound)
-			if tc.wantAnswered && answered == 0 {
-				t.Errorf("the guide never took the answered arm with a 0x91 linkage")
+			if !asked {
+				t.Fatalf("neither arm ran in %d instructions, so the guide never asked its database "+
+					"and this says nothing about the linkage", guideAnswerBudget)
 			}
-			if !tc.wantAnswered && answered != 0 {
-				t.Errorf("the guide took the answered arm %d times for linkage type %#x", answered, tc.linkageType)
-			}
-			if !tc.wantAnswered && notFound == 0 {
-				t.Errorf("neither arm ran, so this proves nothing about the linkage")
+			if answered != tc.wantAnswered {
+				t.Errorf("linkage type %#x: answered arm = %v, want %v", tc.linkageType, answered, tc.wantAnswered)
 			}
 		})
 	}

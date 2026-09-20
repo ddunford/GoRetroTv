@@ -6342,3 +6342,94 @@ runs, the way the drawing gate at `0x9FC4DB3F` was found.
 ~200 s channel-list rebuild before it can press anything, and the NVRAM persists in localStorage —
 a box that has already absorbed the line-up skips the rebuild entirely. Six minutes a run, most of
 it waiting for state that was already there, is what made this screen expensive to chase.
+
+---
+
+## The clock table is the TOT, and the listings PID is a day-of-eight rotation
+
+*Measured on the Go port, 20 Sep 2026, against the post-acquisition snapshot fixture (a warm box,
+1.1 billion instructions retired). Three findings, two of which correct entries above, and one
+question left open rather than smoothed over. Every reading is the box's own match unit, read back
+through `Demux.Match` — which is only trustworthy since it learned that units 8..15 carry their
+rule in the HIGH half of the match word.*
+
+### 1. The box's clock comes from the TOT. The TDT is not delivered to anything.
+
+At rest the fixture's match units are:
+
+    unit  1: 40/fe 00/ff 20/ff ...        NIT
+    unit  2: 42/fb 00/ff 20/ff ...        SDT
+    unit  3: 4a/ff 10/ff 00/ff ...        BAT, bouquet 0x1000
+    unit  5: 73/ff 00/00 00/00 ...        TOT
+    unit 10: c1/ff 01/fe ff/00 ...
+
+**There is no unit matching `0x70`.** Feeding a TDT alone — correctly built, correct MJD, pushed to
+PID `0x14` — moves nothing: not the requested day, not the PID, not the table id. Feeding a TOT for
+the same instant moves the entire request together. Swept across five dates, the result is binary
+and not marginal.
+
+This invalidates the method of every earlier measurement in this project that set the clock with a
+TDT and then read a day off the box. Those runs were reading the day the box already had. The
+`__siTDT(…)` instrument name is part of why it went unnoticed for so long.
+
+### 2. The box asks for its clock's OWN day, not the day after.
+
+The entry above (*"Where it actually stops"*) reads *"The box asks for the day **after** its clock,
+so the day it wants never contains 'now'."* Measured here with the TOT, the requested MJD equals the
+TOT's MJD exactly:
+
+| TOT | requested MJD | date |
+|---|---|---|
+| 1998-03-01 | 50873 | 1998-03-01 |
+| 1998-03-03 | 50875 | 1998-03-03 |
+| 1998-03-06 | 50878 | 1998-03-06 |
+| 1998-06-15 | 50979 | 1998-06-15 |
+
+The earlier +1 reading was almost certainly the same TDT-does-nothing artefact: a box left on its own
+resting day while the instrument believed it had been moved.
+
+### 3. The listings PID is `0x30 | (MJD mod 8)`.
+
+Sky's eight title PIDs are a day-of-eight rotation, and the box picks its own. Confirmed on eight
+consecutive days (MJD 50873..50880 from a 1998-03-01 TOT):
+
+    50873 -> 0x31    50874 -> 0x32    50875 -> 0x33    50876 -> 0x34
+    50877 -> 0x35    50878 -> 0x36    50879 -> 0x37    50880 -> 0x30
+
+and cross-checked on two unrelated days: 50814 -> `0x36`, 50979 -> `0x33`. The record previously had
+only *"Sky's title PIDs are 0x30-0x37 … exactly the range the box moved within"*, which is the
+observation this rule explains.
+
+**The PID arms on every one of the eight days**, including the ones in the next paragraph. The
+rotation is not conditional on anything.
+
+### The open question: five days in eight arm the PID and then program no filter
+
+On MJD ≡ 0, 2, 4, 5, 7 (mod 8) the box arms the correct listings PID and then programs **no title
+match unit at all**, within 200 million instructions. On ≡ 1, 3, 6 it programs one within about
+430,000. There is nothing in between, so it is not a timeout.
+
+    1998-03-02 (50874, slot 2):  armed PIDs [0x32 0x52 0x14 0x11 0x10], units 1,2,3,5,10 only
+    1998-03-03 (50875, slot 3):  armed PIDs [0x33 0x52 0x14 0x11 0x10], and
+                                 unit 7: a3/fe 0b/ff b8/ff 00/00 00/00 00/00 c6/ff bb/ff
+
+`0xc6bb` is 50875 — the unit carries the day it asked for. **A box with an armed PID and no filter
+receives nothing**, so five days in eight currently cannot be fed listings at all. Tracked as its
+own issue rather than guessed at.
+
+### The methodological note
+
+The sweep's first reading was *"the box never asks on five days in eight"*, taken through a census
+that required `table.Mask == 0xfe && table.Value&0xf0 == 0xa0`. OpenTV title tables are `0xA0`-`0xA4`
+**and `0xB0`**, so that census could have been narrowing away a real subscription, and the reading
+could not be believed until it had been checked without the narrowing.
+
+Dumping all sixteen units unconditionally **confirmed** the finding rather than overturning it —
+there is genuinely no title unit on those days — and in doing so produced the more useful half of
+it, which the narrow census could not see at all: **the PID arms on every one of the eight days.**
+"Never asks" was true about the filter and false about the request.
+
+So the lesson is not the usual one. The census was too narrow, the answer it gave happened to be
+right, and the cost of the narrowness was a missing observation rather than a wrong one. Widening it
+was still the right move, and the unconditional dump is what made the day-of-eight rotation
+provable. The census now accepts the whole OpenTV title family.

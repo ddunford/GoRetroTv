@@ -21,6 +21,17 @@ const (
 	pcFlagBit0       = 0x800bf896 // (packed & 1)      -> record[16]
 )
 
+// lineupWindow is how long each case watches for. A negative case can only be
+// proved by a window, so the window has to be demonstrably longer than a
+// decode takes -- and every positive case below asserts that its own last hit
+// landed inside a quarter of it. That assertion is the point: a window trimmed
+// until the negative cases still pass is a window that proves nothing, and it
+// would look exactly like this one.
+//
+// Measured 2026-09-20: the four-entry decode finishes within thirty thousand
+// instructions of the push, so this is a margin of more than sixteen.
+const lineupWindow = 500_000
+
 // breakTheGate rewrites the 0xB1 descriptor's sentinel halfword and repairs the
 // CRC, so the section stays well-formed and only the gate is wrong. The builder
 // has no option for this on purpose: a knob for emitting a broken gate would be
@@ -117,10 +128,25 @@ func TestGuestDecodesTheLineupOnlyThroughTheMeasuredGate(t *testing.T) {
 			}
 
 			hits := map[uint32]int{}
-			for i := 0; i < 3_000_000; i++ {
-				hits[box.Machine.Core.State().PC]++
+			tracked := map[uint32]bool{pcEntryServiceID: true, pcRecordStride: true,
+				pcFlagBit3: true, pcFlagBit2: true, pcFlagBit1: true, pcFlagBit0: true}
+			lastHit := 0
+			for i := 0; i < lineupWindow; i++ {
+				pc := box.Machine.Core.State().PC
+				if tracked[pc] {
+					hits[pc]++
+					lastHit = i
+				}
 				if err := box.Step(); err != nil {
 					t.Fatal(err)
+				}
+			}
+			if tc.wantEntries > 0 {
+				t.Logf("the decode's last tracked hit was at instruction %d of %d", lastHit, lineupWindow)
+				if lastHit > lineupWindow/4 {
+					t.Errorf("the decode ran to instruction %d, within a quarter of the %d-instruction window; "+
+						"the negative cases are no longer demonstrably long enough to have seen a decode",
+						lastHit, lineupWindow)
 				}
 			}
 
@@ -183,7 +209,7 @@ func TestGuestIgnoresTheLineupWithoutTheDeclaredNamespace(t *testing.T) {
 		t.Fatal(err)
 	}
 	hits := 0
-	for i := 0; i < 3_000_000; i++ {
+	for i := 0; i < lineupWindow; i++ {
 		if box.Machine.Core.State().PC == pcEntryServiceID {
 			hits++
 		}

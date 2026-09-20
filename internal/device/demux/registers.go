@@ -135,11 +135,26 @@ func (d *Demux) ArmedPIDs() []uint16 {
 }
 
 // Match returns one independent unit's byte rule; it does not imply a PID channel.
+//
+// THE UNIT NUMBER SELECTS WHICH HALF OF THE WORD CARRIES THE RULE. Units 0..7
+// write it in the low halfword and units 8..15 in the high one — sixteen units
+// packed two to a word. Reading the low half for every unit made every high
+// unit read back as 00/00, which is not "the guest did not program it": it
+// looks exactly like a filter that was never set, and that is how the box's
+// own listings subscription stayed invisible. Measured 2026-09-20 by logging
+// the guest's writes to +0x148/+0x144 through the bus observer: unit 2 wrote
+// 42ff42fb and means the SDT filter 42/fb in the low half, while unit 8 wrote
+// a3fe0000, 0bff0000, b8ff0000, c6ff0000, 7eff0000 and means a complete title
+// filter — table 0xA3 mask 0xFE, extension 0x0BB8, MJD 0xC67E — in the high
+// one.
 func (d *Demux) Match(unit, byteIndex uint8) (MatchByte, bool) {
 	if unit >= 16 || byteIndex >= 16 {
 		return MatchByte{}, false
 	}
 	word := d.matchWords[unit][byteIndex]
+	if unit >= 8 {
+		word >>= 16
+	}
 	return MatchByte{Value: uint8((word >> 8) & 0xff), Mask: uint8(word & 0xff)}, true // #nosec G115 -- masked to bytes.
 }
 

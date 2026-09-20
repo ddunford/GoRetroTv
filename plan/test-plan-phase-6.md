@@ -63,7 +63,7 @@
   **Not yet visible on the demo host.** Nothing wires `internal/broadcast` to the running machine —
   only its own tests import it — so the live box still receives no SI at all. The remaining phase-6
   tasks are that work.
-- [?] **TC-6.4: Twelve records arrive as twelve** (covers: TASK-6.4, TASK-6.9) — and with the length field
+- [x] **TC-6.4: Twelve records arrive as twelve** (covers: TASK-6.4, TASK-6.9) — and with the length field
   computed openTVtoXML's way, the box must read two. The wrong version has to be shown failing.
   **Proved, at the byte level:** `internal/broadcast/titles_test.go` builds a twelve-record section
   and walks it twice. The firmware's arithmetic — `local_84 += local_8a + 4` with
@@ -79,17 +79,47 @@
   transcription of the reference decoder — and separately round-trips here, because an encoder can
   be self-consistently wrong: pack eight bits into byte 0 instead of six and encode/decode still
   agree while the box reads nonsense.
-  **BLOCKED, the half that says "the box must read two":** `titles_firmware_test.go` is written and
-  skips with its reason. Measured 2026-09-20: after a TDT, NIT, SDT and four BAT versions carrying a
-  line-up, the box arms PID `0x36` — one of Sky's title PIDs, and new since before the line-up — but
-  programs **no match unit** for table `0xA0` or `0xA1` in any of its thirty-two. Sections pushed to
-  `0x36` are accepted by the demux and the guest registers **zero** records from them, across all
-  four addressings the record names for a clocked box. What is missing is **TASK-6.6**, addressing
-  each section with the table id, PID and MJD the box is *currently* asking for. This case reopens
-  when that lands.
-- [ ] **TC-6.5: Clock first changes the request** (covers: TASK-6.5, TASK-6.9) — with a clock the box asks for a
-  real MJD; without one it asks for 40587.
+  **And against the box, which is the half that matters.** `titles_firmware_test.go` feeds a clock
+  and a line-up, reads the listings request off the box's own match unit — **table `0xA3`,
+  extension `0x0BB8`, MJD `0xC67E`, PID `0x36`** — and pushes twelve programmes to it. The guest's
+  consumer ladder turns end to end: `sectionParser` 1, `extensionLookup` 1, `dayKeyToSlot` 1,
+  `findBlock` 1, `registerBlock` 1, then `walkDriver`, `walkDescriptors` and `perEventRegister` at
+  **12 each**. With the lengths overstated openTVtoXML's way and the CRC repaired — every other byte
+  identical — the box registers **2**, which is the count the record measured and the number this
+  case was written around.
+  **It only became provable after a demux fix.** `Demux.Match` read the low halfword of every match
+  word, but units 8..15 carry their rule in the HIGH half — sixteen units packed two to a word.
+  The box's entire listings subscription therefore read back as `00/00`, which looks like a filter
+  nobody programmed rather than one we could not see, and sections addressed by guesswork were
+  collected by the interrupt handler and silently dropped. Found by logging the guest's own writes
+  to `+0x148`/`+0x144` through the bus observer: unit 2 wrote `42ff42fb` and means `42/fb` in the
+  low half, unit 8 wrote `a3fe0000`, `0bff0000`, `b8ff0000`, `c6ff0000`, `7eff0000` and means a
+  complete title filter in the high one.
+- [x] **TC-6.5: Clock first changes the request** (covers: TASK-6.5, TASK-6.9) — proved by
+  `TestTheClockTableChoosesTheDayAndThePIDTheBoxAsksFor`, four cases, falsified twice against the
+  product (the MJD anchor one day out, and a TOT carrying a zero MJD).
+
+  **The case as originally written could not be run, and finding out why is the result.** It read
+  "with a clock the box asks for a real MJD; without one it asks for 40587". Neither half holds on
+  this fixture: it is a *warm* box and wakes already holding a day (MJD 50814), so "without a clock"
+  is not a state it can be put into — and the table that sets the clock is the **TOT**, not the TDT
+  every earlier run in this package fed. The box's match units carry `0x73` and nothing matches
+  `0x70`. What is proved instead, which is the thing the task needs:
+
+  | fed | requested MJD | PID |
+  |---|---|---|
+  | nothing | 50814, the day it woke with | `0x36` |
+  | a TDT for 1998-06-15 | 50814 — **unmoved** | `0x36` |
+  | a TOT for 1998-06-15 | 50979 = 1998-06-15 | `0x33` |
+  | a TOT for 1998-03-06 | 50878 = 1998-03-06 | `0x36` |
+
+  and in every case the PID is `0x30 | (MJD mod 8)`, checked rather than assumed. The full sweep and
+  the open question it raised are in `docs/reference/digibox-emulation.md`.
 - [ ] **TC-6.6: Sections are addressed as the box asks** (covers: TASK-6.6, TASK-6.9).
 - [ ] **TC-6.7: The in-world clock face matches real time** (covers: TASK-6.7, TASK-6.9) — 1:1, London both ends.
 - [ ] **TC-6.8: A live edit reaches the guide; a broken one does not break it** (covers: TASK-6.8, TASK-6.9).
+- [ ] **TC-6.13: Every day in the eight-day rotation can be fed listings** (covers: TASK-6.13) — sweep
+  eight consecutive days; each must program a title match unit, not merely arm a PID. The instrument
+  must dump all sixteen match units unconditionally, because a census narrowed to `0xAn` cannot see
+  the half of this that is about the PID.
 - [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10) — SPEC success criterion 4.

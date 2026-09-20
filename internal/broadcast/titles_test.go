@@ -67,13 +67,15 @@ func TestTwelveRecordsArriveAsTwelveAndAsTwoTheReferenceWay(t *testing.T) {
 	}
 	// The wrong version, shown failing on the very same bytes.
 	//
-	// The COUNT it lands on is not pinned, and asserting one would be a
-	// mistake: where a broken walk falls apart depends on how long the records
-	// happen to be. The record's own measurement saw two, with its records;
-	// these twelve equal-sized ones give one, because off += 24 lands inside
-	// record one's text and the byte at +4 is not 0xB5 so the walk stops. What
-	// is invariant, and what the firmware's arithmetic exists to avoid, is that
-	// the reference reads a fraction of what was broadcast and reports no error.
+	// The COUNT this walk lands on is deliberately not pinned. THE BOX READS
+	// TWO from the same bytes (titles_firmware_test.go), and this simulated
+	// walk reads one, because the two stop for different reasons: ours breaks
+	// when the byte at +4 is not 0xB5, while the firmware carries on into a
+	// length it reads out of the middle of a record. That divergence is worth
+	// knowing and is exactly why the box-level test exists — a reader that
+	// merely agrees with our own arithmetic proves nothing about the firmware's.
+	// What is invariant in both is that the reference reads a fraction of what
+	// was broadcast and reports no error.
 	wrong := walkTitles(section, false)
 	if wrong >= 12 {
 		t.Errorf("openTVtoXML's arithmetic found %d of 12 records, so this section does not "+

@@ -113,7 +113,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .key:active:not(:disabled), .key[data-pressed="true"]:not(:disabled) { transform: translateY(2px) scale(.97); box-shadow: 0 1px 0 #101820, 0 2px 4px #02070c7a; }
 @media (hover: hover) { .key:hover:not(:disabled) { transform: translateY(-2px); } .key:active:not(:disabled), .key[data-pressed="true"]:not(:disabled) { transform: translateY(2px) scale(.97); } }
 .remote-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.remote-primary .sky { color: #fff; font-size: 15px; font-weight: 800; background: linear-gradient(#4b5d6b, #2b3947); border-color: #7d8f9d; }
+.remote-primary .primary { color: #fff; font-size: 15px; font-weight: 800; background: linear-gradient(#4b5d6b, #2b3947); border-color: #7d8f9d; }
 .remote-head .power { width: 45px; height: 45px; padding: 0; color: white; font-size: 24px; background: linear-gradient(#ed6b68, #af2b36); border-color: #ff928e; border-radius: 50%; }
 .remote-nav { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 47px); gap: 5px; margin: 23px 24px 12px; }
 .remote-nav .up { grid-column: 2; grid-row: 1; }
@@ -319,7 +319,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   /* 320px of height is not enough for standing explanation; the screen and a
      usable handset are what the space is for. */
   .screen-help { display: none; }
-  .remote-primary .key:not(.sky) { padding-inline: 2px; font-size: 10px; }
+  .remote-primary .key:not(.primary) { padding-inline: 2px; font-size: 10px; }
   .remote-nav { margin-inline: 5px; }
   .number-pad { padding-inline: 0; }
 }

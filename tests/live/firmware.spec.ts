@@ -34,8 +34,8 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
     }
   }));
   await page.goto('/');
-  await expect(page.locator('#box-status')).toHaveText('The box is ready. Press sky on the handset.');
-  const sky = page.getByRole('button', { name: 'sky', exact: true });
+  await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide on the handset.');
+  const sky = page.getByRole('button', { name: 'box office', exact: true });
   await expect(sky).toBeEnabled();
   const screen = page.locator('#screen');
   await expect.poll(() => initialFrame !== null && palette !== null).toBe(true);
@@ -73,7 +73,7 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
   expect(before).toBe(1);
 
   await sky.click();
-  await expect(page.locator('#key-feedback')).toContainText('sky sent to the box');
+  await expect(page.locator('#key-feedback')).toContainText('box office sent to the box');
   try {
     await expect.poll(countColours,
     { timeout: 45_000, intervals: [500, 1000] }).toBeGreaterThan(10);

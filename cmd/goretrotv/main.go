@@ -84,7 +84,7 @@ func run() error {
 		return err
 	}
 	if ready {
-		if err := transport.PushState("ready", "The box is ready. Press sky on the handset."); err != nil {
+		if err := transport.PushState("ready", "The box is ready. Press tv guide on the handset."); err != nil {
 			return err
 		}
 	} else if err := transport.PushState("booting", "The box is starting its firmware."); err != nil {
@@ -234,7 +234,7 @@ func runMachine(ctx context.Context, box *board.Runtime, ready bool, images *fir
 // places, so the viewer is told which one they got.
 func resetState(ready bool) (string, string) {
 	if ready {
-		return "ready", "The box was reset and restored to its startup state. Press sky on the handset."
+		return "ready", "The box was reset and restored to its startup state. Press tv guide on the handset."
 	}
 	return "booting", "The box was reset and is cold-starting from its flash."
 }

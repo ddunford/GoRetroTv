@@ -67,9 +67,9 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
   const response = await page.goto('/');
   expect(response?.status()).toBe(200);
   await expect.poll(() => websocketURL).toBe('wss://goretrotv.demosrv.uk/ws');
-  const sky = page.getByRole('button', { name: 'sky', exact: true });
+  const sky = page.getByRole('button', { name: 'box office', exact: true });
   await expect(sky).toBeEnabled();
-  await expect(page.locator('#box-status')).toHaveText('The box is ready. Press sky on the handset.');
+  await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide on the handset.');
   await expect.poll(() => initial !== null && palette !== null).toBe(true);
   expect(indexedHash(initial!)).toBe(0xA6A21DC5);
 

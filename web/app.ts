@@ -141,7 +141,7 @@ function handleMessage(payload: string): void {
     booting: 'The box is starting its firmware…',
     'flash-check': 'The box is checking its flash memory…',
     'channel-list': 'The box is rebuilding its channel list…',
-    ready: 'The box is ready. Press sky on the handset.',
+    ready: 'The box is ready. Press tv guide on the handset.',
   };
   haltReason = '';
   machineReady = message.phase === 'ready';

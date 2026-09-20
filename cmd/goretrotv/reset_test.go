@@ -90,7 +90,7 @@ func TestResetRestartsAHaltedBoxAndSaysWhatItDid(t *testing.T) {
 	box.RAM.Write(pc&0x1fffffff, bus.Word, 0xfc000000)
 
 	transport := web.NewTransport()
-	if err := transport.PushState("ready", "The box is ready. Press sky on the handset."); err != nil {
+	if err := transport.PushState("ready", "The box is ready. Press tv guide on the handset."); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(transport)
@@ -145,7 +145,7 @@ func TestResetRebuildsARunningBoxAndItKeepsRetiring(t *testing.T) {
 		t.Fatal(err)
 	}
 	transport := web.NewTransport()
-	if err := transport.PushState("ready", "The box is ready. Press sky on the handset."); err != nil {
+	if err := transport.PushState("ready", "The box is ready. Press tv guide on the handset."); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(transport)

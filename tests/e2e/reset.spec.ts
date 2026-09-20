@@ -23,7 +23,7 @@ test('reset sends one request, refuses a second, and announces the outcome', asy
     socket = ws;
     ws.onMessage(message => sent.push(String(message)));
     sendFullScreen(ws);
-    sendState(ws, 'ready', 'The box is ready. Press sky on the handset.');
+    sendState(ws, 'ready', 'The box is ready. Press tv guide on the handset.');
   });
   await page.goto('/');
   const reset = page.locator(resetButton);
@@ -36,10 +36,10 @@ test('reset sends one request, refuses a second, and announces the outcome', asy
   await expect(reset).toBeDisabled();
   await expect(page.locator('#reset-feedback')).toHaveText('Resetting the box…');
 
-  sendState(socket!, 'ready', 'The box was reset and restored to its startup state. Press sky on the handset.');
+  sendState(socket!, 'ready', 'The box was reset and restored to its startup state. Press tv guide on the handset.');
   await expect(page.locator('#reset-feedback')).toHaveText('The box was reset.');
   await expect(page.locator('#box-status'))
-    .toHaveText('The box was reset and restored to its startup state. Press sky on the handset.');
+    .toHaveText('The box was reset and restored to its startup state. Press tv guide on the handset.');
   expect(sent).toHaveLength(1);
 
   // It comes back by itself once the host would accept another request.
@@ -58,7 +58,7 @@ test('reset stays available on a halted box, where the handset does not', async 
   // This is the whole point of the control. A reset that went dark exactly
   // when the box did would be decoration.
   await expect(page.locator(resetButton)).toBeEnabled();
-  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Standby' })).toBeDisabled();
 
   await page.locator(resetButton).click();
@@ -73,7 +73,7 @@ test('reset is disabled while disconnected and sends nothing', async ({ page }) 
     ws.onMessage(message => sent.push(String(message)));
     if (sockets.length === 1) {
       sendFullScreen(ws);
-      sendState(ws, 'ready', 'The box is ready. Press sky on the handset.');
+      sendState(ws, 'ready', 'The box is ready. Press tv guide on the handset.');
     }
   });
   await page.goto('/');
@@ -90,7 +90,7 @@ test('reset is operable by keyboard and shows its states @motion', async ({ page
   await page.routeWebSocket('**/ws', ws => {
     ws.onMessage(message => sent.push(String(message)));
     sendFullScreen(ws);
-    sendState(ws, 'ready', 'The box is ready. Press sky on the handset.');
+    sendState(ws, 'ready', 'The box is ready. Press tv guide on the handset.');
   });
   await page.goto('/');
   const reset = page.locator(resetButton);
@@ -116,7 +116,7 @@ test('reset is operable by keyboard and shows its states @motion', async ({ page
 test('the reset explains itself and is not mistaken for the handset standby key', async ({ page }) => {
   await page.routeWebSocket('**/ws', ws => {
     sendFullScreen(ws);
-    sendState(ws, 'ready', 'The box is ready. Press sky on the handset.');
+    sendState(ws, 'ready', 'The box is ready. Press tv guide on the handset.');
   });
   await page.goto('/');
   const reset = page.locator(resetButton);

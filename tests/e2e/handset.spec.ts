@@ -13,7 +13,7 @@ function sendFullScreen(ws: WebSocketRoute, litPixel: number): void {
 
 function sendReady(ws: WebSocketRoute): void {
   sendFullScreen(ws, 7 * 720 + 5);
-  ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: 'The box is ready. Press sky.' }));
+  ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: 'The box is ready. Press tv guide.' }));
 }
 
 test('canvas paints pixels from a captured Go WebSocket frame', async ({ page }) => {
@@ -36,28 +36,28 @@ test('handset preserves the screen, refuses input during a socket loss, and resu
     if (sockets.length === 1) sendReady(ws);
   });
   await page.goto('/');
-  const sky = page.getByRole('button', { name: 'sky', exact: true });
-  await expect(sky).toBeEnabled();
+  const boxOffice = page.getByRole('button', { name: 'box office', exact: true });
+  await expect(boxOffice).toBeEnabled();
   const pixel = () => page.locator('#screen').evaluate((element: HTMLCanvasElement) =>
     [...element.getContext('2d')!.getImageData(5, 7, 1, 1).data]);
   await expect.poll(pixel).toEqual([255, 255, 255, 255]);
   await sockets[0].close();
   await expect(page.locator('#box-status')).toContainText('connection to the box was lost');
-  await expect(sky).toBeDisabled();
+  await expect(boxOffice).toBeDisabled();
   await expect(page.locator('#key-feedback')).toContainText('unavailable while disconnected');
   await page.screenshot({ path: testInfo.outputPath('disconnected-light.png'), fullPage: true, animations: 'disabled' });
-  await sky.evaluate((element: HTMLButtonElement) => element.click());
+  await boxOffice.evaluate((element: HTMLButtonElement) => element.click());
   expect(sent).toHaveLength(0);
   await expect.poll(pixel).toEqual([255, 255, 255, 255]);
   await expect.poll(() => sockets.length).toBe(2);
-  await expect(sky).toBeDisabled();
+  await expect(boxOffice).toBeDisabled();
   sendFullScreen(sockets[1], 7 * 720 + 6);
   sockets[1].send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: '' }));
-  await expect(sky).toBeEnabled();
+  await expect(boxOffice).toBeEnabled();
   await expect.poll(pixel).toEqual([0, 0, 0, 255]);
   await expect.poll(() => page.locator('#screen').evaluate((element: HTMLCanvasElement) =>
     [...element.getContext('2d')!.getImageData(6, 7, 1, 1).data])).toEqual([255, 255, 255, 255]);
-  await sky.click();
+  await boxOffice.click();
   await expect.poll(() => sent.length).toBe(1);
   const secondClosedAt = Date.now();
   await sockets[1].close();
@@ -75,14 +75,14 @@ test('a guest halt states its reason and refuses handset input', async ({ page }
     sendReady(ws);
   });
   await page.goto('/');
-  const sky = page.getByRole('button', { name: 'sky', exact: true });
-  await expect(sky).toBeEnabled();
+  const boxOffice = page.getByRole('button', { name: 'box office', exact: true });
+  await expect(boxOffice).toBeEnabled();
   socket!.send(JSON.stringify({ type: 'state', version: 1, phase: 'halted', reason: 'invalid guest instruction at 0x80001234' }));
   await expect(page.locator('#box-status')).toContainText('invalid guest instruction at 0x80001234');
-  await expect(sky).toBeDisabled();
+  await expect(boxOffice).toBeDisabled();
   await expect(page.locator('#key-feedback')).toContainText('unavailable while the box is stopped');
   await page.screenshot({ path: testInfo.outputPath('halted-dark.png'), fullPage: true, animations: 'disabled' });
-  await sky.evaluate((element: HTMLButtonElement) => element.click());
+  await boxOffice.evaluate((element: HTMLButtonElement) => element.click());
   expect(sent).toHaveLength(0);
 });
 
@@ -93,9 +93,9 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
     sendReady(ws);
   });
   await page.goto('/');
-  const sky = page.getByRole('button', { name: 'sky', exact: true });
-  await expect(sky).toBeEnabled();
-  await expect(page.locator('#box-status')).toHaveText('The box is ready. Press sky.');
+  const boxOffice = page.getByRole('button', { name: 'box office', exact: true });
+  await expect(boxOffice).toBeEnabled();
+  await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide.');
   await page.screenshot({ path: testInfo.outputPath('handset-ready.png'), fullPage: true, animations: 'disabled' });
 
   // The reset control sits before the handset, so Tab order enters the keys
@@ -113,32 +113,32 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
   expect(focus.color).toBe('rgb(255, 204, 82)');
 
   await page.keyboard.press('Tab');
-  await expect(sky).toBeFocused();
+  await expect(boxOffice).toBeFocused();
   await page.keyboard.down('Space');
-  await expect(sky).toHaveAttribute('data-pressed', 'true');
+  await expect(boxOffice).toHaveAttribute('data-pressed', 'true');
   await page.keyboard.up('Space');
-  await expect(sky).not.toHaveAttribute('data-pressed', 'true');
+  await expect(boxOffice).not.toHaveAttribute('data-pressed', 'true');
   await expect.poll(() => sent.length).toBe(1);
   expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 1, raw: 125, source: 0 });
-  await expect(page.locator('#key-feedback')).toContainText('sky sent to the box');
+  await expect(page.locator('#key-feedback')).toContainText('box office sent to the box');
 
-  const box = await sky.boundingBox();
-  if (!box) throw new Error('Sky key is not laid out');
+  const box = await boxOffice.boundingBox();
+  if (!box) throw new Error('The box office key is not laid out');
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
-  await expect(sky).toHaveAttribute('data-pressed', 'true');
+  await expect(boxOffice).toHaveAttribute('data-pressed', 'true');
   await page.mouse.up();
-  await expect(sky).not.toHaveAttribute('data-pressed', 'true');
+  await expect(boxOffice).not.toHaveAttribute('data-pressed', 'true');
   await expect.poll(() => sent.length).toBe(2);
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const duration = await sky.evaluate(element => getComputedStyle(element).transitionDuration);
+  const duration = await boxOffice.evaluate(element => getComputedStyle(element).transitionDuration);
   expect(duration).toBe('0.001s, 0.001s');
-  await sky.focus();
+  await boxOffice.focus();
   await page.keyboard.down('Enter');
-  await expect(sky).toHaveAttribute('data-pressed', 'true');
+  await expect(boxOffice).toHaveAttribute('data-pressed', 'true');
   await page.keyboard.up('Enter');
-  await expect(sky).not.toHaveAttribute('data-pressed', 'true');
+  await expect(boxOffice).not.toHaveAttribute('data-pressed', 'true');
 });
 
 test('every handset key has a visible Tab focus and a usable touch target', async ({ page }) => {
@@ -181,7 +181,7 @@ test('phone keeps the screen visible while handset keys receive focus', async ({
   await page.setViewportSize({ width: 320, height: 700 });
   await page.routeWebSocket('**/ws', ws => sendReady(ws));
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   const keys = page.locator('#handset button[data-raw]');
   await keys.first().focus();
@@ -233,11 +233,11 @@ test('touch activates a handset key at mobile width', async ({ browser }) => {
     sendReady(ws);
   });
   await page.goto('http://127.0.0.1:8766/');
-  const sky = page.getByRole('button', { name: 'sky', exact: true });
-  await sky.tap();
+  const boxOffice = page.getByRole('button', { name: 'box office', exact: true });
+  await boxOffice.tap();
   await expect.poll(() => sent.length).toBe(1);
   expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', raw: 125, source: 0 });
-  await expect(page.locator('#key-feedback')).toContainText('sky sent to the box');
+  await expect(page.locator('#key-feedback')).toContainText('box office sent to the box');
   await page.getByRole('button', { name: 'select', exact: true }).tap();
   await expect.poll(() => sent.length).toBe(2);
   const screen = await page.locator('#screen').boundingBox();
@@ -290,7 +290,7 @@ const geometry = (page: import('@playwright/test').Page) => page.evaluate(() => 
     screen: visible('#screen'),
     status: visible('.status-panel'),
     reset: visible('#reset-box'),
-    sky: visible('#handset button[data-raw="0x7D"]'),
+    boxOffice: visible('#handset button[data-raw="0x7D"]'),
     zeroKey: visible('#handset button[data-raw="0x00"]'),
     numberPad: visible('.number-pad'),
     screenTop: Math.round(box('#screen').top),
@@ -308,14 +308,14 @@ for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080]] as const)
     await page.setViewportSize({ width, height });
     await page.routeWebSocket('**/ws', ws => sendReady(ws));
     await page.goto('/');
-    await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
 
     const fitted = await geometry(page);
     // The point of the whole layout: no scrolling at all.
     expect(fitted.maxScroll).toBeLessThanOrEqual(0);
     expect(fitted.scrollWidth).toBe(width);
     // Both ends of the handset at once, which is what scrolling used to cost.
-    expect(fitted.sky).toBe(true);
+    expect(fitted.boxOffice).toBe(true);
     expect(fitted.zeroKey).toBe(true);
     expect(fitted.numberPad).toBe(true);
     // And the box it drives, with its status and its recovery control.
@@ -335,7 +335,7 @@ test('a window too short to fit the handset scrolls with the picture pinned', as
   await page.setViewportSize({ width: 1280, height: 620 });
   await page.routeWebSocket('**/ws', ws => sendReady(ws));
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
 
   const top = await geometry(page);
   expect(top.maxScroll).toBeGreaterThan(0); // otherwise this proves nothing

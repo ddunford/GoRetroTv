@@ -6630,3 +6630,33 @@ An encoder tested against a decoder written from the same reading of a format is
 wearing two hats. The Huffman defects above prove it: a round trip, byte-for-byte vectors and a
 transcribed reference decoder all agreed for as long as the guide was drawing `DreamTeams`. When a
 codec's output is eventually DRAWN, the drawing is the check.
+
+---
+
+## The ALL CHANNELS grid, re-measured WITH listings on air
+
+*2026-09-20. `sky-02me.5` ruled the empty grid "not a listings fault" on 16 Sep, and that ruling was
+sound reasoning on the evidence available — but it was made before this project could deliver a
+single programme, so it was an inference rather than a measurement. It has now been taken with
+sixty-seven programmes in the box's store, counted on its own per-event register.*
+
+**The ruling holds.** Route: box office (the menu) → LEFT to the TV GUIDE tab → select, which is
+`0x5C`. The grid draws
+
+    7.00pm Thu 24
+    ALL CHANNELS
+          Today  7.00pm      7.30pm      8.00pm
+
+— our in-world date, our clock, and correctly spaced half-hour columns — **and no channel rows**.
+Identical in substance to the pre-broadcast measurement. Whatever stops the row loop, it is not the
+absence of programme data.
+
+### One practical correction to the route
+
+`0x5C` appears not to work if it is pressed while the menu is still painting. The TV GUIDE tab
+takes a noticeable time to fill its rows when the box is also parsing a broadcast, and a select
+delivered during that window is lost silently — three attempts here concluded "select does nothing"
+before the settle was made long enough. Press, let the screen finish, then press again.
+
+That is the same instrument failure as hashing a frame at a chosen instruction, wearing different
+clothes: the box was not in the state the measurement assumed.

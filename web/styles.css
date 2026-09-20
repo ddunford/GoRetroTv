@@ -100,14 +100,20 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .remote { position: relative; width: min(100%, 338px); margin: 0 auto; padding: 23px 25px 31px; background: linear-gradient(135deg, var(--remote-top), var(--remote-bottom) 63%); border: 1px solid #6b7882; border-radius: 33px 33px 72px 72px; box-shadow: 13px 24px 40px #07101d54, inset 3px 3px 4px #ffffff2d, inset -3px -5px 5px #02081087; }
 .remote::before { content: ""; position: absolute; inset: 7px; border: 1px solid #ffffff18; border-radius: inherit; pointer-events: none; }
 .remote-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 24px; }
-.remote-logo { color: white; font-size: 32px; font-weight: 850; font-style: italic; letter-spacing: -.13em; line-height: 1; }
+/* Our mark, not the broadcaster's. This was a 32px italic tight-tracked
+   lowercase wordmark in white, which is the Sky logo redrawn in CSS -- a
+   trademark lookalike in OUR chrome, which is a different thing from the
+   firmware drawing its own interface on the canvas. Upright, normal tracking,
+   our accent colour, and it says whose emulator this is. */
+.remote-logo { color: #e8eef3; font-size: 17px; font-weight: 800; letter-spacing: -.01em; line-height: 1; }
+.remote-logo-accent { color: var(--accent); }
 .key { position: relative; min-height: 44px; min-width: 44px; padding: 5px 7px; color: var(--key-ink); font-size: 11px; font-weight: 800; line-height: 1.1; text-align: center; text-transform: lowercase; background: linear-gradient(var(--key-top), var(--key-bottom)); border: 1px solid #f8faf4; border-bottom-color: #a1aaa9; border-radius: 12px; box-shadow: 0 3px 0 #121d27, 0 5px 8px #02070c7a; cursor: pointer; transition: var(--motion-state); touch-action: manipulation; }
 .key:disabled { opacity: .45; cursor: not-allowed; }
 .key:focus-visible { outline: 3px solid #ffcc52; outline-offset: 3px; z-index: 1; }
 .key:active:not(:disabled), .key[data-pressed="true"]:not(:disabled) { transform: translateY(2px) scale(.97); box-shadow: 0 1px 0 #101820, 0 2px 4px #02070c7a; }
 @media (hover: hover) { .key:hover:not(:disabled) { transform: translateY(-2px); } .key:active:not(:disabled), .key[data-pressed="true"]:not(:disabled) { transform: translateY(2px) scale(.97); } }
 .remote-primary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.remote-primary .sky { color: #fff; font-size: 16px; font-style: italic; background: linear-gradient(#1685d5, #035a9f); border-color: #59b6ec; }
+.remote-primary .sky { color: #fff; font-size: 15px; font-weight: 800; background: linear-gradient(#4b5d6b, #2b3947); border-color: #7d8f9d; }
 .remote-head .power { width: 45px; height: 45px; padding: 0; color: white; font-size: 24px; background: linear-gradient(#ed6b68, #af2b36); border-color: #ff928e; border-radius: 50%; }
 .remote-nav { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 47px); gap: 5px; margin: 23px 24px 12px; }
 .remote-nav .up { grid-column: 2; grid-row: 1; }

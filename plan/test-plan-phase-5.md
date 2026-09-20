@@ -126,3 +126,20 @@
   (`.artifacts/reset-light.png`, `reset-dark.png`, `reset-mobile-dark.png`); `scrollWidth` was 390
   at 390 px and the button measured 140 × 44. `go test -race ./...`, `./ctl.sh lint`,
   `npm run wire:check`, typecheck, CSS lint and the 17-test local Playwright suite all pass.
+- [x] **TC-5.14: The screen stays with the handset while scrolling** (covers: TASK-5.12) — on a
+  desktop window you must be able to watch the box and press its lower keys at the same time,
+  and nothing may be covered by the pinned screen.
+  **Result:** `tests/e2e/handset.spec.ts` drives 1280 × 620 and 1440 × 900, scrolls to the far end
+  and asserts the canvas, the status line, the reset and the number pad are all fully in the
+  viewport, that the reset is the element at its own coordinates rather than something painted over
+  it, that the page never scrolls horizontally, and that the canvas is **pinned at the sticky
+  offset** rather than merely still on screen. That last assertion is the one that matters:
+  capping the stage's height alone shortens the page enough that everything happens to fit at the
+  bottom, so removing `position: sticky` left the first version of this test passing. With the
+  assertion added, the same mutation fails at 1280 × 620 (canvas top 2 px, not ≥ 16). Light and
+  dark were inspected at 1280 × 620 and 1440 × 900 scrolled to the end
+  (`.artifacts/final-620-light.png`, `.artifacts/stage-1440-bottom-dark.png`), which is how the
+  help text was caught overprinting the reset note — anything left below a pinned stage scrolls
+  under it, so that copy moved above the television. Mobile was re-checked at 390 × 780: the stage
+  is `display: contents` there and the television sticks against the grid as it did before, with
+  `scrollWidth` 390. Full local Playwright suite 19/19.

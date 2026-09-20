@@ -15,6 +15,10 @@
   --key-top: #eef0ec;
   --key-bottom: #cbd0cd;
   --key-ink: #152334;
+  /* Everything in the sticky stage that is not the picture: the television's
+     own 92px of casing, the status line, the reset and its note, the margins
+     between them, and the 16px the stage is pinned at. Measured, not guessed. */
+  --stage-chrome: 340px;
   --duration-fast: 110ms;
   --duration-state: 170ms;
   --ease-press: cubic-bezier(.2, .7, .3, 1);
@@ -93,7 +97,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .reset-box:active:not(:disabled), .reset-box[data-pressed="true"]:not(:disabled) { transform: translateY(1px) scale(.98); }
 .reset-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .reset-feedback { min-height: 20px; margin: 8px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.screen-help { margin: 12px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.screen-help { margin: 12px 2px 22px; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .controls-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .controls-heading h2 { margin: 0; font-size: 28px; line-height: 1; letter-spacing: -.05em; }
 .controls-caption { max-width: 115px; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: right; }
@@ -127,6 +131,31 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .remote-bottom span { width: 15px; height: 2px; border-radius: 2px; background: #80909d; }
 .key-feedback { min-height: 38px; margin: 17px 8px 0; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
 
+/* The screen follows the handset. Below 760px the television is already
+   sticky; above it you had to scroll away from the picture to reach the lower
+   keys. The whole STAGE sticks, not just the television: the status line and
+   the reset are about the screen and have to stay with it, and an earlier
+   version that pinned the television alone had both of them sliding
+   underneath it, which put the recovery control behind the picture at exactly
+   the scroll position a stuck viewer would be at.
+
+   .viewer needs the row's full height or the sticky element has nowhere to
+   travel. The stage is capped from the VIEWPORT HEIGHT -- applied as a width,
+   so the 5:4 picture keeps its ratio and the bezel shrinks with it rather
+   than pillarboxing -- because pinning a stage taller than the window would
+   clip the picture, which is worse than the scrolling it fixes. On a tall
+   window the column width is the smaller limit and the cap does nothing. */
+@media (min-width: 761px) {
+  .viewer { align-self: stretch; }
+  .viewer-stage {
+    position: sticky;
+    top: 16px;
+    z-index: 2;
+    max-width: calc((100vh - var(--stage-chrome)) * 1.25 + 56px);
+    margin-inline: auto;
+  }
+}
+
 @media (max-width: 1000px) {
   .experience { grid-template-columns: minmax(0, 1fr) 310px; gap: 30px; }
   .remote { padding-inline: 19px; }
@@ -139,9 +168,15 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   .era-tag { max-width: 130px; font-size: 10px; }
   .experience { grid-template-columns: 1fr; gap: 16px; padding-top: 32px; }
   .viewer { display: contents; }
-  .television { position: sticky; top: 8px; z-index: 3; width: min(100%, 400px); justify-self: center; }
+  /* The stage is a DESKTOP grouping. Here the television sticks against the
+     grid itself, as it did before the stage existed, so the stage must get
+     out of the way -- left in place it becomes the sticky container and the
+     picture scrolls away after a few hundred pixels. */
+  .viewer-stage { display: contents; }
+  .television { position: sticky; top: 8px; z-index: 3; width: min(100%, 400px); margin-inline: auto; }
   .intro-copy { margin-bottom: 22px; }
-  .status-panel, .screen-help { margin-top: 0; }
+  .status-panel { margin-top: 0; }
+  .screen-help { margin-top: 0; margin-bottom: 0; }
   .box-actions { flex-wrap: wrap; gap: 10px; }
   .controls { margin-top: 20px; }
   .controls-heading { max-width: 338px; margin-inline: auto; }
@@ -159,6 +194,9 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   .controls-heading { display: block; }
   .controls-caption { display: block; max-width: none; margin-top: 8px; text-align: left; }
   .remote { padding-inline: 14px; }
+  /* 320px of height is not enough for standing explanation; the screen and a
+     usable handset are what the space is for. */
+  .screen-help { display: none; }
   .remote-primary .key:not(.sky) { padding-inline: 2px; font-size: 10px; }
   .remote-nav { margin-inline: 5px; }
   .number-pad { padding-inline: 0; }

@@ -26,26 +26,28 @@
           <p class="eyebrow">THE ORIGINAL FIRMWARE, LIVE</p>
           <h1 id="viewer-title">A Sky Digibox<br>in your browser.</h1>
           <p class="intro-copy">Give the box a moment to find its feet. Then press <strong>sky</strong> on the handset to open the real menu.</p>
+          <p class="screen-help">The screen is the box’s own framebuffer. The handset sends key presses to its firmware.</p>
         </div>
 
-        <div class="television" aria-label="Digibox television display">
-          <div class="television-topline"><span class="signal-light" id="signal-light" aria-hidden="true"></span><span>DIGITAL SATELLITE</span><span class="topline-model">2500N</span></div>
-          <div class="screen-well">
-            <canvas id="screen" width="720" height="576" role="img" aria-label="Sky Digibox screen" aria-describedby="box-status"></canvas>
+        <div class="viewer-stage">
+          <div class="television" aria-label="Digibox television display">
+            <div class="television-topline"><span class="signal-light" id="signal-light" aria-hidden="true"></span><span>DIGITAL SATELLITE</span><span class="topline-model">2500N</span></div>
+            <div class="screen-well">
+              <canvas id="screen" width="720" height="576" role="img" aria-label="Sky Digibox screen" aria-describedby="box-status"></canvas>
+            </div>
+            <div class="television-footer"><span>PACE</span><span>SKY DIGIBOX</span></div>
           </div>
-          <div class="television-footer"><span>PACE</span><span>SKY DIGIBOX</span></div>
-        </div>
 
-        <div class="status-panel" role="status" aria-live="polite" aria-atomic="true">
-          <span class="status-icon" aria-hidden="true"></span>
-          <p id="box-status">Connecting to the Digibox…</p>
+          <div class="status-panel" role="status" aria-live="polite" aria-atomic="true">
+            <span class="status-icon" aria-hidden="true"></span>
+            <p id="box-status">Connecting to the Digibox…</p>
+          </div>
+          <div class="box-actions">
+            <button class="reset-box" type="button" id="reset-box" aria-describedby="reset-note" disabled>Reset the box</button>
+            <p class="reset-note" id="reset-note">Restarts the box itself, for everyone watching — use it if the screen stops responding. The handset’s standby key talks to the firmware instead.</p>
+          </div>
+          <p class="reset-feedback" id="reset-feedback" role="status" aria-live="polite">The reset will be available once the box connects.</p>
         </div>
-        <div class="box-actions">
-          <button class="reset-box" type="button" id="reset-box" aria-describedby="reset-note" disabled>Reset the box</button>
-          <p class="reset-note" id="reset-note">Restarts the box itself, for everyone watching — use it if the screen stops responding. The handset’s standby key talks to the firmware instead.</p>
-        </div>
-        <p class="reset-feedback" id="reset-feedback" role="status" aria-live="polite">The reset will be available once the box connects.</p>
-        <p class="screen-help">The screen above is the box’s own framebuffer. The handset sends key presses to its firmware.</p>
       </section>
 
       <aside class="controls" aria-labelledby="handset-heading">

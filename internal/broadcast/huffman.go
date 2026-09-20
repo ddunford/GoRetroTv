@@ -28,12 +28,26 @@ type HuffmanDictionary struct {
 
 // LoadHuffmanDictionary reads the `<value>=<bits>` table.
 //
-// The parse mirrors openTVtoXML's huffman_read_dictionary(), which tries three
-// scanf patterns IN ORDER: a single character, then a multi-character phrase,
-// then an empty value. That order is load-bearing rather than incidental —
-// splitting naively on '=' mis-reads both the line that maps SPACE (it begins
-// with one) and any phrase containing an '='. Partitioning on the FIRST '='
-// reproduces all three cases.
+// THE TABLE IS A DECODER'S, AND AN ENCODER CANNOT READ IT STRAIGHT. Two things
+// about it caught this project out, and both produced text that was wrong on
+// screen while every round-trip test passed:
+//
+//  1. A VALUE CAN HAVE MANY CODES, and only the shortest is the real one. Space
+//     appears 65 times in the Sky table: once as `110`, once as seven bits,
+//     once as seventeen, and sixty-two times as twenty-seven-bit leaves. Those
+//     long ones are the flattened tree's padding, not alternative spellings,
+//     and the box does not decode them back to a space. Keeping whichever came
+//     last -- which a plain map assignment does -- emitted a 27-bit filler for
+//     every space in every title, and the spaces vanished from the guide.
+//
+//  2. THE PARSE ORDER IS LOAD-BEARING. openTVtoXML's huffman_read_dictionary()
+//     tries a SINGLE CHARACTER pattern before a phrase pattern, and that order
+//     is what reads `==<bits>` as the code for "=" rather than as an empty
+//     value with malformed bits. Cutting on the first '=' drops that entry, so
+//     a title containing an equals sign could not be encoded at all.
+//
+// Both are fixed here: a single-character value is recognised first, and a
+// value already seen keeps its SHORTER code.
 func LoadHuffmanDictionary(path string) (*HuffmanDictionary, error) {
 	file, err := os.Open(path) // #nosec G304 -- operator-supplied dictionary, like the firmware
 	if err != nil {
@@ -48,12 +62,18 @@ func LoadHuffmanDictionary(path string) (*HuffmanDictionary, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := strings.TrimRight(scanner.Text(), "\r")
-		value, bits, found := strings.Cut(line, "=")
+		value, bits, found := splitDictionaryLine(line)
 		if !found || bits == "" || strings.Trim(bits, "01") != "" {
 			continue
 		}
 		if value == "" {
-			dict.terminator = bits
+			// The terminator too: shortest wins, for the same reason.
+			if dict.terminator == "" || len(bits) < len(dict.terminator) {
+				dict.terminator = bits
+			}
+			continue
+		}
+		if existing, ok := dict.codes[value]; ok && len(existing) <= len(bits) {
 			continue
 		}
 		dict.codes[value] = bits
@@ -75,6 +95,20 @@ func LoadHuffmanDictionary(path string) (*HuffmanDictionary, error) {
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(dict.lengths)))
 	return dict, nil
+}
+
+// splitDictionaryLine reads one `<value>=<bits>` line in openTVtoXML's order: a
+// single character first, then anything else at its first '='.
+//
+// The order is the whole function. ` =110` and `==1010` both have '=' at index
+// one, and taking the single character first reads them as SPACE and EQUALS;
+// cutting at the first '=' reads the second as an empty value with bits that
+// begin with '=', which is then thrown away.
+func splitDictionaryLine(line string) (value, bits string, found bool) {
+	if len(line) >= 2 && line[1] == '=' {
+		return line[:1], line[2:], true
+	}
+	return strings.Cut(line, "=")
 }
 
 // Entries reports how many values the dictionary can code, so a caller can say
@@ -110,7 +144,7 @@ func (d *HuffmanDictionary) Encode(text string) ([]byte, error) {
 		}
 	}
 	bits.WriteString(d.terminator)
-	return packHuffman(bits.String()), nil
+	return packHuffman(d.padToByteBoundary(bits.String())), nil
 }
 
 // packHuffman turns a bit string into the bytes the decoder expects.
@@ -121,9 +155,45 @@ func (d *HuffmanDictionary) Encode(text string) ([]byte, error) {
 // packs eight bits into byte 0 produces plausible-looking output that decodes
 // to nonsense — which is exactly the kind of failure this box gives no error
 // for.
+// padToByteBoundary fills the last byte with bits that cannot finish a symbol.
+//
+// THE PADDING IS DECODED. The box reads a title record to the length the record
+// declares, not to the terminator, so whatever sits in the tail of the final
+// byte is walked down the tree like anything else -- and zero-fill is the worst
+// possible choice, because `s` is coded `0000` in the Sky table. Every title
+// broadcast before this gained a trailing "s": "Dream Team" drew as "Dream
+// Teams". Our own decoder stops at the terminator and never saw it, which is
+// how it survived a round-trip test.
+//
+// The filler is the TERMINATOR'S OWN BITS, truncated to what is left. Every
+// proper prefix of a code is by construction not a leaf, so a partial
+// terminator walks part-way down the tree and runs out of data without
+// emitting anything; a whole one lands on the terminator again, which is
+// harmless. It needs no separate reserved code and stays correct if the
+// dictionary changes.
+func (d *HuffmanDictionary) padToByteBoundary(bits string) string {
+	// The first byte carries six bits and every later byte eight.
+	total := firstByteBits
+	for total < len(bits) {
+		total += 8
+	}
+	for len(bits) < total {
+		if need := total - len(bits); need < len(d.terminator) {
+			bits += d.terminator[:need]
+		} else {
+			bits += d.terminator
+		}
+	}
+	return bits
+}
+
+// firstByteBits is how much of the first byte carries code. The Sky format
+// spends the top two bits of the first byte on something else, so it holds six.
+const firstByteBits = 6
+
 func packHuffman(bits string) []byte {
-	out := []byte{bitsToByte(bits, 0, 6)}
-	for i := 6; i < len(bits); i += 8 {
+	out := []byte{bitsToByte(bits, 0, firstByteBits)}
+	for i := firstByteBits; i < len(bits); i += 8 {
 		out = append(out, bitsToByte(bits, i, 8))
 	}
 	return out

@@ -6548,3 +6548,55 @@ A code that does nothing from the idle picture may still do something once a men
 first sweep of this map missed that entirely by pressing everything from idle. From inside the
 menu: `0x60`, `0x61`, `0x62` and `0x81` move the highlight or open a sub-screen, `0x65`, `0x80` and
 `0x83` exit to the picture, and `0xF7`-`0xFC` each draw something of their own.
+
+---
+
+## The Huffman dictionary is a DECODER'S table, and two readings of it were wrong
+
+*Measured 2026-09-20, against the box's screen. Both defects had been in every title section this
+project ever broadcast, and both survived a byte-for-byte reference-vector test — because the
+vectors came from an encoder that had been validated against a decoder, and the two shared the
+misreadings.*
+
+### 1. A value's real code is the SHORTEST of its many codes
+
+`skyuk.dict` has 512 lines and 447 codeable values. The gap is almost all SPACE, which appears
+**sixty-five times**:
+
+    3 bits    110
+    7 bits    1110111
+    17 bits   11100011011011101
+    27 bits   x62
+
+The long ones are the flattened tree's padding, not alternative spellings, and the box does not
+decode them back to a space. A loader that keeps the LAST duplicate — which a plain map assignment
+does — emitted a 27-bit filler for every space in every title, and the guide drew `DreamTeam`
+where the schedule said `Dream Team`.
+
+### 2. THE PADDING IS DECODED, and `s` is coded `0000`
+
+The box reads a title record to the length the record declares, not to the terminator, so whatever
+sits in the tail of the final byte is walked down the tree like any other bits. Zero-filling it is
+the worst available choice in this table: `s=0000`. Every title gained a trailing `s` —
+`Dream Teams`, `WalkerTexasRangers` — and a decoder that stops at the terminator, as ours did,
+never sees it.
+
+The fix pads with the TERMINATOR'S OWN BITS, truncated to what is left. Every proper prefix of a
+code is by construction not a leaf, so a partial terminator walks part-way down the tree and runs
+out of data without emitting anything. It needs no reserved code and stays correct if the
+dictionary changes.
+
+### 3. And the parse order recovers one more value
+
+openTVtoXML's `huffman_read_dictionary()` tries a SINGLE CHARACTER pattern before a phrase pattern.
+That order is what reads `==<bits>` as the code for `=` rather than as an empty value with
+malformed bits. Cutting at the first `=` dropped it, so a title containing an equals sign could not
+be encoded at all. The recorded entry count moves from 446 to 447.
+
+### The method note, which is the point
+
+**A round trip is not validation.** These three were invisible to a round-trip test, to a
+byte-for-byte vector test, and to a decoder transcribed from the reference — because every one of
+those instruments shared the encoder's reading of the dictionary. The only instrument that
+disagreed was the box drawing the text on a screen, and it had been disagreeing in plain sight for
+as long as there have been titles to draw.

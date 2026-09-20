@@ -20,28 +20,42 @@ func testDictionary(t *testing.T) *HuffmanDictionary {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dict.Entries() != 446 {
-		t.Fatalf("dictionary has %d entries, want the 446 the MANIFEST records", dict.Entries())
+	if dict.Entries() != 447 {
+		t.Fatalf("dictionary has %d entries, want the 447 the MANIFEST records", dict.Entries())
 	}
 	return dict
 }
 
-// Byte-for-byte against the Python codec this is a port of, which was itself
-// validated by round-tripping through a transcription of the reference
-// DECODER. Pinning the bytes rather than only the round trip matters: an
-// encoder can be self-consistently wrong — pack eight bits into byte 0 instead
-// of six and encode/decode still agree with each other while the box reads
-// nonsense.
+// Byte-for-byte, so that a change to the encoder has to be deliberate.
+//
+// THESE VECTORS WERE WRONG UNTIL 2026-09-20, and the way they were wrong is
+// the lesson. They were taken from a Python codec "validated by round-tripping
+// through a transcription of the reference decoder" — which is an encoder
+// checked against a decoder, the exact self-consistency the old comment here
+// warned about while relying on it. Both halves shared two misreadings, so
+// they agreed perfectly and the box did not:
+//
+//   - a space was emitted as one of the dictionary's 27-bit filler leaves
+//     instead of its real three-bit code, and every title lost its spaces;
+//   - the last byte was zero-filled, and `s` is coded `0000`, so every title
+//     gained a trailing "s".
+//
+// The authority for the current vectors is THE BOX'S SCREEN: with them, the
+// guide draws "Dream Team" and "Walker Texas Ranger"; with the old ones it drew
+// "DreamTeams" and "WalkerTexasRangers". Pinning the bytes is still worth doing
+// — an encoder can be self-consistently wrong in other ways, and packing eight
+// bits into byte 0 instead of six is the classic — but a round trip must never
+// again be mistaken for validation.
 func TestHuffmanMatchesTheValidatedEncoder(t *testing.T) {
 	t.Parallel()
 	dict := testDictionary(t)
 	for _, tc := range []struct{ text, want string }{
-		{"The Simpsons", "2ae3015ab8c32a256b1c2ae3069010"},
-		{"Sky News", "04c046ae30cad5c61fc010"},
-		{"Football", "2a866dc2694100"},
-		{"News at Ten", "2ae30fe055c619596ab8c32a2fdc40"},
-		{" leading space", "2ae30cad3e53571829475718654079e7c400"},
-		{"A", "388400"},
+		{"The Simpsons", "2ae3015c256b1c2ae3069010"},
+		{"Sky News", "04c04755c61fc010"},
+		{"Football", "2a866dc2694102"},
+		{"News at Ten", "2ae30fe0696c2fdc40"},
+		{" leading space", "353e53571829478079e7c408"},
+		{"A", "388408"},
 	} {
 		got, err := dict.Encode(tc.text)
 		if err != nil {

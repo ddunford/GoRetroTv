@@ -168,7 +168,19 @@
   itself. What is not solved is that the guide does not DRAW them, which is the distinction this
   case exists to keep — an earlier version of this work counted the per-event register and called it
   working. The instrument must end at the screen.
-- [ ] **TC-6.14: A title draws on screen with its spaces** (covers: TASK-6.14) — read the drawn text,
-  not the round trip. An encoder checked against its own decoder agrees with itself whatever they
-  both get wrong, which is why this shipped.
+- [x] **TC-6.14: A title draws on screen with its spaces** (covers: TASK-6.14) — the guide draws
+  `Dream Team` and `Walker Texas Ranger`, where it drew `DreamTeams` and `WalkerTexasRangers`.
+  Pinned by `TestTheDictionaryIsReadTheWayAnEncoderNeedsIt` (shortest-code-wins, and `=` parsed as a
+  value) and `TestTheRealTableGivesSpaceItsShortCode`.
+
+  **Three defects, all invisible to every instrument that shared the encoder's reading.** A value
+  has many codes and only the shortest is real (SPACE appears 65 times, once as `110` and 62 times
+  as 27-bit filler); the padding in the final byte IS decoded and `s` is coded `0000`, so zero-fill
+  appended an `s` to every title; and `==<bits>`, the code for `=`, was dropped by cutting at the
+  first `=`.
+
+  The old reference vectors came from an encoder "validated by round-tripping through a
+  transcription of the reference decoder" — an encoder checked against a decoder, which is one
+  instrument and not two. They have been regenerated and their provenance comment now says the
+  authority is the screen.
 - [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10) — SPEC success criterion 4.

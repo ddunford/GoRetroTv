@@ -20,7 +20,7 @@ re-derived — `docs/reference/digibox-emulation.md` and `digibox-next-session.m
 - [ ] `TASK-6.9` ⫘ Tests, including a cross-check of the Huffman encoder against the reference decoder → `/go-engineer` [TC-6.1, TC-6.2, TC-6.3, TC-6.4, TC-6.5, TC-6.6, TC-6.7, TC-6.8]
 - [ ] `TASK-6.10` ⫘ Playwright: press tv guide, read now and next → `/qa-test-engineer` [TC-6.9]
 - [ ] `TASK-6.13` Five days in eight arm the listings PID and program no title filter. On MJD mod 8 in {1,3,6} the box programs a title match unit in ~430k instructions; on {0,2,4,5,7} it arms the right PID and programs none in 200M. The transmitter routes around it by deriving the addressing, and the programmes are then STORED — 67 of 67 registered — but the guide does not draw them, so the demo still has to pin a date in the set → `/go-engineer` [TC-6.13]
-- [ ] `TASK-6.14` Huffman-encoded titles lose their spaces and gain a trailing character — `Dream Team` draws as `DreamTeams`. Present since the first title section went on air and invisible because every title tested stayed legible; the encoder's round-trip test against its own decoder cannot see it, because the two share the mistake → `/go-engineer` [TC-6.14]
+- [x] `TASK-6.14` Huffman-encoded titles lose their spaces and gain a trailing character — `Dream Team` draws as `DreamTeams`. Present since the first title section went on air and invisible because every title tested stayed legible; the encoder's round-trip test against its own decoder cannot see it, because the two share the mistake → `/go-engineer` [TC-6.14]
 - [ ] `TASK-6.11` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns (measured — do not re-derive)

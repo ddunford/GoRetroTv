@@ -143,10 +143,3 @@ func TestSectionRingWrapKeepsWholeSectionTogether(t *testing.T) {
 		t.Fatalf("wrapped status byte = %#x", got)
 	}
 }
-
-func TestMPEGCRCAnchor(t *testing.T) {
-	t.Parallel()
-	if got := mpegCRC([]byte("123456789")); got != 0x0376e6e7 {
-		t.Fatalf("MPEG CRC of standard check vector = %#08x", got)
-	}
-}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/dvb"
 )
 
 const (
@@ -131,7 +132,7 @@ func (d *Demux) continueTransport(channel uint8, payload []byte) error {
 }
 
 func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
-	if mpegCRC(section) != 0 {
+	if dvb.MPEGCRC32(section) != 0 {
 		return nil
 	}
 	for i, offset := range [...]int{0, 3, 4} {

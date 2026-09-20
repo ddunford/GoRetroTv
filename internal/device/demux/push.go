@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/dvb"
 	"github.com/ddunford/goretrotv/internal/memory"
 )
 
@@ -48,26 +49,11 @@ func validateSection(section []byte) error {
 		return fmt.Errorf("demux: section length %d differs from %d bytes", declared, len(section))
 	}
 	if section[1]&0x80 != 0 || section[0] == 0x73 {
-		if len(section) < 7 || mpegCRC(section) != 0 {
+		if len(section) < 7 || dvb.MPEGCRC32(section) != 0 {
 			return fmt.Errorf("demux: invalid MPEG section CRC")
 		}
 	}
 	return nil
-}
-
-func mpegCRC(data []byte) uint32 {
-	crc := ^uint32(0)
-	for _, b := range data {
-		crc ^= uint32(b) << 24
-		for bit := 0; bit < 8; bit++ {
-			if crc&0x80000000 != 0 {
-				crc = crc<<1 ^ 0x04c11db7
-			} else {
-				crc <<= 1
-			}
-		}
-	}
-	return crc
 }
 
 func (d *Demux) pushFilter(filter uint8, section []byte) error {

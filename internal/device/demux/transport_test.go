@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/ddunford/goretrotv/internal/dvb"
 	"github.com/ddunford/goretrotv/internal/memory"
 )
 
@@ -61,7 +62,7 @@ func TestTransportRejectsUnrepresentableWritePointer(t *testing.T) {
 	section := make([]byte, 0, 7)
 	section = append(section, 0x00, 0xb0, 0x04)
 	var checksum [4]byte
-	binary.BigEndian.PutUint32(checksum[:], mpegCRC(section))
+	binary.BigEndian.PutUint32(checksum[:], dvb.MPEGCRC32(section))
 	section = append(section, checksum[:]...)
 	d.indirect[0], d.indirect[3], d.writePointer[0] = 0x1ffffc, 0x200010, 0x1ffffc
 	if err := d.acceptTransportSection(0, section); err == nil {

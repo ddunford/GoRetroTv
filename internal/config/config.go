@@ -52,6 +52,32 @@ type Config struct {
 	// WebDir contains the authored page and compiled TypeScript modules.
 	WebDir string `env:"GORETROTV_WEB_DIR"`
 
+	// ListingsPath is the editable schedule the modelled multiplex broadcasts.
+	// Empty means transmit nothing, which is a supported way to run: the box
+	// boots, the menus work, and the guide says there is no schedule
+	// information -- which is exactly what a real box off the dish does.
+	ListingsPath string `env:"GORETROTV_LISTINGS_PATH"`
+
+	// DictionaryPath is the Sky/OpenTV Huffman dictionary the title sections
+	// are compressed with. It is third-party data and is not redistributable,
+	// so it is mounted rather than built in; see dictionaries/MANIFEST.md.
+	//
+	// It is required in order to broadcast and absent by default, and the
+	// server says so rather than starting a silent multiplex: a schedule
+	// configured with no dictionary is a demo that looks identical to one with
+	// no schedule at all.
+	DictionaryPath string `env:"GORETROTV_DICTIONARY_PATH"`
+
+	// BroadcastDayMJD pins the in-world day, as a Modified Julian Date.
+	//
+	// It exists because of a measured defect rather than as a preference: this
+	// box programs a listings filter only on three of the eight days in the
+	// PID rotation (MJD mod 8 in 1, 3 or 6), so a day chosen freely leaves the
+	// guide empty five times in eight with no error anywhere. The default is
+	// 15 June 1998, which is in the set. When TASK-6.13 is understood this
+	// becomes a real clock and this setting goes.
+	BroadcastDayMJD int `env:"GORETROTV_BROADCAST_DAY_MJD"`
+
 	// ServiceName labels log lines.
 	ServiceName string `env:"GORETROTV_SERVICE_NAME"`
 
@@ -82,12 +108,13 @@ type Config struct {
 // a contradiction — the default would be the guess the requirement exists to prevent — and a test
 // asserts that none of them has one.
 var Defaults = Config{
-	ServiceName: "goretrotv",
-	HTTPAddr:    "127.0.0.1:8099",
-	WebDir:      "web",
-	LogLevel:    "info",
-	LogFormat:   "json",
-	EnablePprof: false,
+	ServiceName:     "goretrotv",
+	BroadcastDayMJD: 51171, // Christmas Eve 1998
+	HTTPAddr:        "127.0.0.1:8099",
+	WebDir:          "web",
+	LogLevel:        "info",
+	LogFormat:       "json",
+	EnablePprof:     false,
 }
 
 // Variable describes one environment setting, as declared by the struct tags.

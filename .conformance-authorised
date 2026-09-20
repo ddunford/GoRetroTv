@@ -82,3 +82,7 @@ digest: b7511b274d6e0f8944563131b355c2210f6f3b03668d87320d32454b088086e8
   when: 2026-09-17T15:07:26Z
    why: Phase 5 public acceptance needs a repeatable restart through the project control script so Playwright can verify the real firmware screen and Sky menu from a known private snapshot
 
+digest: 34d180965af6a2aa8e8745e882e1964112ac0c9c6cdedb9d04a7dbd9efd44fe6
+  when: 2026-09-20T19:13:48Z
+   why: The modelled multiplex needs two more read-only host mounts and three settings. docker-compose.yml is governed because it carries the loopback-only port mapping that ARCH-DEV-1 checks, and that mapping is UNCHANGED: ports still bind 127.0.0.1 and GORETROTV_BIND_ALL_INTERFACES stays literal. What changed is the broadcast — dictionaries/ mounted read-only exactly as firmware/ is, because the Sky Huffman dictionary is third-party data that must never enter the image; listings.json mounted read-only so the schedule can be edited on the host without a rebuild; and GORETROTV_LISTINGS_PATH, GORETROTV_DICTIONARY_PATH and GORETROTV_BROADCAST_DAY_MJD declared. No developer surface is opened and no bind is widened.
+

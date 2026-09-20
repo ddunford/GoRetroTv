@@ -6433,3 +6433,70 @@ So the lesson is not the usual one. The census was too narrow, the answer it gav
 right, and the cost of the narrowness was a missing observation rather than a wrong one. Widening it
 was still the right move, and the unconditional dump is what made the day-of-eight rotation
 provable. The census now accepts the whole OpenTV title family.
+
+---
+
+## Addressing the listings: two masks, and two facts that came off the screen
+
+*Measured 2026-09-20 while wiring the modelled multiplex into the running server. Everything here
+was found by being wrong first, and each wrong reading presented as **"the box is not asking"** —
+which is the same symptom as a box that has not acquired, a box on the wrong day, and a box whose
+sections were dropped by the hardware. That symptom has now been produced by four distinct causes in
+this project, so it should be treated as "something upstream is wrong" and never as a finding.*
+
+### 1. The table-id match mask is not always `0xFE`
+
+`a3/fe` and `a3/ff` have both been observed on the same firmware, for the same purpose. A census
+written as `mask != 0xFE -> skip` reported that a box had programmed no listings filter while its
+unit 7 read, one byte pair per match byte as `value/mask`:
+
+    a3/ff 0b/ff b8/ff 00/00 00/00 00/00 c7/ff 23/ff 00/00 00/70
+
+That is table `0xA3` matched exactly, extension `0x0BB8`, MJD `0xC723` = 50979 = 15 June 1998 —
+the right extension and the right day, on a box being reported as not asking.
+
+The only invariants worth testing are that the unit compares the table id at all (`mask != 0`) and
+that the value is one the title parsers take (`0xA0`-`0xA4`, `0xB0`). Send back exactly the value
+that was read and both masks are satisfied.
+
+### 2. THE EXTENSION HAS A MASK, AND ONE REQUEST COVERS A SET OF CHANNELS
+
+This is the important one. The box does not ask about one channel at a time. It builds a **set
+filter**: the extension VALUE is the bitwise OR of the listings ids it wants, and the extension MASK
+clears the bits that differ between them. Swept by loading N channels with ids `0x0BB8` upwards:
+
+    channels loaded   1        2        3        4        5        6
+    extension asked   0x0BB8   0x0BB9   0x0BBB   0x0BBB   0x0BBF   0x0BBF
+                      = the running OR of 0x0BB8, 0x0BB9, 0x0BBA, 0x0BBB, 0x0BBC, 0x0BBD
+
+and with six loaded the full unit reads `bf/f8` — value `0xBF`, mask `0xF8`, admitting `0x0BB8`
+through `0x0BBF`.
+
+**So the value on its own is frequently nobody's listings id.** A transmitter that reads it and
+looks up the channel it names finds nothing, sends nothing, and reports nothing. Answering correctly
+means asking each channel whether the filter wants it: `id & mask == value & mask`.
+
+### 3. The guide's row number is the LISTINGS ID, not the line-up's channel number
+
+With `listingsId` 3000 and `channel` 101 the guide drew **`3000 Sky One`**. Setting `listingsId` to
+101 drew **`101 Sky One`**. Whatever the line-up's channel field is for, it is not what the now/next
+banner prints, so a channel's listings id must BE the number a viewer expects to see.
+
+### 4. The box applies its declared time offset to PROGRAMME times as well as to the clock
+
+With a TOT declaring +60 (BST) and a programme sent at 19:00, the banner read `8.00pm` and named
+that programme as NOW. Both the clock and the schedule shift together, so **the wire carries UTC and
+a human-edited schedule is in local time**; the conversion belongs in the transmitter. Sending local
+times directly reads correctly all winter and is an hour out all summer, which is a plausible
+listing rather than a visible fault.
+
+The demo therefore pins its in-world day to Christmas Eve 1998 — MJD 51171, which is in the
+subscribing set of section *The clock table is the TOT* and is in GMT, so the demo does not rest on
+the offset conversion being right.
+
+### The eight-day rotation, re-measured
+
+The finding that only MJD mod 8 in {1, 3, 6} programs a filter was first taken through the census
+that assumed a `0xFE` table mask and no extension mask. Both assumptions were wrong, so it was
+re-taken with a census that assumes neither. **It survived unchanged**, and is now pinned by
+`TestOnlyThreeDaysInEightProgramAListingsFilter`, which is written to fail when the defect is fixed.

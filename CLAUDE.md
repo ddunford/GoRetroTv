@@ -84,6 +84,13 @@ modelling any device.** This section is only for patterns discovered while build
   Where both are wrong in the same way they agree. Inherited errors are caught only by the measured
   record.
 
+- **"The box is not asking for it" is a SYMPTOM, not a finding.** Four distinct causes have produced
+  it: a demux read that took the low halfword of every match unit, a census that assumed the table
+  mask was `0xFE`, a reader that ignored the extension mask, and a genuine firmware defect. It is
+  also what a box looks like mid-boot, on the wrong day, or with its sections dropped by the
+  hardware. Treat it as "something upstream is wrong" and go and dump all sixteen match units
+  unconditionally — never as a result.
+
 ## The emulator
 
 **Read the emulator reference before writing the CPU core, modelling a peripheral, reading the

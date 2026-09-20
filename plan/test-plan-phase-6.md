@@ -115,7 +115,24 @@
 
   and in every case the PID is `0x30 | (MJD mod 8)`, checked rather than assumed. The full sweep and
   the open question it raised are in `docs/reference/digibox-emulation.md`.
-- [ ] **TC-6.6: Sections are addressed as the box asks** (covers: TASK-6.6, TASK-6.9).
+- [x] **TC-6.6: Sections are addressed as the box asks** (covers: TASK-6.6, TASK-6.9) — proved end to
+  end by `TestTheBoxTakesProgrammesOffTheModelledMultiplex`, which drives the real firmware off the
+  real schedule and counts the box's own per-event register: **67 of 67 programmes registered**,
+  across six channels.
+
+  **Two assumptions in the addressing were wrong, and both presented as "the box is not asking".**
+  A census that skipped any table match whose mask was not `0xFE` missed a unit reading `a3/ff` with
+  the right extension and the right day. And the extension has a MASK, which the first reader threw
+  away: **one request covers a SET of channels** — the value is the bitwise OR of the listings ids
+  and the mask clears the bits that differ, so six channels on `0x0BB8`–`0x0BBD` arrive as a single
+  `bf/f8`. Answering the value literally means answering `0x0BBF`, which is nobody, and sending
+  nothing at all with no error. The sweep that found it: 1→`0xBB8`, 2→`0xBB9`, 3→`0xBBB`, 4→`0xBBB`,
+  5→`0xBBF`, 6→`0xBBF`.
+
+  Two further facts came off the screen rather than the bus: **the guide's row number is the
+  listings id**, not the line-up's channel number (so a channel's listings id must BE its channel
+  number), and **the box applies its declared time offset to programme times as well as to the
+  clock**, so the wire carries UTC and the schedule is written in local time.
 - [ ] **TC-6.7: The in-world clock face matches real time** (covers: TASK-6.7, TASK-6.9) — 1:1, London both ends.
 - [ ] **TC-6.8: A live edit reaches the guide; a broken one does not break it** (covers: TASK-6.8, TASK-6.9).
 - [ ] **TC-6.13: Every day in the eight-day rotation can be fed listings** (covers: TASK-6.13) — sweep

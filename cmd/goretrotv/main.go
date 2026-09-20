@@ -8,14 +8,18 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/ddunford/goretrotv/internal/app"
 	"github.com/ddunford/goretrotv/internal/board"
+	bcast "github.com/ddunford/goretrotv/internal/broadcast"
 	"github.com/ddunford/goretrotv/internal/config"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/httpx"
 	"github.com/ddunford/goretrotv/internal/logging"
+	"github.com/ddunford/goretrotv/internal/multiplex"
 	"github.com/ddunford/goretrotv/internal/platform/statehash"
 	"github.com/ddunford/goretrotv/internal/version"
 	"github.com/ddunford/goretrotv/internal/web"
@@ -75,6 +79,14 @@ func run() error {
 		"application_ram_bytes", len(fw.ApplicationRAM),
 	)
 
+	// The broadcast is loaded and validated BEFORE the listener opens, for the
+	// same reason the firmware is: a demo that serves a page and then discovers
+	// its schedule is malformed has already told the boot gate it is fine.
+	air, err := loadBroadcast(cfg, logger)
+	if err != nil {
+		return err
+	}
+
 	transport := web.NewTransport()
 	box, ready, err := startBox(fw, cfg.SnapshotPath)
 	if err != nil {
@@ -94,7 +106,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	go runMachine(ctx, box, ready, fw, cfg.SnapshotPath, transport, logger)
+	go runMachine(ctx, box, ready, fw, cfg.SnapshotPath, transport, logger, air)
 
 	if err := httpx.NewServer(cfg.HTTPAddr, handler, logger).Run(ctx); err != nil {
 		return err
@@ -154,6 +166,111 @@ func acquiredSnapshot(box *board.Runtime) (bool, error) {
 	return got == 0x04E99A24, nil
 }
 
+// broadcast is everything the modelled multiplex needs, loaded once and shared
+// by every box this process runs. It is nil when nothing is configured to go on
+// air, which is a supported way to run rather than a failure.
+type broadcastConfig struct {
+	listings *multiplex.Listings
+	dict     *bcast.HuffmanDictionary
+	day      time.Time
+	schedule bcast.Schedule
+}
+
+// airSchedule is how often each rung of the carousel repeats, in instructions.
+//
+// The RATE IS NOT LOAD-BEARING and was measured not to be -- sixteen sections
+// pushed by hand acquire a line-up with no rate involved -- so these are chosen
+// for how quickly someone watching the demo sees the guide fill. The two
+// SETTLES are the part that is load-bearing: the box programs its day-addressed
+// listings request once, so a line-up that arrives before the clock has landed
+// leaves it asking for the wrong day for ever.
+var airSchedule = bcast.Schedule{
+	ClockPeriod:  20_000_000,
+	LineupPeriod: 60_000_000,
+	TitlePeriod:  60_000_000,
+	ClockSettle:  8_000_000,
+	LineupSettle: 4_000_000,
+}
+
+// loadBroadcast reads the schedule and the dictionary, or reports that nothing
+// will go on air and why.
+//
+// A schedule with no dictionary is REFUSED rather than run silently. Title
+// sections cannot be built without it, so that combination is a box whose guide
+// is empty -- indistinguishable, from the outside, from a demo deliberately run
+// with no broadcast at all.
+func loadBroadcast(cfg *config.Config, logger *slog.Logger) (*broadcastConfig, error) {
+	if cfg.ListingsPath == "" {
+		logger.Info("no broadcast configured; the box will boot with an empty guide",
+			"reason", "GORETROTV_LISTINGS_PATH is empty")
+		return nil, nil
+	}
+	listings, err := multiplex.LoadListings(cfg.ListingsPath)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.DictionaryPath == "" {
+		return nil, fmt.Errorf("a schedule is configured at %s but GORETROTV_DICTIONARY_PATH is empty, "+
+			"and title sections cannot be built without the dictionary; see dictionaries/MANIFEST.md",
+			cfg.ListingsPath)
+	}
+	dict, err := bcast.LoadHuffmanDictionary(cfg.DictionaryPath)
+	if err != nil {
+		return nil, err
+	}
+	day := multiplex.DayOfMJD(cfg.BroadcastDayMJD).Add(19 * time.Hour)
+	if slot := cfg.BroadcastDayMJD % 8; slot != 1 && slot != 3 && slot != 6 {
+		// Named rather than corrected. Choosing a different day silently would
+		// make the one setting an operator can get wrong the one thing they
+		// cannot see they got wrong.
+		logger.Warn("the pinned broadcast day is one this box does not subscribe on, so the guide will be empty",
+			"mjd", cfg.BroadcastDayMJD, "date", day.Format("2006-01-02"), "slot", slot,
+			"subscribing_slots", "1, 3, 6", "issue", "TASK-6.13")
+	}
+	programmes := 0
+	for _, service := range listings.Services {
+		programmes += len(service.Programmes)
+	}
+	logger.Info("broadcast loaded",
+		"schedule", cfg.ListingsPath, "bouquet", listings.Bouquet,
+		"channels", len(listings.Services), "programmes", programmes,
+		"dictionary_entries", dict.Entries(),
+		"in_world_day", day.Format("2006-01-02"), "mjd", cfg.BroadcastDayMJD)
+	return &broadcastConfig{listings: listings, dict: dict, day: day, schedule: airSchedule}, nil
+}
+
+// transmitterFor builds the multiplex for one box, or nil when nothing is on
+// air. A transmitter belongs to exactly one box: the carousel holds the line-up
+// back until the clock has landed, and carrying that state across a reset would
+// release it into a machine that had just forgotten the clock.
+func transmitterFor(air *broadcastConfig, box *board.Runtime, logger *slog.Logger) *multiplex.Multiplex {
+	if air == nil {
+		return nil
+	}
+	transmitter, err := multiplex.New(box, air.listings, air.dict,
+		multiplex.FixedClock{At: air.day}, air.schedule)
+	if err == nil {
+		transmitter.OnAir(func(counts multiplex.Counters, requests []multiplex.TitleRequest) {
+			pids := make([]string, 0, len(requests))
+			for _, request := range requests {
+				pids = append(pids, fmt.Sprintf("%#02x(MJD %d)", request.PID, request.MJD()))
+			}
+			logger.Info("programmes on air",
+				"clock_waves", counts.Clock, "lineup_waves", counts.Lineup,
+				"filters", strings.Join(pids, " "))
+		})
+	}
+	if err != nil {
+		// The box is still worth running without a broadcast, so this is
+		// reported and survived rather than returned: an emulator that refuses
+		// to start because its television schedule is wrong has the priorities
+		// of this project backwards.
+		logger.Error("no broadcast for this box", "err", err)
+		return nil
+	}
+	return transmitter
+}
+
 func publishFrame(box *board.Runtime, transport *web.Transport) error {
 	frame, err := box.Compose()
 	if err != nil {
@@ -185,9 +302,9 @@ const (
 // restart is the one case the reset control exists for, so the halt path waits
 // for a reset instead of returning.
 func runMachine(ctx context.Context, box *board.Runtime, ready bool, images *firmware.Set,
-	snapshotPath string, transport *web.Transport, logger *slog.Logger) {
+	snapshotPath string, transport *web.Transport, logger *slog.Logger, air *broadcastConfig) {
 	for {
-		cause, err := runInstructions(ctx, box, ready, transport, logger)
+		cause, err := runInstructions(ctx, box, ready, transport, logger, transmitterFor(air, box, logger))
 		switch cause {
 		case stopContext:
 			return
@@ -242,7 +359,7 @@ func resetState(ready bool) (string, string) {
 // runInstructions drives one board until the process stops, a reset is asked
 // for, or the guest halts. It is the board's only owner for that lifetime.
 func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
-	transport *web.Transport, logger *slog.Logger) (stopCause, error) {
+	transport *web.Transport, logger *slog.Logger, transmitter *multiplex.Multiplex) (stopCause, error) {
 	const inputInterval = 1024
 	const frameInterval = 500_000
 	const stateInterval = 4_000_000
@@ -266,6 +383,15 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 				return box.CSI.Key(raw, source)
 			}); err != nil {
 				return stopHalt, err
+			}
+			// On the same 1024-instruction boundary as input, because the board
+			// admits no owner but this loop. Pump is cheap when nothing is due:
+			// it compares against the carousel's next due instruction and
+			// returns.
+			if transmitter != nil {
+				if err := transmitter.Pump(count); err != nil {
+					return stopHalt, err
+				}
 			}
 		}
 		if err := box.Step(); err != nil {

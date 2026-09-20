@@ -42,7 +42,7 @@ type Runtime struct {
 	I2C       *i2c.Controller
 	DMA       *dma.Controller
 	Timer     *hwtimer.Timer
-	hooks     *StepHooks
+	hooks     StepHooks
 }
 
 // New constructs a reset board from firmware already verified by firmware.Load.
@@ -156,7 +156,7 @@ func New(images *firmware.Set, skyGates bool) (*Runtime, error) {
 		if err != nil {
 			return err
 		}
-		if applied && r.hooks != nil && r.hooks.Handoff != nil {
+		if applied && r.hooks.Handoff != nil {
 			r.hooks.Handoff(r.Machine.Retired, core.PC)
 		}
 		_, err = loopClock.At(now+16, pumpName, pump)
@@ -195,8 +195,23 @@ func (r *Runtime) StepWithHooks(hooks StepHooks) error {
 	}
 	m := r.Machine
 	i := m.Retired
-	r.hooks = &hooks
-	defer func() { r.hooks = nil }()
+	// Held BY VALUE, and deliberately not cleared afterwards. Storing &hooks
+	// moved the parameter to the heap -- 'go build -gcflags=-m' says so
+	// outright -- and Step calls this once per emulated instruction, so the
+	// machine allocated once per instruction and spent a fifth of its time
+	// between the allocator and the defer that cleared the field.
+	//
+	// It is not cleared afterwards, and the defer that used to do it was pure
+	// cost rather than safety. r.hooks is read only by the clock pump (see
+	// New), the clock is advanced only by the pump closure below, and this
+	// line runs before either -- on EVERY entry, since Step passes an empty
+	// StepHooks. A leftover hook therefore cannot be read by a later step
+	// whether the field holds a pointer or a value, which is a structural
+	// property of there being one entry point, not something to defend with
+	// a test: a test written for it passes just as happily with the bug it
+	// would be guarding against. The guard that does bite is
+	// TestStepDoesNotAllocate.
+	r.hooks = hooks
 	pump := func() error { return m.Clock.Advance(1) }
 	if !m.Core.HasPendingBranch() || m.Core.ISA {
 		if err := pump(); err != nil {

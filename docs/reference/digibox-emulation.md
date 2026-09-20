@@ -6500,3 +6500,51 @@ The finding that only MJD mod 8 in {1, 3, 6} programs a filter was first taken t
 that assumed a `0xFE` table mask and no extension mask. Both assumptions were wrong, so it was
 re-taken with a census that assumes neither. **It survived unchanged**, and is now pinned by
 `TestOnlyThreeDaysInEightProgramAListingsFilter`, which is written to fail when the defect is fixed.
+
+---
+
+## The handset map, swept exhaustively
+
+*Measured 2026-09-20. Every raw code 0x00-0xFF pressed on its own restored box, nine million
+instructions to settle, framebuffer hashed. This replaces every partial key-map note above: it is
+the complete set of codes this firmware reacts to from the idle picture.*
+
+| code | screen |
+|---|---|
+| `0x0C`, `0x80` | **tv guide** — the now/next banner over the picture |
+| `0x7D` | **box office** — the Sky menu, opened on the BOX OFFICE tab |
+| `0x7E` | **services** — the Sky menu, opened on the SERVICES tab |
+| `0xCC` | standby |
+| `0xF5` | **interactive** |
+
+**Every other code does nothing at all.** There is no code that opens the menu on TV GUIDE, and no
+separate "sky" or "home" key that opens the menu: `0x7D` is what opens it. The TV GUIDE tab is
+reached from inside the menu, one LEFT of BOX OFFICE, and the tab is REMEMBERED — press box office,
+arrow to TV GUIDE, leave, and the next box office press reopens on TV GUIDE. That is why `0x7D` can
+look like a home key on one box and a box-office key on another: it depends on where the last
+session left it.
+
+### The firmware names its own keys
+
+The SERVICES menu's first item, *USING YOUR SKY DIGIBOX*, is a help screen that documents the
+remote — which is a better authority than any external photograph, and settles what to call each
+key:
+
+    To find a programme press 'tv guide', then choose the category you need. Use the arrow keys
+    to move around the listings and press 'i' for more information on a programme
+    To see what's on Box Office and order a movie press the 'box office' key
+    To set up Parental Control press 'services' and choose '3'
+    Press 'Sky' any time to return immediately to TV viewing
+
+So the box's own name for `0x7D` is **box office**, not sky. The 'Sky' key it describes is one that
+RETURNS TO TV VIEWING rather than opening anything: swept from inside the menu, `0x65` and `0x83`
+both exit to the picture and both do nothing from idle, which is exactly that behaviour. Neither is
+named further here, because "returns to TV" does not distinguish them and guessing which is Sky is
+the kind of plausible answer this file exists to stop.
+
+### Keys that act only inside the menu
+
+A code that does nothing from the idle picture may still do something once a menu is open, and the
+first sweep of this map missed that entirely by pressing everything from idle. From inside the
+menu: `0x60`, `0x61`, `0x62` and `0x81` move the highlight or open a sub-screen, `0x65`, `0x80` and
+`0x83` exit to the picture, and `0xF7`-`0xFC` each draw something of their own.

@@ -19,9 +19,9 @@ services:
       # The modelled broadcast. The schedule is ours and is committed; the Huffman dictionary is
       # third-party data that is NOT redistributable, so it is mounted exactly as the firmware is
       # and a clone without it broadcasts nothing rather than failing to build.
-      GORETROTV_LISTINGS_PATH: /listings/listings.json
+      GORETROTV_LISTINGS_PATH: /listings
       GORETROTV_DICTIONARY_PATH: /dictionaries/skyuk.dict
-      GORETROTV_BROADCAST_DAY_MJD: ${GORETROTV_BROADCAST_DAY_MJD:-51171}
+      GORETROTV_BROADCAST_DATE: ${GORETROTV_BROADCAST_DATE:-1998-12-24}
       GORETROTV_LOG_LEVEL: ${GORETROTV_LOG_LEVEL:-debug}
       GORETROTV_LOG_FORMAT: ${GORETROTV_LOG_FORMAT:-json}
       # Inside the container the listener must accept the published mapping, so it binds all
@@ -39,7 +39,7 @@ services:
       - ./firmware:/firmware:ro
       # THE HUFFMAN DICTIONARY IS NOT REDISTRIBUTABLE either — same treatment, same reason.
       - ./dictionaries:/dictionaries:ro
-      # The schedule is mounted rather than baked in so it can be edited on the host without a
-      # rebuild.
-      - ./listings.json:/listings/listings.json:ro
+      # The schedules are mounted rather than baked in so they can be edited, and dated files
+      # added, on the host without a rebuild.
+      - ./listings:/listings:ro
     restart: unless-stopped

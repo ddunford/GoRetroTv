@@ -28,12 +28,48 @@ type Subscription struct {
 	// SIArmed is whether PID 0x11 is armed, i.e. whether a BAT pushed there
 	// would reach the guest at all.
 	SIArmed bool
+	// ListingsPID is the title PID the box has armed, or zero.
+	//
+	// It is separate from Titles because THE BOX ARMS IT ON EVERY DAY while it
+	// programs a match unit on only three days in eight (TASK-6.13). The PID is
+	// therefore the reliable half of the subscription and the match unit is
+	// not, which is what makes a derived request possible at all.
+	ListingsPID uint16
 	// Titles is every listings request the box has programmed, one per match
-	// unit. It is empty until the box acquires, and that is a normal state
-	// rather than a fault: a box that has not been given a channel list has
-	// nothing to ask about.
+	// unit. It is empty until the box acquires, and on five days in eight it
+	// stays empty even after it has.
 	Titles []TitleRequest
 }
+
+// DerivedTitleRequest is the request to use when the box has armed a listings
+// PID but programmed no match unit for it.
+//
+// THIS IS A HOST INTERVENTION AND IS REPORTED AS ONE. On real hardware the
+// match unit is what admits a section, and this port's Push routes by PID
+// alone -- so a section sent this way reaches the guest here and might not
+// reach it on a Digibox. Every field is nevertheless measured rather than
+// invented: the table id is 0xA3 on all three days the box does programme a
+// unit, the extension is the channel's own listings id, and the MJD is the day
+// the broadcast is claiming. The guest's parser then accepts them exactly as
+// it accepts a filtered day -- 67 of 67 programmes registered on slots 2, 4
+// and 7, which are three of the five that programme nothing.
+func DerivedTitleRequest(pid uint16, mjd int, listingsID uint16) TitleRequest {
+	return TitleRequest{
+		TableID:       derivedTitleTable,
+		TableMask:     0xfe,
+		Extension:     listingsID,
+		ExtensionMask: 0xffff,
+		Filter:        [2]byte{byte(mjd >> 8), byte(mjd)}, // #nosec G115 -- an MJD is sixteen bits
+		PID:           pid,
+	}
+}
+
+// derivedTitleTable is the table id the box asks for whenever it asks at all.
+// Measured constant across every subscribing day and every slot: 0xA3 with a
+// 0xFE mask, so 0xA2 would also be admitted -- but the parser takes tableId & 3
+// as part of its day-slot key, so the pair are not interchangeable and this is
+// the one that was observed.
+const derivedTitleTable = 0xa3
 
 // TitleRequest is one programmed listings filter: which table, which service's
 // listings id, which day, and the PID it will arrive on.
@@ -188,6 +224,7 @@ func Read(d *demux.Demux) (Subscription, error) {
 	}
 	// A filter with no armed PID is half a subscription: there is nowhere to
 	// deliver it, so it is not something the box is asking for.
+	sub.ListingsPID = listingsPID
 	if listingsPID == 0 {
 		sub.Titles = nil
 	}

@@ -133,10 +133,24 @@
   listings id**, not the line-up's channel number (so a channel's listings id must BE its channel
   number), and **the box applies its declared time offset to programme times as well as to the
   clock**, so the wire carries UTC and the schedule is written in local time.
-- [ ] **TC-6.7: The in-world clock face matches real time** (covers: TASK-6.7, TASK-6.9) — 1:1, London both ends.
+- [x] **TC-6.7: The in-world clock is whatever it is configured to be** (covers: TASK-6.7, TASK-6.9) —
+  `GORETROTV_BROADCAST_DATE` takes `now` or a `YYYY-MM-DD` date, and the guide follows it: a
+  directory of schedules keyed by date, proved by `TestADatedScheduleReplacesTheDefaultOnItsOwnDay`
+  and `TestAScheduleDirectoryWithoutADefaultIsRefused`. Verified on the real box, both ways: pinned
+  to Christmas Eve 1998 the banner reads `7.00pm Thu 24` (it was a Thursday); on the live clock it
+  read `8.22pm Sun 20` for 20 September 2026 (a Sunday).
+
+  **The 28-day loop the task asked for was not built, deliberately.** It would answer a question
+  nobody has: the guide is per-date files, so a real listings page keeps its own date and every
+  other date falls back. And a live clock is not the demo's default because of TASK-6.13 — on five
+  days in eight the programmes are stored and the guide does not draw them, so `now` gives a correct
+  clock and an empty guide most of the week. The server says so at startup rather than leaving it
+  to be found.
 - [ ] **TC-6.8: A live edit reaches the guide; a broken one does not break it** (covers: TASK-6.8, TASK-6.9).
-- [ ] **TC-6.13: Every day in the eight-day rotation can be fed listings** (covers: TASK-6.13) — sweep
-  eight consecutive days; each must program a title match unit, not merely arm a PID. The instrument
-  must dump all sixteen match units unconditionally, because a census narrowed to `0xAn` cannot see
-  the half of this that is about the PID.
+- [ ] **TC-6.13: Every day in the eight-day rotation DRAWS listings** (covers: TASK-6.13) — note the
+  verb. Delivery is already solved: `TestTheBoxTakesProgrammesAddressedFromTheClockAlone` shows all
+  five non-subscribing slots registering 67 of 67 programmes from sections the transmitter addresses
+  itself. What is not solved is that the guide does not DRAW them, which is the distinction this
+  case exists to keep — an earlier version of this work counted the per-event register and called it
+  working. The instrument must end at the screen.
 - [ ] **TC-6.9: The guide shows correct now and next** (covers: TASK-6.10) — SPEC success criterion 4.

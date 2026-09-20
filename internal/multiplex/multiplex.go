@@ -34,7 +34,7 @@ const (
 type Multiplex struct {
 	box      *board.Runtime
 	carousel *broadcast.Carousel
-	listings *Listings
+	guide    *Guide
 	dict     *broadcast.HuffmanDictionary
 	clock    InWorldClock
 
@@ -63,11 +63,16 @@ type Counters struct {
 	Clock  int
 	Lineup int
 	Titles int
-	// TitlesUnaddressed counts title waves that could not be sent because the
-	// box had programmed no listings filter. It is the single most useful
+	// TitlesUnaddressed counts title waves that could not be sent at all
+	// because the box had armed no listings PID. It is the single most useful
 	// number here: a box that never asks is a different fault from a box that
 	// asks and is answered wrongly, and without this they read the same.
 	TitlesUnaddressed int
+	// TitlesDerived counts waves addressed from the in-world clock rather than
+	// from a match unit the box programmed. It is a HOST INTERVENTION and is
+	// counted so that it is reported rather than assumed away: this port
+	// delivers by PID, and a section sent this way might not reach a Digibox.
+	TitlesDerived int
 }
 
 // InWorldClock is the time the broadcast claims it is. It is an interface
@@ -80,26 +85,41 @@ type InWorldClock interface {
 	Now() time.Time
 }
 
-// FixedClock is an in-world clock stopped at one instant.
+// FixedClock is an in-world clock stopped at one instant. It is what the tests
+// use, and what an operator gets by pinning a day.
 type FixedClock struct{ At time.Time }
 
 // Now implements InWorldClock.
 func (c FixedClock) Now() time.Time { return c.At.UTC() }
 
+// LiveClock is the real wall clock: the box shows today's date and the actual
+// time, and the schedule -- which is a day's television with no date in it --
+// plays on whatever day that is.
+//
+// It is the one place in this program that reads the wall, and that is not a
+// contradiction of the instruction-counter rule. The rule exists so that the
+// SCHEDULE of emulated events is reproducible; this is the CONTENT of a
+// broadcast, the same way a real transmitter's clock is not part of the
+// receiver's determinism. Nothing about when a wave fires depends on it.
+type LiveClock struct{}
+
+// Now implements InWorldClock.
+func (LiveClock) Now() time.Time { return time.Now().UTC() }
+
 // New builds a transmitter for one box.
-func New(box *board.Runtime, listings *Listings, dict *broadcast.HuffmanDictionary,
+func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 	clock InWorldClock, schedule broadcast.Schedule) (*Multiplex, error) {
 	switch {
 	case box == nil:
 		return nil, fmt.Errorf("multiplex: no box to transmit to")
-	case listings == nil:
+	case guide == nil:
 		return nil, fmt.Errorf("multiplex: no schedule to transmit")
 	case dict == nil:
 		return nil, fmt.Errorf("multiplex: title sections need a huffman dictionary; see dictionaries/MANIFEST.md")
 	case clock == nil:
 		return nil, fmt.Errorf("multiplex: no in-world clock, so the broadcast has no date to claim")
 	}
-	m := &Multiplex{box: box, listings: listings, dict: dict, clock: clock, version: 1}
+	m := &Multiplex{box: box, guide: guide, dict: dict, clock: clock, version: 1}
 	carousel, err := broadcast.NewCarousel(schedule, broadcast.Source{
 		Clock:  m.clockWave,
 		Lineup: m.lineupWave,
@@ -114,6 +134,11 @@ func New(box *board.Runtime, listings *Listings, dict *broadcast.HuffmanDictiona
 
 // Counts reports what has gone on air.
 func (m *Multiplex) Counts() Counters { return m.sent }
+
+// listings is the schedule for the day the broadcast is currently claiming.
+// It is looked up per wave rather than held, so a clock that crosses midnight
+// starts transmitting the next day's television without anything restarting.
+func (m *Multiplex) listings() *Listings { return m.guide.On(m.clock.Now()) }
 
 // OnAir is called once, the first time programmes are actually transmitted to
 // a box that asked for them.
@@ -185,8 +210,9 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 		// server down over a machine that is merely not ready.
 		return nil, nil
 	}
-	transport := m.transport(sub)
-	nit, err := broadcast.NIT(sub.NetworkID, m.version, m.listings.Bouquet, []broadcast.Transport{transport})
+	listings := m.listings()
+	transport := m.transport(sub, listings)
+	nit, err := broadcast.NIT(sub.NetworkID, m.version, listings.Bouquet, []broadcast.Transport{transport})
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +220,7 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 	if err != nil {
 		return nil, err
 	}
-	bat, err := broadcast.BAT(sub.BouquetID, m.version, m.listings.Bouquet, []broadcast.Transport{transport})
+	bat, err := broadcast.BAT(sub.BouquetID, m.version, listings.Bouquet, []broadcast.Transport{transport})
 	if err != nil {
 		return nil, err
 	}
@@ -208,13 +234,13 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 
 // transport turns the schedule's channels into the one transport stream this
 // multiplex models.
-func (m *Multiplex) transport(sub Subscription) broadcast.Transport {
+func (m *Multiplex) transport(sub Subscription, listings *Listings) broadcast.Transport {
 	transport := broadcast.Transport{
 		ID: sub.NetworkID, NetworkID: sub.NetworkID,
 		FrequencyMHz: transportFrequencyMHz, OrbitTenths: transportOrbitTenths,
 		SymbolRate: transportSymbolRate, FEC: transportFEC,
 	}
-	for _, service := range m.listings.Services {
+	for _, service := range listings.Services {
 		transport.Services = append(transport.Services, broadcast.Service{
 			ID: service.ServiceID, Name: service.Name, EITSchedule: true,
 		})
@@ -243,9 +269,31 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 	if !asking {
 		return nil, nil
 	}
-	if len(sub.Titles) == 0 {
-		m.sent.TitlesUnaddressed++
-		return nil, nil
+	listings := m.listings()
+	mjd := MJDOf(m.clock.Now())
+	// Only a filter for the day the broadcast is CLAIMING is worth honouring.
+	// The box programs its request once and never re-subscribes, so after
+	// midnight its filter still names yesterday -- and answering that would
+	// fill the guide with a day that has gone.
+	var requests []TitleRequest
+	for _, request := range sub.Titles {
+		if request.MJD() == mjd {
+			requests = append(requests, request)
+		}
+	}
+	if len(requests) == 0 {
+		// The box has acquired and armed its listings PID but programmed no
+		// match unit -- which it does on five days in eight (TASK-6.13). The
+		// PID is armed on every day, so the request is derived and the
+		// intervention is counted rather than hidden.
+		if sub.ListingsPID == 0 {
+			m.sent.TitlesUnaddressed++
+			return nil, nil
+		}
+		for _, service := range listings.Services {
+			requests = append(requests, DerivedTitleRequest(sub.ListingsPID, mjd, service.ListingsID))
+		}
+		m.sent.TitlesDerived++
 	}
 	defer func() {
 		if !m.onAirCalled && m.sent.Titles > 0 && m.onAir != nil {
@@ -254,13 +302,13 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 		}
 	}()
 	var wave []broadcast.Emission
-	for _, request := range sub.Titles {
+	for _, request := range requests {
 		// One request covers a SET of channels, so this asks each channel
 		// whether the filter wants it rather than looking one up by the
 		// request's value -- that value is the OR of the ids in the set and is
 		// frequently nobody's id at all.
-		for i := range m.listings.Services {
-			service := &m.listings.Services[i]
+		for i := range listings.Services {
+			service := &listings.Services[i]
 			if !request.Wants(service.ListingsID) {
 				continue
 			}

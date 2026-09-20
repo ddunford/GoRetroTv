@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // The editable schedule.
@@ -85,6 +87,87 @@ func (p ListedProgramme) StartSeconds() (int, error) {
 	}
 	return h*3600 + m*60, nil
 }
+
+// Guide is every schedule available to broadcast, keyed by the date it is for.
+//
+// A day with its own file gets that file; every other day gets the default.
+// That is what lets a real 1998 listings page be dropped in for the date it
+// was printed for, while any other date still has television on it.
+type Guide struct {
+	byDate   map[string]*Listings
+	fallback *Listings
+	// Source is where it was loaded from, for the startup log.
+	Source string
+}
+
+// scheduleFor names the file a date is served by.
+const defaultScheduleName = "default.json"
+
+// LoadGuide reads either a single schedule file, which then plays on every
+// date, or a DIRECTORY of them named YYYY-MM-DD.json with a default.json
+// beside them.
+//
+// A directory with no default.json is refused. The alternative is a demo that
+// works on the dates somebody happened to write up and silently shows nothing
+// on the rest, which is the failure mode this whole area keeps producing.
+func LoadGuide(path string) (*Guide, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("multiplex: schedule: %w", err)
+	}
+	if !info.IsDir() {
+		listings, err := LoadListings(path)
+		if err != nil {
+			return nil, err
+		}
+		return &Guide{fallback: listings, Source: path}, nil
+	}
+
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil, fmt.Errorf("multiplex: schedule directory: %w", err)
+	}
+	guide := &Guide{byDate: map[string]*Listings{}, Source: path}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		listings, err := LoadListings(filepath.Join(path, name))
+		if err != nil {
+			return nil, err
+		}
+		if name == defaultScheduleName {
+			guide.fallback = listings
+			continue
+		}
+		date := strings.TrimSuffix(name, ".json")
+		if _, err := time.Parse(dateLayout, date); err != nil {
+			return nil, fmt.Errorf("multiplex: %s is neither %s nor a YYYY-MM-DD.json date", name, defaultScheduleName)
+		}
+		guide.byDate[date] = listings
+	}
+	if guide.fallback == nil {
+		return nil, fmt.Errorf("multiplex: %s has no %s, so any date without its own file would broadcast nothing",
+			path, defaultScheduleName)
+	}
+	return guide, nil
+}
+
+// dateLayout is how a schedule file names its date, and how an operator writes
+// one in the environment.
+const dateLayout = "2006-01-02"
+
+// On returns the schedule to broadcast for a given day.
+func (g *Guide) On(day time.Time) *Listings {
+	if listings, ok := g.byDate[day.UTC().Format(dateLayout)]; ok {
+		return listings
+	}
+	return g.fallback
+}
+
+// Dated is how many days have a schedule of their own.
+func (g *Guide) Dated() int { return len(g.byDate) }
 
 // LoadListings reads and validates a schedule file.
 //

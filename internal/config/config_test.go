@@ -254,7 +254,7 @@ func TestLoadAppliesDefaultsAndOverrides(t *testing.T) {
 		LogLevel:             "debug",
 		LogFormat:            "text",
 		EnablePprof:          true,
-		BroadcastDayMJD:      config.Defaults.BroadcastDayMJD,
+		BroadcastDate:        config.Defaults.BroadcastDate,
 	}
 	if *cfg != want {
 		t.Errorf("Load = %+v, want %+v", *cfg, want)

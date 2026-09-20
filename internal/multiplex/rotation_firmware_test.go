@@ -8,16 +8,17 @@ import (
 )
 
 // subscribingSlots are the day-of-eight slots on which this box programs a
-// listings filter. The other five arm the right PID and program nothing, so
-// nothing can be delivered to them.
+// listings match unit. The other five arm the right PID and program nothing.
 //
-// This test PINS A DEFECT rather than describing intended behaviour, and it is
-// written to fail the moment the defect is fixed -- which is the only way a
-// characterisation test earns its place. Two things make it worth having:
+// This test PINS A FIRMWARE BEHAVIOUR the product routes around, and it is
+// written to fail the moment that behaviour changes. It is worth having for
+// two reasons:
 //
-//   - the demo has to choose an in-world day, and choosing one outside this set
-//     produces an empty guide with no error anywhere;
-//   - the finding was first measured through a census that assumed a 0xFE table
+//   - the transmitter DERIVES its addressing on the other five days, and that
+//     is a host intervention justified entirely by this measurement. If the box
+//     started programming a unit on all eight, the derivation would be dead
+//     code pretending to be a workaround;
+//   - the finding was first taken through a census that assumed a 0xFE table
 //     mask and no extension mask, both of which turned out to be wrong, so it
 //     had to be re-taken through a census that assumes neither. It survived.
 //     Without this test that re-measurement is a paragraph nobody re-runs.
@@ -25,12 +26,12 @@ var subscribingSlots = map[int]bool{1: true, 3: true, 6: true}
 
 // TASK-6.13. Eight consecutive days, one box each.
 func TestOnlyThreeDaysInEightProgramAListingsFilter(t *testing.T) {
-	listings := demoListings(t)
+	guide := demoGuide(t)
 	for d := 0; d < 8; d++ {
 		day := time.Date(1998, 3, 1, 12, 0, 0, 0, time.UTC).AddDate(0, 0, d)
 		t.Run(day.Format("2006-01-02"), func(t *testing.T) {
 			box := restoredBox(t)
-			transmitter, err := multiplex.New(box, listings, demoDictionary(t),
+			transmitter, err := multiplex.New(box, guide, demoDictionary(t),
 				multiplex.FixedClock{At: day}, demoSchedule())
 			if err != nil {
 				t.Fatal(err)
@@ -96,14 +97,14 @@ func TestOnlyThreeDaysInEightProgramAListingsFilter(t *testing.T) {
 			// One filter covers the whole line-up: the value is the OR of the
 			// listings ids and the mask clears the bits that differ.
 			covered := 0
-			for _, service := range listings.Services {
+			for _, service := range guide.On(day).Services {
 				if request.Wants(service.ListingsID) {
 					covered++
 				}
 			}
-			if covered != len(listings.Services) {
+			if covered != len(guide.On(day).Services) {
 				t.Errorf("the box's filter %#04x/%#04x covers %d of %d channels; the rest would never be broadcast",
-					request.Extension, request.ExtensionMask, covered, len(listings.Services))
+					request.Extension, request.ExtensionMask, covered, len(guide.On(day).Services))
 			}
 		})
 	}

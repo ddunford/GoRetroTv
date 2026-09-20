@@ -68,15 +68,25 @@ type Config struct {
 	// no schedule at all.
 	DictionaryPath string `env:"GORETROTV_DICTIONARY_PATH"`
 
-	// BroadcastDayMJD pins the in-world day, as a Modified Julian Date.
+	// BroadcastDate is the day and time the broadcast claims it is.
 	//
-	// It exists because of a measured defect rather than as a preference: this
-	// box programs a listings filter only on three of the eight days in the
-	// PID rotation (MJD mod 8 in 1, 3 or 6), so a day chosen freely leaves the
-	// guide empty five times in eight with no error anywhere. The default is
-	// 15 June 1998, which is in the set. When TASK-6.13 is understood this
-	// becomes a real clock and this setting goes.
-	BroadcastDayMJD int `env:"GORETROTV_BROADCAST_DAY_MJD"`
+	// "now" follows the real clock: the box shows today's date and the actual
+	// time. A date as YYYY-MM-DD pins it to that day at 19:00, which is what
+	// the demo does -- it is a 1998 box, and an evening in 1998 is the thing
+	// worth showing. Pinning is also how a day gets reproduced when something
+	// about it looks wrong.
+	//
+	// The schedule follows whichever it is: a guide DIRECTORY can hold one
+	// file per date, so a real listings page keeps the date it was printed for
+	// and every other day falls back to default.json.
+	//
+	// One caveat belongs with this setting rather than in a commit message.
+	// The box programs its listings filter on only three days in eight (MJD
+	// mod 8 in 1, 3 or 6, TASK-6.13). On the other five the transmitter
+	// addresses the sections itself and the programmes are stored but the
+	// guide does not draw them -- so "now" gives a correct clock and an empty
+	// guide five days a week, while a pinned date in the set always draws.
+	BroadcastDate string `env:"GORETROTV_BROADCAST_DATE"`
 
 	// ServiceName labels log lines.
 	ServiceName string `env:"GORETROTV_SERVICE_NAME"`
@@ -108,13 +118,13 @@ type Config struct {
 // a contradiction — the default would be the guess the requirement exists to prevent — and a test
 // asserts that none of them has one.
 var Defaults = Config{
-	ServiceName:     "goretrotv",
-	BroadcastDayMJD: 51171, // Christmas Eve 1998
-	HTTPAddr:        "127.0.0.1:8099",
-	WebDir:          "web",
-	LogLevel:        "info",
-	LogFormat:       "json",
-	EnablePprof:     false,
+	ServiceName:   "goretrotv",
+	BroadcastDate: "1998-12-24",
+	HTTPAddr:      "127.0.0.1:8099",
+	WebDir:        "web",
+	LogLevel:      "info",
+	LogFormat:     "json",
+	EnablePprof:   false,
 }
 
 // Variable describes one environment setting, as declared by the struct tags.

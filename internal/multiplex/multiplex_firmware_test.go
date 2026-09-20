@@ -64,13 +64,13 @@ func restoredBox(t *testing.T) *board.Runtime {
 	return box
 }
 
-func demoListings(t *testing.T) *multiplex.Listings {
+func demoGuide(t *testing.T) *multiplex.Guide {
 	t.Helper()
-	listings, err := multiplex.LoadListings(filepath.Join("..", "..", "listings.json"))
+	guide, err := multiplex.LoadGuide(filepath.Join("..", "..", "listings"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return listings
+	return guide
 }
 
 func demoDictionary(t *testing.T) *broadcast.HuffmanDictionary {
@@ -95,14 +95,14 @@ func demoDictionary(t *testing.T) *broadcast.HuffmanDictionary {
 // it -- which is the failure this project has met at every rung.
 func TestTheBoxTakesProgrammesOffTheModelledMultiplex(t *testing.T) {
 	box := restoredBox(t)
-	listings := demoListings(t)
+	guide := demoGuide(t)
 	dict := demoDictionary(t)
 
 	// A day the box subscribes on. The eight-day PID rotation currently only
 	// programmes a title filter on MJD mod 8 in {1,3,6}; 15 June 1998 is MJD
 	// 50979, which is 3.
 	day := time.Date(1998, 6, 15, 19, 30, 0, 0, time.UTC)
-	transmitter, err := multiplex.New(box, listings, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
 	if err != nil {
 		t.Fatal(err)
 	}

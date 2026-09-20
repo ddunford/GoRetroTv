@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
@@ -102,15 +103,80 @@ func TestProgrammesAreSortedByStart(t *testing.T) {
 	}
 }
 
-// The committed schedule is what the demo broadcasts, so it is checked like any
-// other input rather than trusted for being ours.
-func TestTheCommittedScheduleIsValid(t *testing.T) {
-	listings, err := multiplex.LoadListings(filepath.Join("..", "..", "listings.json"))
+// The committed schedules are what the demo broadcasts, so they are checked
+// like any other input rather than trusted for being ours. Every dated file is
+// loaded too, because a directory's whole point is that most of it is only
+// read on one day of the year.
+func TestTheCommittedSchedulesAreValid(t *testing.T) {
+	guide, err := multiplex.LoadGuide(filepath.Join("..", "..", "listings"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listings.Services) == 0 {
-		t.Fatal("the committed schedule has no channels")
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	if len(guide.On(day).Services) == 0 {
+		t.Fatal("Christmas Eve has no channels")
+	}
+	if guide.Dated() == 0 {
+		t.Error("no dated schedule was loaded, so the per-date path is untested against real files")
+	}
+}
+
+// A dated file plays on its date and the default plays on every other, which is
+// the whole point of a directory: a real listings page keeps the date it was
+// printed for.
+func TestADatedScheduleReplacesTheDefaultOnItsOwnDay(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, bouquet string) {
+		body := `{"bouquet":"` + bouquet + `","services":[{"name":"Sky One","channel":101,` +
+			`"serviceId":100,"listingsId":101,"programmes":[{"start":"19:00","minutes":60,"title":"Dream Team"}]}]}`
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("default.json", "Every Other Day")
+	write("1998-12-24.json", "Christmas Eve")
+
+	guide, err := multiplex.LoadGuide(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		day  time.Time
+		want string
+	}{
+		{time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC), "Christmas Eve"},
+		{time.Date(1998, 12, 23, 23, 59, 0, 0, time.UTC), "Every Other Day"},
+		{time.Date(1998, 12, 25, 0, 1, 0, 0, time.UTC), "Every Other Day"},
+		{time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC), "Every Other Day"},
+	} {
+		if got := guide.On(tc.day).Bouquet; got != tc.want {
+			t.Errorf("%s served %q, want %q", tc.day.Format("2006-01-02"), got, tc.want)
+		}
+	}
+}
+
+// A directory with no default would broadcast nothing on most days, and would
+// do it silently.
+func TestAScheduleDirectoryWithoutADefaultIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	body := `{"bouquet":"Sky","services":[{"name":"Sky One","channel":101,"serviceId":100,` +
+		`"listingsId":101,"programmes":[{"start":"19:00","minutes":60,"title":"Dream Team"}]}]}`
+	if err := os.WriteFile(filepath.Join(dir, "1998-12-24.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := multiplex.LoadGuide(dir); err == nil {
+		t.Fatal("accepted a schedule directory with no default.json")
+	}
+	// And a file that is neither a date nor the default is a typo, not a
+	// schedule to be skipped quietly.
+	if err := os.WriteFile(filepath.Join(dir, "default.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "chistmas.json"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := multiplex.LoadGuide(dir); err == nil {
+		t.Fatal("accepted a schedule file whose name is neither a date nor default.json")
 	}
 }
 

@@ -1,0 +1,388 @@
+{
+  "bouquet": "Sky Digital",
+  "services": [
+    {
+      "name": "Sky One",
+      "channel": 101,
+      "serviceId": 100,
+      "listingsId": 101,
+      "programmes": [
+        {
+          "start": "06:00",
+          "minutes": 60,
+          "title": "Hour Of Power"
+        },
+        {
+          "start": "07:00",
+          "minutes": 60,
+          "title": "Hey Arnold"
+        },
+        {
+          "start": "08:00",
+          "minutes": 60,
+          "title": "Rugrats"
+        },
+        {
+          "start": "09:00",
+          "minutes": 60,
+          "title": "Oprah Winfrey"
+        },
+        {
+          "start": "10:00",
+          "minutes": 60,
+          "title": "Jerry Springer"
+        },
+        {
+          "start": "11:00",
+          "minutes": 60,
+          "title": "Sally Jessy Raphael"
+        },
+        {
+          "start": "12:00",
+          "minutes": 60,
+          "title": "Married With Children"
+        },
+        {
+          "start": "13:00",
+          "minutes": 60,
+          "title": "The Simpsons"
+        },
+        {
+          "start": "14:00",
+          "minutes": 60,
+          "title": "Guinness World Records"
+        },
+        {
+          "start": "15:00",
+          "minutes": 60,
+          "title": "Xena Warrior Princess"
+        },
+        {
+          "start": "16:00",
+          "minutes": 60,
+          "title": "Star Trek Voyager"
+        },
+        {
+          "start": "17:00",
+          "minutes": 60,
+          "title": "The Simpsons"
+        },
+        {
+          "start": "18:00",
+          "minutes": 60,
+          "title": "Friends"
+        },
+        {
+          "start": "19:00",
+          "minutes": 60,
+          "title": "Dream Team"
+        },
+        {
+          "start": "20:00",
+          "minutes": 60,
+          "title": "Walker Texas Ranger"
+        },
+        {
+          "start": "21:00",
+          "minutes": 60,
+          "title": "The X Files"
+        },
+        {
+          "start": "22:00",
+          "minutes": 60,
+          "title": "Star Trek Deep Space Nine"
+        },
+        {
+          "start": "23:00",
+          "minutes": 60,
+          "title": "Jerry Springer"
+        }
+      ]
+    },
+    {
+      "name": "Sky News",
+      "channel": 501,
+      "serviceId": 101,
+      "listingsId": 501,
+      "programmes": [
+        {
+          "start": "06:00",
+          "minutes": 180,
+          "title": "Sunrise"
+        },
+        {
+          "start": "09:00",
+          "minutes": 180,
+          "title": "Sky News Today"
+        },
+        {
+          "start": "12:00",
+          "minutes": 120,
+          "title": "Lunchtime News"
+        },
+        {
+          "start": "14:00",
+          "minutes": 180,
+          "title": "Sky News Afternoon"
+        },
+        {
+          "start": "17:00",
+          "minutes": 120,
+          "title": "Live At Five"
+        },
+        {
+          "start": "19:00",
+          "minutes": 60,
+          "title": "Sky News Tonight"
+        },
+        {
+          "start": "20:00",
+          "minutes": 60,
+          "title": "Sportsline"
+        },
+        {
+          "start": "21:00",
+          "minutes": 60,
+          "title": "Nine O Clock News"
+        },
+        {
+          "start": "22:00",
+          "minutes": 120,
+          "title": "Sky News At Ten"
+        },
+        {
+          "start": "00:00",
+          "minutes": 360,
+          "title": "Sky News Overnight"
+        }
+      ]
+    },
+    {
+      "name": "Sky Sports 1",
+      "channel": 401,
+      "serviceId": 102,
+      "listingsId": 401,
+      "programmes": [
+        {
+          "start": "07:00",
+          "minutes": 120,
+          "title": "Sports Centre"
+        },
+        {
+          "start": "09:00",
+          "minutes": 60,
+          "title": "Racing News"
+        },
+        {
+          "start": "10:00",
+          "minutes": 120,
+          "title": "Aerobics Oz Style"
+        },
+        {
+          "start": "12:00",
+          "minutes": 120,
+          "title": "Live Cricket"
+        },
+        {
+          "start": "14:00",
+          "minutes": 120,
+          "title": "Golf Highlights"
+        },
+        {
+          "start": "16:00",
+          "minutes": 60,
+          "title": "Soccer Saturday"
+        },
+        {
+          "start": "17:00",
+          "minutes": 60,
+          "title": "Gillette Soccer Special"
+        },
+        {
+          "start": "18:00",
+          "minutes": 60,
+          "title": "Sports Centre"
+        },
+        {
+          "start": "19:00",
+          "minutes": 120,
+          "title": "Live Premiership Football"
+        },
+        {
+          "start": "21:00",
+          "minutes": 60,
+          "title": "Rugby League"
+        },
+        {
+          "start": "22:00",
+          "minutes": 60,
+          "title": "Sports Centre"
+        },
+        {
+          "start": "23:00",
+          "minutes": 60,
+          "title": "Darts"
+        }
+      ]
+    },
+    {
+      "name": "Sky Movies",
+      "channel": 301,
+      "serviceId": 103,
+      "listingsId": 301,
+      "programmes": [
+        {
+          "start": "06:00",
+          "minutes": 120,
+          "title": "Babe"
+        },
+        {
+          "start": "08:00",
+          "minutes": 120,
+          "title": "Mrs Doubtfire"
+        },
+        {
+          "start": "10:00",
+          "minutes": 120,
+          "title": "Apollo Thirteen"
+        },
+        {
+          "start": "12:00",
+          "minutes": 120,
+          "title": "Sleepless In Seattle"
+        },
+        {
+          "start": "14:00",
+          "minutes": 120,
+          "title": "Jumanji"
+        },
+        {
+          "start": "16:00",
+          "minutes": 120,
+          "title": "Twister"
+        },
+        {
+          "start": "18:00",
+          "minutes": 120,
+          "title": "Mission Impossible"
+        },
+        {
+          "start": "20:00",
+          "minutes": 120,
+          "title": "Independence Day"
+        },
+        {
+          "start": "22:00",
+          "minutes": 120,
+          "title": "Goldeneye"
+        },
+        {
+          "start": "00:00",
+          "minutes": 120,
+          "title": "Heat"
+        },
+        {
+          "start": "02:00",
+          "minutes": 240,
+          "title": "Night Movie Double Bill"
+        }
+      ]
+    },
+    {
+      "name": "Sky Travel",
+      "channel": 251,
+      "serviceId": 104,
+      "listingsId": 251,
+      "programmes": [
+        {
+          "start": "08:00",
+          "minutes": 120,
+          "title": "Holiday Hit Squad"
+        },
+        {
+          "start": "10:00",
+          "minutes": 120,
+          "title": "Wish You Were Here"
+        },
+        {
+          "start": "12:00",
+          "minutes": 120,
+          "title": "Travel Guide Europe"
+        },
+        {
+          "start": "14:00",
+          "minutes": 120,
+          "title": "Cruise Ships"
+        },
+        {
+          "start": "16:00",
+          "minutes": 120,
+          "title": "Departures"
+        },
+        {
+          "start": "18:00",
+          "minutes": 120,
+          "title": "Great Rail Journeys"
+        },
+        {
+          "start": "20:00",
+          "minutes": 120,
+          "title": "Floyd On Britain"
+        },
+        {
+          "start": "22:00",
+          "minutes": 120,
+          "title": "Travel Guide Asia"
+        }
+      ]
+    },
+    {
+      "name": "Sky Soap",
+      "channel": 121,
+      "serviceId": 105,
+      "listingsId": 121,
+      "programmes": [
+        {
+          "start": "09:00",
+          "minutes": 60,
+          "title": "Days Of Our Lives"
+        },
+        {
+          "start": "10:00",
+          "minutes": 60,
+          "title": "Another World"
+        },
+        {
+          "start": "11:00",
+          "minutes": 60,
+          "title": "Guiding Light"
+        },
+        {
+          "start": "12:00",
+          "minutes": 60,
+          "title": "As The World Turns"
+        },
+        {
+          "start": "13:00",
+          "minutes": 60,
+          "title": "Peyton Place"
+        },
+        {
+          "start": "14:00",
+          "minutes": 60,
+          "title": "Days Of Our Lives"
+        },
+        {
+          "start": "15:00",
+          "minutes": 60,
+          "title": "Another World"
+        },
+        {
+          "start": "16:00",
+          "minutes": 60,
+          "title": "Guiding Light"
+        }
+      ]
+    }
+  ]
+}

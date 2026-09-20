@@ -170,9 +170,9 @@ func acquiredSnapshot(box *board.Runtime) (bool, error) {
 // by every box this process runs. It is nil when nothing is configured to go on
 // air, which is a supported way to run rather than a failure.
 type broadcastConfig struct {
-	listings *multiplex.Listings
+	guide    *multiplex.Guide
 	dict     *bcast.HuffmanDictionary
-	day      time.Time
+	clock    multiplex.InWorldClock
 	schedule bcast.Schedule
 }
 
@@ -205,7 +205,7 @@ func loadBroadcast(cfg *config.Config, logger *slog.Logger) (*broadcastConfig, e
 			"reason", "GORETROTV_LISTINGS_PATH is empty")
 		return nil, nil
 	}
-	listings, err := multiplex.LoadListings(cfg.ListingsPath)
+	guide, err := multiplex.LoadGuide(cfg.ListingsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -218,25 +218,49 @@ func loadBroadcast(cfg *config.Config, logger *slog.Logger) (*broadcastConfig, e
 	if err != nil {
 		return nil, err
 	}
-	day := multiplex.DayOfMJD(cfg.BroadcastDayMJD).Add(19 * time.Hour)
-	if slot := cfg.BroadcastDayMJD % 8; slot != 1 && slot != 3 && slot != 6 {
-		// Named rather than corrected. Choosing a different day silently would
-		// make the one setting an operator can get wrong the one thing they
-		// cannot see they got wrong.
-		logger.Warn("the pinned broadcast day is one this box does not subscribe on, so the guide will be empty",
-			"mjd", cfg.BroadcastDayMJD, "date", day.Format("2006-01-02"), "slot", slot,
-			"subscribing_slots", "1, 3, 6", "issue", "TASK-6.13")
+	clock, err := inWorldClock(cfg.BroadcastDate)
+	if err != nil {
+		return nil, err
 	}
+	day := clock.Now()
+	listings := guide.On(day)
 	programmes := 0
 	for _, service := range listings.Services {
 		programmes += len(service.Programmes)
 	}
 	logger.Info("broadcast loaded",
-		"schedule", cfg.ListingsPath, "bouquet", listings.Bouquet,
-		"channels", len(listings.Services), "programmes", programmes,
+		"schedule", guide.Source, "dated_schedules", guide.Dated(),
+		"bouquet", listings.Bouquet, "channels", len(listings.Services), "programmes", programmes,
 		"dictionary_entries", dict.Entries(),
-		"in_world_day", day.Format("2006-01-02"), "mjd", cfg.BroadcastDayMJD)
-	return &broadcastConfig{listings: listings, dict: dict, day: day, schedule: airSchedule}, nil
+		"broadcast_date", cfg.BroadcastDate, "in_world_now", day.Format("2006-01-02 15:04 MST"))
+	if slot := multiplex.MJDOf(day) % 8; slot != 1 && slot != 3 && slot != 6 {
+		// Named rather than corrected. This is the one setting whose wrong
+		// value produces a demo that looks like it is working -- clock right,
+		// menus right, guide empty -- so it says so at startup instead of
+		// leaving it to be discovered.
+		logger.Warn("this box programs no listings filter on this day, so the guide will not draw programmes",
+			"date", day.Format("2006-01-02"), "slot", slot, "drawing_slots", "1, 3, 6", "issue", "TASK-6.13")
+	}
+	return &broadcastConfig{guide: guide, dict: dict, clock: clock, schedule: airSchedule}, nil
+}
+
+// inWorldClock reads the broadcast date setting.
+//
+// "now" and a date are the only two answers, and anything else is refused by
+// name rather than quietly treated as one of them: a typo that silently became
+// "now" would move the demo off its 1998 evening and the only symptom would be
+// an empty guide five days a week.
+func inWorldClock(setting string) (multiplex.InWorldClock, error) {
+	if strings.EqualFold(strings.TrimSpace(setting), "now") {
+		return multiplex.LiveClock{}, nil
+	}
+	day, err := time.Parse("2006-01-02", strings.TrimSpace(setting))
+	if err != nil {
+		return nil, fmt.Errorf("GORETROTV_BROADCAST_DATE is %q; it must be \"now\" or a YYYY-MM-DD date", setting)
+	}
+	// 19:00 rather than midnight: a demo opened at any hour should show an
+	// evening's television, not the small hours.
+	return multiplex.FixedClock{At: day.Add(19 * time.Hour)}, nil
 }
 
 // transmitterFor builds the multiplex for one box, or nil when nothing is on
@@ -247,8 +271,7 @@ func transmitterFor(air *broadcastConfig, box *board.Runtime, logger *slog.Logge
 	if air == nil {
 		return nil
 	}
-	transmitter, err := multiplex.New(box, air.listings, air.dict,
-		multiplex.FixedClock{At: air.day}, air.schedule)
+	transmitter, err := multiplex.New(box, air.guide, air.dict, air.clock, air.schedule)
 	if err == nil {
 		transmitter.OnAir(func(counts multiplex.Counters, requests []multiplex.TitleRequest) {
 			pids := make([]string, 0, len(requests))

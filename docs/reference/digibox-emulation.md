@@ -4910,6 +4910,62 @@ rather than the raw ones. That is a gap in the probe, not a fact about the box -
 the stores above are the measurement.
 
 
+### `gort-qbn.2`: two corrections to the gate and the specifier, from the Go port
+
+`internal/broadcast/lineup_firmware_test.go`, 2026-09-20. Building the BAT in Go put both of
+`sky-eluc.38`'s conclusions under a sweep rather than a single control, and **both were wider than
+the record said**. Neither changes what to broadcast — the builder still sends the `0xFFFF` gate
+with the specifier first — but a boundary asserted from one negative control is a boundary nobody
+has actually found.
+
+#### The gate admits `0x0000` as well as `0xFFFF`
+
+`sky-eluc.38` compared `0xFFFF` against `0x1234` and concluded *"a `0xB1` whose first two body
+bytes are anything else decodes nothing"*. Sweeping nine values, with the entry-read PC
+`0x800BF826` counted once per decoded entry:
+
+    0xFFFF  2 entries      0x0001  0        0x8000  0
+    0x0000  2 entries      0x00FF  0        0x7FFF  0
+                           0xFF00  0        0xFFFE  0
+                           0x1234  0
+
+So **two values admit entries and seven do not** — not a range, not a mask, and `0xFFFE` and
+`0x0001` sitting either side of an admitted value rule out an off-by-one in the comparison.
+
+Tracing the PCs between the gate read and the entry loop shows they arrive by **different paths**:
+
+    0xFFFF   ...7ea 7ee 7f0 7f2 7f6 7fa -> 80c            bteqz jumps straight to the loop
+    0x0000   ...7ea 7ee 7f0 7f2 7f6 7fa    7fc..80a -> 80c falls through, then CONTINUES into it
+    0x1234   ...7ea 7ee 7f0 7f2 7f6 7fa    7fc..80a        falls through and stops
+
+`sky-eluc.38` described the fall-through block as one that *"re-reads the same two bytes and never
+touches an entry"*, which is true of `0x1234` and false of `0x0000`: the block ends in a second
+test that admits zero. Whether that is a deliberate "no restriction" case or an accident of a
+zero-check meant for something else is **not established** — the branch at `0x800BF7FC..0x800BF80A`
+has not been read.
+
+#### The specifier's VALUE gates the private tag; its POSITION does not
+
+`sky-eluc.12` and `__siBAT()`'s comment both say the `0x5F` must be *ahead* of the `0xB1` in the
+same loop, which is what DVB defines — a private_data_specifier scopes the descriptors that follow
+it. Moving it **after** the `0xB1`, so the loop reads `[0xB1 …][0x5F 4 … 2][0x41 …]`, still decoded
+every entry. Changing only its VALUE from 2 to 9, position untouched, decoded none.
+
+    0x5F before 0xB1, specifier 2     4 of 4 entries
+    0x5F after  0xB1, specifier 2     4 of 4 entries
+    0x5F before 0xB1, specifier 9     0
+
+`sky-eluc.12`'s own descriptor-walk counts are the likely explanation and were in the record all
+along: **specifier 2 walked 261 descriptors, specifier 0 and 9 walked 131** — about double. A
+second pass that consumes private tags once the namespace is known would make position irrelevant,
+and that is a hypothesis with a number behind it rather than a reading of the code.
+
+**What to emit is unchanged.** The Go builder declares the namespace first and sends `0xFFFF`,
+because being accidentally right on one box is not a reason to broadcast a loop that a stricter
+parser would reject. What changed is what the record may CLAIM: this box is more permissive than
+`sky-eluc.38` and `sky-eluc.12` concluded from one control each.
+
+
 ### `sky-eluc.12`: the line-up goes in, and the box immediately asks for table `0xA1`
 
 `scripts/digibox-probes/feed-a-lineup.js`. NIT, SDT and a BAT carrying

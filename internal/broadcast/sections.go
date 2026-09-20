@@ -33,6 +33,42 @@ type Transport struct {
 	SymbolRate   int  // ksymbols per second
 	FEC          byte // DVB inner FEC nibble
 	Services     []Service
+	// Lineup is Sky's channel list for this transport, carried in the BAT and
+	// ignored by every other table. It rides on the transport because the guest
+	// seeds each record it builds from that transport's own context.
+	Lineup []LineupEntry
+}
+
+// LineupEntry is one nine-byte entry of the private 0xB1 channel-list
+// descriptor. The field widths and their destinations were measured by
+// watching which bytes the guest's parser reads and where it stores them
+// (record sky-eluc.38); they are not read off a public table, and two of them
+// still have no name this project is willing to assert.
+//
+// Each entry becomes an 18-byte record in the guest:
+//
+//	ServiceID +0..1  -> record[4..5]
+//	Kind      +2     -> record[12]
+//	Listings  +3..4  -> record[6..7]
+//	Extra     +5..6  -> record[8..9]
+//	Channel   +7..8  -> record[10..11], the top twelve bits
+//	Flags     +7..8  -> record[13..16], the low four bits, one per byte
+type LineupEntry struct {
+	ServiceID uint16
+	// Kind is the one-byte field at +2. Zero defaults to 1, the value every
+	// measured feed used.
+	Kind byte
+	// Listings is the reference the box turns into a table-id extension when it
+	// asks for this service's listings: feeding 0x0BB8 made it request table
+	// 0xA1 extension 0x0BBB. That is observation, not a named field.
+	Listings uint16
+	// Extra is the halfword at +5..6. Its destination is measured, its meaning
+	// is not established, and naming it would be a guess.
+	Extra uint16
+	// Channel is twelve bits, so the largest value is 4095.
+	Channel uint16
+	// Flags is four bits, unpacked by the guest into four separate bytes.
+	Flags byte
 }
 
 // TimeOffset describes the local time offset descriptor carried in a TOT.
@@ -124,6 +160,103 @@ func SDT(transportID, networkID uint16, version byte, services []Service) ([]byt
 		payload = append(payload, desc...)
 	}
 	return longSection(0x42, transportID, version, payload)
+}
+
+// BAT builds a bouquet association table (table 0x4A) carrying Sky's channel
+// list. bouquetID must be the one the guest's own section filter is asking for:
+// Sky's real bouquets are 0x1001..0x1004, but a box whose filter matches 0x1000
+// exactly will never be delivered a section announcing anything else, and an
+// undelivered section is indistinguishable from an ignored one.
+//
+// The channel list is a private descriptor, so it is only looked at inside a
+// declared namespace: a 0x5F private_data_specifier carrying value 2 goes ahead
+// of it in the same loop, and with any other specifier the guest walks straight
+// past the 0xB1 without reading a byte of it.
+func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([]byte, error) {
+	bouquetName, err := ascii(name)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast: bouquet name: %w", err)
+	}
+	if len(bouquetName) > 255 {
+		return nil, fmt.Errorf("broadcast: bouquet name too long")
+	}
+	bouquetLoop := append([]byte{0x47, byte(len(bouquetName))}, bouquetName...) // #nosec G115 -- length checked above
+
+	var tsLoop []byte
+	for _, tr := range transports {
+		descriptors, err := lineupDescriptors(tr.Lineup)
+		if err != nil {
+			return nil, err
+		}
+		services, err := serviceListDescriptor(tr.Services)
+		if err != nil {
+			return nil, err
+		}
+		descriptors = append(descriptors, services...)
+		if len(descriptors) > 0xfff {
+			return nil, fmt.Errorf("broadcast: transport descriptors exceed twelve bits")
+		}
+		tsLoop = appendU16(tsLoop, tr.ID)
+		tsLoop = appendU16(tsLoop, tr.NetworkID)
+		tsLoop = append(tsLoop, 0xf0|byte(len(descriptors)>>8), byte(len(descriptors))) // #nosec G115 -- length checked above
+		tsLoop = append(tsLoop, descriptors...)
+	}
+	if len(bouquetLoop) > 0xfff || len(tsLoop) > 0xfff {
+		return nil, fmt.Errorf("broadcast: BAT descriptor loop exceeds twelve bits")
+	}
+
+	payload := append([]byte{0xf0 | byte(len(bouquetLoop)>>8), byte(len(bouquetLoop))}, bouquetLoop...) // #nosec G115 -- length checked above
+	payload = append(payload, 0xf0|byte(len(tsLoop)>>8), byte(len(tsLoop)))                             // #nosec G115 -- length checked above
+	payload = append(payload, tsLoop...)
+	return longSection(0x4a, bouquetID, version, payload)
+}
+
+// lineupGate is the halfword the guest tests before it will read a single
+// entry. Anything else and it re-reads those two bytes and returns, decoding
+// nothing at all and reporting nothing -- a descriptor the box accepts and
+// silently ignores, which is the failure mode this whole line of work kept
+// meeting. It is a measured sentinel, not a length or a count.
+const lineupGate = 0xffff
+
+// maxLineupEntries is what fits one descriptor: the length field is a byte, the
+// gate costs two of it, and each entry is nine. A longer line-up is split
+// across several 0xB1 descriptors, which the guest appends into one array
+// because its running index lives in the transport context rather than being
+// reset per descriptor.
+const maxLineupEntries = (255 - 2) / 9
+
+func lineupDescriptors(lineup []LineupEntry) ([]byte, error) {
+	if len(lineup) == 0 {
+		return nil, nil
+	}
+	// The specifier goes FIRST and once: DVB scopes it to the descriptors that
+	// follow it in the same loop, so a 0xB1 ahead of its own namespace is one
+	// the guest walks past without looking.
+	out := []byte{0x5f, 4, 0x00, 0x00, 0x00, 0x02}
+	for start := 0; start < len(lineup); start += maxLineupEntries {
+		end := min(start+maxLineupEntries, len(lineup))
+		body := []byte{lineupGate >> 8, lineupGate & 0xff}
+		for _, entry := range lineup[start:end] {
+			if entry.Channel > 0x0fff {
+				return nil, fmt.Errorf("broadcast: channel %d exceeds twelve bits", entry.Channel)
+			}
+			if entry.Flags > 0x0f {
+				return nil, fmt.Errorf("broadcast: flags %#x exceed four bits", entry.Flags)
+			}
+			kind := entry.Kind
+			if kind == 0 {
+				kind = 1
+			}
+			body = appendU16(body, entry.ServiceID)
+			body = append(body, kind)
+			body = appendU16(body, entry.Listings)
+			body = appendU16(body, entry.Extra)
+			body = appendU16(body, entry.Channel<<4|uint16(entry.Flags))
+		}
+		out = append(out, 0xb1, byte(len(body))) // #nosec G115 -- maxLineupEntries keeps this under 255
+		out = append(out, body...)
+	}
+	return out, nil
 }
 
 // TDT builds the UTC time and date table. It has no CRC.

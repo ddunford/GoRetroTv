@@ -225,3 +225,134 @@ func TestInvalidSectionInputs(t *testing.T) {
 		})
 	}
 }
+
+func sampleLineup() []LineupEntry {
+	return []LineupEntry{
+		{ServiceID: 0x0064, Kind: 1, Listings: 0x0bb8, Extra: 0x1770, Channel: 0x0abc, Flags: 0b0101},
+		{ServiceID: 0x0065, Kind: 1, Listings: 0x0bb9, Extra: 0x1771, Channel: 0x0abd, Flags: 0b0101},
+	}
+}
+
+// Produced by executing the untouched browser oracle's own lineupDescriptors()
+// with these inputs, so the Go builder is pinned to the bytes a box has already
+// been measured accepting rather than to a reading of the layout.
+func TestOracleLineupDescriptorVector(t *testing.T) {
+	t.Parallel()
+	got, err := lineupDescriptors(sampleLineup())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "5f0400000002b114ffff0064010bb81770abc50065010bb91771abd5"
+	if hex.EncodeToString(got) != want {
+		t.Fatalf("lineup descriptors\n got %s\nwant %s", hex.EncodeToString(got), want)
+	}
+}
+
+// The specifier comes first and the gate is the sentinel. This pins the shape
+// the oracle emits and the one DVB defines — a private_data_specifier scopes
+// what FOLLOWS it in the same loop — and not a requirement of this box, which
+// was measured 2026-09-20 decoding the line-up just as happily with the 0x5F
+// moved after the 0xB1. The record and the oracle's own comment both say the
+// specifier must lead; on this firmware the VALUE is load-bearing and the
+// position is not. Emit the correct order anyway: being right by accident on
+// one box is not a reason to broadcast a malformed loop.
+func TestLineupDeclaresItsNamespaceBeforeThePrivateTag(t *testing.T) {
+	t.Parallel()
+	got, err := lineupDescriptors(sampleLineup())
+	if err != nil {
+		t.Fatal(err)
+	}
+	specifier := bytes.Index(got, []byte{0x5f, 4, 0, 0, 0, 2})
+	private := bytes.IndexByte(got, 0xb1)
+	if specifier != 0 {
+		t.Fatalf("specifier at %d, want first", specifier)
+	}
+	if private < specifier {
+		t.Fatalf("private tag at %d precedes its namespace at %d", private, specifier)
+	}
+	if got[private+2] != 0xff || got[private+3] != 0xff {
+		t.Fatalf("gate = %#x %#x, want the measured 0xFFFF sentinel", got[private+2], got[private+3])
+	}
+}
+
+// A byte-long length field holds the gate plus twenty-eight nine-byte entries,
+// so a real Sky line-up spans several descriptors. The guest appends them into
+// one array because its running index lives in the transport context, and one
+// declared namespace covers the rest of the loop.
+func TestLineupSplitsAcrossDescriptorsAndDeclaresTheNamespaceOnce(t *testing.T) {
+	t.Parallel()
+	lineup := make([]LineupEntry, maxLineupEntries+1)
+	for i := range lineup {
+		lineup[i] = LineupEntry{ServiceID: uint16(i), Listings: uint16(i), Channel: uint16(i)}
+	}
+	got, err := lineupDescriptors(lineup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := bytes.Count(got, []byte{0x5f, 4, 0, 0, 0, 2}); n != 1 {
+		t.Fatalf("declared the namespace %d times, want once", n)
+	}
+	entries, descriptors := 0, 0
+	for i := 6; i < len(got); {
+		if got[i] != 0xb1 {
+			t.Fatalf("unexpected tag %#x at %d", got[i], i)
+		}
+		length := int(got[i+1])
+		if length > 255 || (length-2)%9 != 0 {
+			t.Fatalf("descriptor length %d is not a gate plus whole entries", length)
+		}
+		if got[i+2] != 0xff || got[i+3] != 0xff {
+			t.Fatal("a split descriptor lost its gate")
+		}
+		descriptors++
+		entries += (length - 2) / 9
+		i += 2 + length
+	}
+	if descriptors != 2 || entries != len(lineup) {
+		t.Fatalf("%d descriptors carrying %d entries, want 2 carrying %d", descriptors, entries, len(lineup))
+	}
+}
+
+// Twelve bits and four bits. Masking silently would ship a channel number that
+// is simply a different channel, which is the class of failure this whole file
+// exists to refuse.
+func TestLineupRefusesFieldsThatDoNotFit(t *testing.T) {
+	t.Parallel()
+	if _, err := lineupDescriptors([]LineupEntry{{Channel: 0x1000}}); err == nil {
+		t.Error("accepted a channel wider than twelve bits")
+	}
+	if _, err := lineupDescriptors([]LineupEntry{{Flags: 0x10}}); err == nil {
+		t.Error("accepted flags wider than four bits")
+	}
+}
+
+func TestBATFramesTheBouquetAndItsTransport(t *testing.T) {
+	t.Parallel()
+	transport := sampleTransport()
+	transport.Lineup = sampleLineup()
+	section, err := BAT(0x1000, 3, "Sky", []Transport{transport})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if section[0] != 0x4a {
+		t.Fatalf("table id %#x, want 0x4a", section[0])
+	}
+	if got := uint16(section[3])<<8 | uint16(section[4]); got != 0x1000 {
+		t.Fatalf("bouquet id %#x, want 0x1000", got)
+	}
+	if dvb.MPEGCRC32(section) != 0 {
+		t.Fatal("BAT CRC does not verify")
+	}
+	if declared := int(section[1]&0x0f)<<8 | int(section[2]); declared+3 != len(section) {
+		t.Fatalf("section_length %d does not describe %d bytes", declared, len(section))
+	}
+	// The line-up rides in the TRANSPORT loop, because the guest seeds each
+	// record it builds from the transport the descriptor arrived on.
+	bouquetLen := int(section[8]&0x0f)<<8 | int(section[9])
+	if bytes.Contains(section[10:10+bouquetLen], []byte{0xb1}) {
+		t.Fatal("the line-up is in the bouquet loop, where the transport context is not available")
+	}
+	if !bytes.Contains(section[10+bouquetLen:], []byte{0x5f, 4, 0, 0, 0, 2}) {
+		t.Fatal("the transport loop does not declare the private namespace")
+	}
+}

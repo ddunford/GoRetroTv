@@ -10,7 +10,7 @@ re-derived — `docs/reference/digibox-emulation.md` and `digibox-next-session.m
 ## Tasks (mirror — bd epic `gort-qbn` is the source of truth; never hand-ticked)
 
 - [x] `TASK-6.1` Section builders: NIT, SDT, TDT, TOT, with MPEG CRC-32 (poly `0x04C11DB7`, init all ones, no final inversion) → `/go-engineer` [TC-6.1]
-- [ ] `TASK-6.2` The BAT with the `0x5F` private-data-specifier (value **2**) ahead of a `0xB1` line-up descriptor whose gate halfword must be `0xFFFF` and whose entries are nine bytes → `/go-engineer` [TC-6.2]
+- [x] `TASK-6.2` The BAT with the `0x5F` private-data-specifier (value **2**) ahead of a `0xB1` line-up descriptor whose gate halfword must be `0xFFFF` and whose entries are nine bytes → `/go-engineer` [TC-6.2]
 - [ ] `TASK-6.3` The `0x4A` linkage descriptor with **linkage_type `0x91`**, in **both** descriptor loops. Without it the guide's one database question fails and it draws nothing; in the transport loop alone it changes nothing → `/go-engineer` [TC-6.3]
 - [ ] `TASK-6.4` The Sky/OpenTV title-section builder with the Huffman codec. **The 12-bit length field counts the bytes AFTER the four-byte header and the reader advances `length + 4`** — openTVtoXML advances by the field alone, and following it makes twelve records arrive as two, silently → `/go-engineer` [TC-6.4]
 - [ ] `TASK-6.5` The carousel: clock tables first and repeating, with NIT/BAT/SDT held until the box has a clock. **The entire listings request is day-addressed and the box programs it once** — with no clock it asks for table `0xA1`, PID `0x33` and MJD 40587, the Unix epoch, and never re-subscribes → `/go-engineer` [TC-6.5]

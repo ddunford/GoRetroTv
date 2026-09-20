@@ -85,6 +85,14 @@ canvas { display: block; width: 100%; height: auto; aspect-ratio: 5 / 4; backgro
 .status-icon { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--status); box-shadow: 0 0 0 4px color-mix(in srgb, var(--status) 15%, transparent); }
 body[data-state="ready"] .status-icon { background: #2d9d5e; box-shadow: 0 0 0 4px #2d9d5e22; }
 body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 4px #db4f4622; }
+.box-actions { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding: 0 2px; }
+.reset-box { flex: none; min-height: 44px; padding: 10px 18px; color: var(--panel); font-family: inherit; font-size: 13px; font-weight: 700; background: var(--accent); border: 1px solid var(--accent); border-radius: 10px; cursor: pointer; transition: var(--motion-state); touch-action: manipulation; }
+.reset-box:disabled { opacity: .45; cursor: not-allowed; }
+.reset-box:focus-visible { outline: 3px solid #ffcc52; outline-offset: 3px; }
+@media (hover: hover) { .reset-box:hover:not(:disabled) { transform: translateY(-2px); } }
+.reset-box:active:not(:disabled), .reset-box[data-pressed="true"]:not(:disabled) { transform: translateY(1px) scale(.98); }
+.reset-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.reset-feedback { min-height: 20px; margin: 8px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .screen-help { margin: 12px 2px 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .controls-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .controls-heading h2 { margin: 0; font-size: 28px; line-height: 1; letter-spacing: -.05em; }
@@ -134,6 +142,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   .television { position: sticky; top: 8px; z-index: 3; width: min(100%, 400px); justify-self: center; }
   .intro-copy { margin-bottom: 22px; }
   .status-panel, .screen-help { margin-top: 0; }
+  .box-actions { flex-wrap: wrap; gap: 10px; }
   .controls { margin-top: 20px; }
   .controls-heading { max-width: 338px; margin-inline: auto; }
   .remote { width: min(100%, 338px); }

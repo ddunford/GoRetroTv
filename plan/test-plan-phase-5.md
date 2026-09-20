@@ -97,3 +97,32 @@
   frame changing a known blue screen to an unknown one; the old label was removed. The
   classifier covers those measured frames only. Other guest screens and interactive choices
   still lack verified semantic extraction, so full screen-reader access is not yet proved.
+- [x] **TC-5.13: The reset control recovers the box, and says what it did** (covers: TASK-5.11) —
+  the state matrix and the recovery, both. Pressed on a running box, the canvas returns to the
+  startup frame and the status line says the box was restored; pressed twice quickly, the second
+  press is refused rather than queued; pressed while disconnected, it is disabled and sends
+  nothing. The control is reachable and operable by keyboard and by touch, and its outcome is
+  announced rather than only drawn. **A halted box is the case that matters**: halt the machine,
+  then reset, and the box must run again — today `haltMachine` returns and nothing restarts it.
+  A second viewer's page must show the same reset, because the box is shared.
+  **Result:** `cmd/goretrotv/reset_test.go` runs the real firmware and the private snapshot.
+  `TestResetRestartsAHaltedBoxAndSaysWhatItDid` halts the guest for real — an illegal instruction
+  written at its own restored program counter — watches the browser be told `halted`, sends a reset
+  on that same socket, and gets `ready` back with *"The box was reset and restored to its startup
+  state."* Falsified: with the halt path returning as it did before this task, the test fails after
+  91 s having never been answered. `TestResetRebuildsARunningBoxAndItKeepsRetiring` resets a working
+  box, checks a **second connected viewer** is told too, then presses sky and waits for the guest to
+  draw — an idle box publishes nothing at all, so drawing is the only honest liveness signal.
+  `internal/web/transport_test.go` proves a reset is accepted in the halted phase where a key is
+  still refused (falsified against the reset behind the same gate), the minimum interval folds a
+  second press (falsified against the interval removed — the first version of that test passed
+  without it, because the queue's one slot was doing the folding), and malformed or unknown client
+  messages close the socket. `tests/e2e/reset.spec.ts` covers the state matrix in a browser: one
+  request per press with the control held through the host's own cooldown, enabled on a halted box
+  where every handset key is disabled, disabled and silent while disconnected, keyboard-operable
+  with a visible focus ring, and a token-driven transition that reduced motion shortens. The
+  control's accessible description distinguishes it from the handset's standby key, and it is
+  asserted to live outside `#handset`. Light, dark and 390 px screenshots were inspected
+  (`.artifacts/reset-light.png`, `reset-dark.png`, `reset-mobile-dark.png`); `scrollWidth` was 390
+  at 390 px and the button measured 140 × 44. `go test -race ./...`, `./ctl.sh lint`,
+  `npm run wire:check`, typecheck, CSS lint and the 17-test local Playwright suite all pass.

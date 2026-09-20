@@ -76,31 +76,9 @@ func run() error {
 	)
 
 	transport := web.NewTransport()
-	box, err := board.New(fw, true)
+	box, ready, err := startBox(fw, cfg.SnapshotPath)
 	if err != nil {
 		return err
-	}
-	ready := false
-	if cfg.SnapshotPath != "" {
-		file, err := os.Open(cfg.SnapshotPath) // #nosec G304 -- operator explicitly supplies this private snapshot path.
-		if err != nil {
-			return fmt.Errorf("open machine snapshot: %w", err)
-		}
-		err = box.Restore(file)
-		closeErr := file.Close()
-		if err != nil {
-			return fmt.Errorf("restore machine snapshot: %w", err)
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		ready, err = acquiredSnapshot(box)
-		if err != nil {
-			return err
-		}
-		if !ready {
-			return fmt.Errorf("machine snapshot is not the verified post-acquisition state")
-		}
 	}
 	if err := publishFrame(box, transport); err != nil {
 		return err
@@ -116,7 +94,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	go runMachine(ctx, box, transport, ready, logger)
+	go runMachine(ctx, box, ready, fw, cfg.SnapshotPath, transport, logger)
 
 	if err := httpx.NewServer(cfg.HTTPAddr, handler, logger).Run(ctx); err != nil {
 		return err
@@ -124,6 +102,41 @@ func run() error {
 
 	logger.Info("stopped")
 	return nil
+}
+
+// startBox builds the machine this process serves: the verified
+// post-acquisition snapshot where the operator configured one, and a cold
+// board from flash where they did not. It is called once at startup and again
+// for every reset, so both paths land in exactly the same state by
+// construction rather than by two functions agreeing.
+func startBox(images *firmware.Set, snapshotPath string) (*board.Runtime, bool, error) {
+	box, err := board.New(images, true)
+	if err != nil {
+		return nil, false, err
+	}
+	if snapshotPath == "" {
+		return box, false, nil
+	}
+	file, err := os.Open(snapshotPath) // #nosec G304 -- operator explicitly supplies this private snapshot path.
+	if err != nil {
+		return nil, false, fmt.Errorf("open machine snapshot: %w", err)
+	}
+	err = box.Restore(file)
+	closeErr := file.Close()
+	if err != nil {
+		return nil, false, fmt.Errorf("restore machine snapshot: %w", err)
+	}
+	if closeErr != nil {
+		return nil, false, closeErr
+	}
+	ready, err := acquiredSnapshot(box)
+	if err != nil {
+		return nil, false, err
+	}
+	if !ready {
+		return nil, false, fmt.Errorf("machine snapshot is not the verified post-acquisition state")
+	}
+	return box, true, nil
 }
 
 func acquiredSnapshot(box *board.Runtime) (bool, error) {
@@ -157,35 +170,113 @@ func publishFrame(box *board.Runtime, transport *web.Transport) error {
 	return transport.PushFrame(frame)
 }
 
-func runMachine(ctx context.Context, box *board.Runtime, transport *web.Transport, ready bool, logger *slog.Logger) {
+// stopCause says why one machine's instruction loop gave up the board.
+type stopCause int
+
+const (
+	stopContext stopCause = iota // the process is shutting down
+	stopReset                    // a browser asked for the box to be rebuilt
+	stopHalt                     // the guest halted
+)
+
+// runMachine owns every board this process runs. A machine ends when the
+// process stops, when a browser asks for a reset, or when the guest halts, and
+// only the first of those ends this goroutine: a halted box that nothing can
+// restart is the one case the reset control exists for, so the halt path waits
+// for a reset instead of returning.
+func runMachine(ctx context.Context, box *board.Runtime, ready bool, images *firmware.Set,
+	snapshotPath string, transport *web.Transport, logger *slog.Logger) {
+	for {
+		cause, err := runInstructions(ctx, box, ready, transport, logger)
+		switch cause {
+		case stopContext:
+			return
+		case stopHalt:
+			haltMachine(transport, logger, err)
+			select {
+			case <-ctx.Done():
+				return
+			case <-transport.Resets():
+			}
+		case stopReset:
+		}
+		// Keys queued against the machine that is going away must not arrive at
+		// the one replacing it.
+		if err := transport.DrainKeys(func(uint8, uint8) error { return nil }); err != nil {
+			haltMachine(transport, logger, err)
+			return
+		}
+		next, nextReady, err := startBox(images, snapshotPath)
+		if err != nil {
+			// Say so and stop rather than leave an unreachable machine behind a
+			// control that claims to fix it.
+			haltMachine(transport, logger, fmt.Errorf("rebuild the box: %w", err))
+			return
+		}
+		box, ready = next, nextReady
+		logger.Info("box reset", "restored", snapshotPath != "", "ready", ready)
+		if err := publishFrame(box, transport); err != nil {
+			haltMachine(transport, logger, err)
+			return
+		}
+		phase, reason := resetState(ready)
+		if err := transport.PushState(phase, reason); err != nil {
+			haltMachine(transport, logger, err)
+			return
+		}
+	}
+}
+
+// resetState names the host intervention in the words the page shows. A reset
+// is the host rebuilding the machine, not the guest doing anything, and this
+// project reports host interventions explicitly rather than letting them read
+// as firmware behaviour. The two paths also leave the box in visibly different
+// places, so the viewer is told which one they got.
+func resetState(ready bool) (string, string) {
+	if ready {
+		return "ready", "The box was reset and restored to its startup state. Press sky on the handset."
+	}
+	return "booting", "The box was reset and is cold-starting from its flash."
+}
+
+// runInstructions drives one board until the process stops, a reset is asked
+// for, or the guest halts. It is the board's only owner for that lifetime.
+func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
+	transport *web.Transport, logger *slog.Logger) (stopCause, error) {
 	const inputInterval = 1024
 	const frameInterval = 500_000
 	const stateInterval = 4_000_000
 	for {
 		count := box.Machine.Retired
 		if count%inputInterval == 0 {
+			// The cancellation is returned with the cause rather than dropped.
+			// stopContext is the process shutting down and its caller has
+			// nothing to report, but a loop that swallows the only error it
+			// was handed is the shape that hides a real one later.
 			if err := ctx.Err(); err != nil {
-				return
+				return stopContext, err
+			}
+			// Taken here, at the same safe point as input, because Runtime
+			// admits no owner but this loop.
+			if transport.TakeReset() {
+				return stopReset, nil
 			}
 			if err := transport.DrainKeys(func(raw, source uint8) error {
 				logger.Debug("handset key queued on CSI", "retired", count, "raw", raw, "source", source)
 				return box.CSI.Key(raw, source)
 			}); err != nil {
-				haltMachine(transport, logger, err)
-				return
+				return stopHalt, err
 			}
 		}
 		if err := box.Step(); err != nil {
-			haltMachine(transport, logger, err)
-			return
+			return stopHalt, err
 		}
 		count = box.Machine.Retired
 		if count%5_000_000 == 0 {
 			if logger.Enabled(ctx, slog.LevelDebug) {
 				frame, err := box.Compose()
 				if err != nil {
-					haltMachine(transport, logger, err)
-					return
+					return stopHalt, err
 				}
 				logger.Debug("guest progress", "retired", count, "pc", box.Machine.Core.PC,
 					"csi_pending", box.CSI.Pending(), "frame_hash", fmt.Sprintf("%08X", statehash.HashBytes(frame.Pix)))
@@ -193,20 +284,17 @@ func runMachine(ctx context.Context, box *board.Runtime, transport *web.Transpor
 		}
 		if count%frameInterval == 0 {
 			if err := publishFrame(box, transport); err != nil {
-				haltMachine(transport, logger, err)
-				return
+				return stopHalt, err
 			}
 		}
 		if !ready && count%stateInterval == 0 {
 			evidence, err := readBootEvidence(box)
 			if err != nil {
-				haltMachine(transport, logger, err)
-				return
+				return stopHalt, err
 			}
 			phase, reason := coldStatus(evidence)
 			if err := transport.PushState(phase, reason); err != nil {
-				haltMachine(transport, logger, err)
-				return
+				return stopHalt, err
 			}
 		}
 	}

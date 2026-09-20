@@ -40,6 +40,11 @@
           <span class="status-icon" aria-hidden="true"></span>
           <p id="box-status">Connecting to the Digibox…</p>
         </div>
+        <div class="box-actions">
+          <button class="reset-box" type="button" id="reset-box" aria-describedby="reset-note" disabled>Reset the box</button>
+          <p class="reset-note" id="reset-note">Restarts the box itself, for everyone watching — use it if the screen stops responding. The handset’s standby key talks to the firmware instead.</p>
+        </div>
+        <p class="reset-feedback" id="reset-feedback" role="status" aria-live="polite">The reset will be available once the box connects.</p>
         <p class="screen-help">The screen above is the box’s own framebuffer. The handset sends key presses to its firmware.</p>
       </section>
 

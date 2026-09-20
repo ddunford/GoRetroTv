@@ -1,16 +1,24 @@
-import { decodeServerMessage, encodeKeyMessage } from './wire.js';
+import { decodeServerMessage, encodeKeyMessage, encodeResetMessage } from './wire.js';
 import { describeScreen, unknownScreen } from './screen.js';
 
 const canvasNode = document.querySelector<HTMLCanvasElement>('#screen');
 const statusNode = document.querySelector<HTMLElement>('#box-status');
 const feedbackNode = document.querySelector<HTMLElement>('#key-feedback');
+const resetNode = document.querySelector<HTMLButtonElement>('#reset-box');
+const resetFeedbackNode = document.querySelector<HTMLElement>('#reset-feedback');
 const keys = Array.from(document.querySelectorAll<HTMLButtonElement>('#handset button[data-raw]'));
-if (!canvasNode || !statusNode || !feedbackNode) {
-  throw new Error('Digibox page is missing its screen, status, or handset feedback');
+if (!canvasNode || !statusNode || !feedbackNode || !resetNode || !resetFeedbackNode) {
+  throw new Error('Digibox page is missing its screen, status, handset feedback, or reset control');
 }
 const canvas: HTMLCanvasElement = canvasNode;
 const statusLine: HTMLElement = statusNode;
 const keyFeedback: HTMLElement = feedbackNode;
+const resetButton: HTMLButtonElement = resetNode;
+const resetFeedback: HTMLElement = resetFeedbackNode;
+
+// Mirrors the server's own minimum gap between restores, so the page never
+// sends a reset the host would silently fold into the previous one.
+const resetCooldown = 3000;
 const drawingContext = canvas.getContext('2d', { alpha: false });
 if (!drawingContext) {
   throw new Error('This browser cannot display the Digibox framebuffer');
@@ -31,6 +39,8 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let haltReason = '';
 let screenRevision = 0;
+let resetPending = false;
+let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setKeysEnabled(enabled: boolean): void {
   for (const key of keys) key.disabled = !enabled;
@@ -54,6 +64,12 @@ function describeCurrentFrame(): void {
 function updateKeys(): void {
   ready = connected && machineReady && !awaitingFullFrame;
   setKeysEnabled(ready);
+}
+
+// The reset is deliberately NOT gated on the box being ready. A halted or
+// wedged box is the one it exists for, so it needs only a socket to send on.
+function updateReset(): void {
+  resetButton.disabled = !connected || resetPending;
 }
 
 function reconnectDelay(): number {
@@ -112,6 +128,7 @@ function handleMessage(payload: string): void {
     }
     return;
   }
+  acknowledgeReset();
   if (message.phase === 'halted') {
     machineReady = false;
     updateKeys();
@@ -134,6 +151,13 @@ function handleMessage(payload: string): void {
     machineReady ? 'Waiting for the box to send its screen.' : 'The handset will wake when the box is ready.';
 }
 
+// A state message is the host's answer to a reset: it is pushed with a reason
+// naming the intervention, so it arrives even when the phase is unchanged.
+function acknowledgeReset(): void {
+  if (!resetPending) return;
+  resetFeedback.textContent = 'The box was reset.';
+}
+
 function connect(): void {
   if (reconnectTimer !== null) {
     clearTimeout(reconnectTimer);
@@ -148,12 +172,15 @@ function connect(): void {
   awaitingFullFrame = true;
   paletteEpoch = -1;
   updateKeys();
+  updateReset();
   showStatus('connecting', reconnectAttempts ? 'Reconnecting to the Digibox…' : 'Connecting to the Digibox…');
   keyFeedback.textContent = 'The handset is unavailable while disconnected.';
   next.addEventListener('open', () => {
     if (socket !== next) return;
     connected = true;
     openedAt = Date.now();
+    updateReset();
+    if (!resetPending) resetFeedback.textContent = '';
     showStatus('booting', 'Connected. Waiting for the box to report its state…');
   });
   next.addEventListener('message', (event: MessageEvent<string>) => {
@@ -163,6 +190,7 @@ function connect(): void {
     } catch (error) {
       machineReady = false;
       updateKeys();
+      updateReset();
       haltReason = error instanceof Error ? error.message : 'The display data could not be read';
       showStatus('halted', `The box stopped: ${haltReason}.`);
       next.close();
@@ -174,6 +202,7 @@ function connect(): void {
     connected = false;
     machineReady = false;
     updateKeys();
+    updateReset();
     if (openedAt && Date.now() - openedAt >= 10_000) reconnectAttempts = 0;
     const delay = reconnectDelay();
     if (haltReason) showStatus('halted', `The box stopped: ${haltReason}. Reconnecting…`);
@@ -210,5 +239,30 @@ for (const key of keys) {
     keyFeedback.textContent = `${key.getAttribute('aria-label') || key.textContent?.trim() || 'Key'} sent to the box.`;
   });
 }
+
+resetButton.addEventListener('pointerdown', () => {
+  if (!resetButton.disabled) resetButton.dataset.pressed = 'true';
+});
+for (const event of ['pointerup', 'pointercancel', 'pointerleave', 'blur']) {
+  resetButton.addEventListener(event, () => delete resetButton.dataset.pressed);
+}
+resetButton.addEventListener('click', () => {
+  if (resetButton.disabled || socket?.readyState !== WebSocket.OPEN) {
+    resetFeedback.textContent = 'The box cannot be reset while the page is disconnected.';
+    return;
+  }
+  socket.send(encodeResetMessage());
+  resetPending = true;
+  updateReset();
+  resetFeedback.textContent = 'Resetting the box…';
+  if (resetTimer !== null) clearTimeout(resetTimer);
+  // Held for the full cooldown even when the box answers at once: releasing
+  // early would let a second press be folded by the host and look swallowed.
+  resetTimer = setTimeout(() => {
+    resetTimer = null;
+    resetPending = false;
+    updateReset();
+  }, resetCooldown);
+});
 
 connect();

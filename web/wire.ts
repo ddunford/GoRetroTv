@@ -6,10 +6,11 @@ import {
   type FrameMessage,
   type KeyMessage,
   type PaletteMessage,
+  type ResetMessage,
   type StateMessage,
 } from './wire_generated.js';
 
-export type { FrameMessage, KeyMessage, PaletteMessage, StateMessage } from './wire_generated.js';
+export type { FrameMessage, KeyMessage, PaletteMessage, ResetMessage, StateMessage } from './wire_generated.js';
 export { FRAME_HEIGHT, FRAME_WIDTH, WIRE_VERSION } from './wire_generated.js';
 
 export type ServerMessage =
@@ -77,5 +78,12 @@ export function encodeKeyMessage(raw: number, source: number): string {
   integer(raw, 'key raw code', 255);
   integer(source, 'key source', 255);
   const message: KeyMessage = { type: 'key', version: WIRE_VERSION, raw, source };
+  return JSON.stringify(message);
+}
+
+// A reset asks the host to rebuild the box, so it carries nothing the guest
+// could interpret: the whole message is its type and the wire version.
+export function encodeResetMessage(): string {
+  const message: ResetMessage = { type: 'reset', version: WIRE_VERSION };
   return JSON.stringify(message);
 }

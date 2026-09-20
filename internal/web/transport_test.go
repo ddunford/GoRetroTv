@@ -275,3 +275,123 @@ func TestTransportPublishesLatestMachineStateOnConnectAndChange(t *testing.T) {
 		t.Fatal("invalid phase accepted")
 	}
 }
+
+// dialTransport opens one browser-equivalent socket against the transport.
+func dialTransport(t *testing.T, ctx context.Context, server *httptest.Server) *websocket.Conn {
+	t.Helper()
+	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		t.Cleanup(func() { response.Body.Close() })
+	}
+	t.Cleanup(func() { conn.Close(websocket.StatusNormalClosure, "") })
+	return conn
+}
+
+// The halted box is the whole reason the reset exists, so the phase gate that
+// refuses keys must not refuse a reset. A reset accepted only while the box
+// already works is a control that cannot do its one job.
+func TestTransportAcceptsResetWhileHaltedAndStillRefusesKeys(t *testing.T) {
+	transport := NewTransport()
+	if err := transport.PushState("halted", "guest instruction fault"); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(transport)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn := dialTransport(t, ctx, server)
+	readMessage(t, conn) // the halted state the transport replays on connect
+	if transport.TakeReset() {
+		t.Fatal("a reset was pending before the browser asked for one")
+	}
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":1}`)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-transport.Resets():
+	case <-ctx.Done():
+		t.Fatal("reset sent while halted never reached the instruction loop")
+	}
+
+	// The same socket, the same phase: a key must still be refused, or the
+	// reset would have opened a hole in the gate rather than an exception to it.
+	keyed := dialTransport(t, ctx, server)
+	readMessage(t, keyed)
+	if err := keyed.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":1,"raw":125,"source":0}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := keyed.Read(ctx); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+		t.Fatalf("key accepted while halted: close status = %v", err)
+	}
+	if len(transport.keys) != 0 {
+		t.Fatal("key entered the input queue while the box was halted")
+	}
+}
+
+// A public unauthenticated control must cost one rebuild however hard it is
+// pressed. The fold is silent by design: one restore satisfies every request
+// inside the window, and the state push that follows tells all of them.
+func TestTransportFoldsResetsInsideTheMinimumInterval(t *testing.T) {
+	transport := NewTransport()
+	transport.requestReset()
+	transport.requestReset()
+	if !transport.TakeReset() {
+		t.Fatal("the first reset was not queued")
+	}
+	if transport.TakeReset() {
+		t.Fatal("two presses with nothing drained between them queued two rebuilds")
+	}
+
+	// The queue is empty now, so anything the next press queues came past the
+	// interval rather than past the channel's one slot. Without this drain the
+	// test passes with no rate limit at all, which is how it was first written.
+	transport.requestReset()
+	if transport.TakeReset() {
+		t.Fatal("a press inside the minimum interval queued a second rebuild")
+	}
+
+	// Once the interval has passed the next press is a real request again.
+	transport.mu.Lock()
+	transport.lastReset = time.Now().Add(-resetInterval - time.Millisecond)
+	transport.mu.Unlock()
+	transport.requestReset()
+	if !transport.TakeReset() {
+		t.Fatal("a reset after the interval was folded")
+	}
+}
+
+func TestTransportRejectsMalformedResetsAndUnknownTypes(t *testing.T) {
+	for _, payload := range []string{
+		`{"type":"reset","version":2}`,
+		`{"type":"reset","version":1,"raw":125}`,
+		`{"type":"reset","version":1}{}`,
+		`{"type":"restart","version":1}`,
+	} {
+		transport := NewTransport()
+		server := httptest.NewServer(transport)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := conn.Write(ctx, websocket.MessageText, []byte(payload)); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := conn.Read(ctx); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
+			t.Errorf("accepted %s: close status = %v", payload, err)
+		}
+		if transport.TakeReset() {
+			t.Errorf("%s queued a rebuild", payload)
+		}
+		conn.Close(websocket.StatusNormalClosure, "")
+		if response.Body != nil {
+			response.Body.Close()
+		}
+		cancel()
+		server.Close()
+	}
+}

@@ -38,5 +38,10 @@ export interface KeyMessage {
   source: number;
 }
 
+export interface ResetMessage {
+  type: 'reset';
+  version: typeof WIRE_VERSION;
+}
+
 export type ServerWireMessage = PaletteMessage | FrameMessage | StateMessage;
-export type ClientWireMessage = KeyMessage;
+export type ClientWireMessage = KeyMessage | ResetMessage;

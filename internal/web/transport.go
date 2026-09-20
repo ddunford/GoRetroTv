@@ -26,6 +26,10 @@ const (
 	framePeriod   = 100 * time.Millisecond
 	writeLimit    = 10 * time.Second
 	keyQueueLimit = 64
+	// resetInterval is the shortest gap between two restores. The box is public
+	// and unauthenticated, so a held-down reset must cost one rebuild rather
+	// than one per message.
+	resetInterval = 3 * time.Second
 )
 
 type frameData struct {
@@ -48,7 +52,11 @@ type Transport struct {
 	clients map[*client]struct{}
 	latest  *frameData
 	keys    chan wire.KeyMessage
-	state   *wire.StateMessage
+	// resets holds at most one pending rebuild. It is a channel rather than a
+	// flag so a loop with no machine left to step can block on it.
+	resets    chan struct{}
+	lastReset time.Time
+	state     *wire.StateMessage
 }
 
 // PushState publishes the latest observed machine phase to current and future
@@ -79,7 +87,8 @@ func (t *Transport) PushState(phase, reason string) error {
 
 // NewTransport creates a framebuffer broadcaster.
 func NewTransport() *Transport {
-	return &Transport{clients: make(map[*client]struct{}), keys: make(chan wire.KeyMessage, keyQueueLimit)}
+	return &Transport{clients: make(map[*client]struct{}), keys: make(chan wire.KeyMessage, keyQueueLimit),
+		resets: make(chan struct{}, 1)}
 }
 
 // DrainKeys hands queued browser input to the caller's instruction loop. The
@@ -96,6 +105,41 @@ func (t *Transport) DrainKeys(send func(raw, source uint8) error) error {
 		}
 	}
 }
+
+// requestReset queues one rebuild for the instruction loop, folding a second
+// request inside resetInterval into the first. The wall clock is the right
+// clock here and only here: this rate-limits a socket, not the guest, whose
+// only clock is the instruction counter.
+func (t *Transport) requestReset() {
+	t.mu.Lock()
+	now := time.Now()
+	if !t.lastReset.IsZero() && now.Sub(t.lastReset) < resetInterval {
+		t.mu.Unlock()
+		return
+	}
+	t.lastReset = now
+	t.mu.Unlock()
+	select {
+	case t.resets <- struct{}{}:
+	default: // One rebuild already pending; it satisfies this request too.
+	}
+}
+
+// TakeReset reports whether a browser has asked for the box to be rebuilt.
+// The instruction loop calls it at a safe point, because Runtime admits no
+// owner but that loop.
+func (t *Transport) TakeReset() bool {
+	select {
+	case <-t.resets:
+		return true
+	default:
+		return false
+	}
+}
+
+// Resets lets a loop with no machine to step wait for a rebuild. A halted box
+// is the state the reset control exists to leave, so that wait is the point.
+func (t *Transport) Resets() <-chan struct{} { return t.resets }
 
 // PushFrame copies one full compositor image and makes it available to clients.
 // Callers retain ownership of image memory and may change it immediately after
@@ -193,6 +237,22 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				_ = conn.Close(websocket.StatusUnsupportedData, "key must be text")
 				return
 			}
+			kind, err := clientMessageType(data)
+			if err != nil {
+				_ = conn.Close(websocket.StatusPolicyViolation, "invalid client message")
+				return
+			}
+			if kind == "reset" {
+				if err := decodeReset(data); err != nil {
+					_ = conn.Close(websocket.StatusPolicyViolation, "invalid reset")
+					return
+				}
+				// Accepted in EVERY phase on purpose. The halted box is the one
+				// case this control exists for, and the phase gate below would
+				// refuse it exactly there.
+				t.requestReset()
+				continue
+			}
 			var key wire.KeyMessage
 			if err := decodeKey(data, &key); err != nil {
 				_ = conn.Close(websocket.StatusPolicyViolation, "invalid key")
@@ -243,10 +303,26 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func decodeKey(data []byte, key *wire.KeyMessage) error {
+// clientMessageType reads only the discriminator, and permissively, because
+// the strict decoders reject unknown fields and a key's fields are unknown to
+// a reset.
+func clientMessageType(data []byte) (string, error) {
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return "", err
+	}
+	return envelope.Type, nil
+}
+
+// decodeStrict reads exactly one JSON object, rejecting unknown fields and
+// trailing values. Both browser messages share it so neither can drift into
+// accepting something the other refuses.
+func decodeStrict(data []byte, value any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(key); err != nil {
+	if err := decoder.Decode(value); err != nil {
 		return err
 	}
 	var trailing any
@@ -255,8 +331,28 @@ func decodeKey(data []byte, key *wire.KeyMessage) error {
 	} else if err != io.EOF {
 		return err
 	}
+	return nil
+}
+
+func decodeKey(data []byte, key *wire.KeyMessage) error {
+	if err := decodeStrict(data, key); err != nil {
+		return err
+	}
 	if key.Type != "key" || key.Version != wire.Version || key.Source != 0 || !handsetRaw(key.Raw) {
 		return fmt.Errorf("unsupported handset key")
+	}
+	return nil
+}
+
+// decodeReset accepts the browser's request to rebuild the box. It carries no
+// guest-visible payload, so its whole validation is type and wire version.
+func decodeReset(data []byte) error {
+	var reset wire.ResetMessage
+	if err := decodeStrict(data, &reset); err != nil {
+		return err
+	}
+	if reset.Type != "reset" || reset.Version != wire.Version {
+		return fmt.Errorf("unsupported reset request")
 	}
 	return nil
 }

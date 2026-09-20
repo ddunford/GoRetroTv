@@ -98,6 +98,10 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
   await expect(page.locator('#box-status')).toHaveText('The box is ready. Press sky.');
   await page.screenshot({ path: testInfo.outputPath('handset-ready.png'), fullPage: true, animations: 'disabled' });
 
+  // The reset control sits before the handset, so Tab order enters the keys
+  // from there. Seeding focus keeps this about the KEY's focus ring rather
+  // than about how many controls happen to precede it.
+  await page.locator('#reset-box').focus();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Standby' })).toBeFocused();
   const focus = await page.getByRole('button', { name: 'Standby' }).evaluate(element => {
@@ -146,8 +150,9 @@ test('every handset key has a visible Tab focus and a usable touch target', asyn
   const count = await keys.count();
   expect(count).toBeGreaterThan(20);
   await expect(keys.first()).toBeEnabled();
+  await keys.first().focus();
   for (let index = 0; index < count; index++) {
-    await page.keyboard.press('Tab');
+    if (index > 0) await page.keyboard.press('Tab');
     const key = keys.nth(index);
     await expect(key).toBeFocused();
     const appearance = await key.evaluate(element => {
@@ -179,8 +184,9 @@ test('phone keeps the screen visible while handset keys receive focus', async ({
   await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   const keys = page.locator('#handset button[data-raw]');
+  await keys.first().focus();
   for (let index = 0; index < await keys.count(); index++) {
-    await page.keyboard.press('Tab');
+    if (index > 0) await page.keyboard.press('Tab');
     await expect(keys.nth(index)).toBeFocused();
     const positions = await page.evaluate(() => {
       const television = document.querySelector('.television')!.getBoundingClientRect();

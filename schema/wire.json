@@ -1,6 +1,9 @@
 {
   "version": 1,
-  "raster": { "width": 720, "height": 576 },
+  "raster": {
+    "width": 720,
+    "height": 576
+  },
   "messages": {
     "palette": {
       "direction": "server",
@@ -24,7 +27,13 @@
     "state": {
       "direction": "server",
       "fields": {
-        "phase": ["booting", "flash-check", "channel-list", "ready", "halted"],
+        "phase": [
+          "booting",
+          "flash-check",
+          "channel-list",
+          "ready",
+          "halted"
+        ],
         "reason": "string"
       }
     },
@@ -34,6 +43,10 @@
         "raw": "uint8",
         "source": "uint8"
       }
+    },
+    "reset": {
+      "direction": "client",
+      "fields": {}
     }
   }
 }

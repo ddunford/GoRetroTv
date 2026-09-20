@@ -37,3 +37,8 @@ type KeyMessage struct {
 	Raw     uint8  `json:"raw"`
 	Source  uint8  `json:"source"`
 }
+
+type ResetMessage struct {
+	Type    string `json:"type"`
+	Version int    `json:"version"`
+}

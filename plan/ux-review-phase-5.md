@@ -29,10 +29,11 @@ original canvas remain the same.
 ## Verification
 
 `tests/e2e/handset.spec.ts` tabs through every key at 320 × 700 and checks that the screen remains
-inside the viewport while each focused key lies below the television. It also taps Sky and Select
-in a mobile touch context and checks that the screen stays above Select. The focused `0` key and
-display were inspected together in the screenshot. The full Playwright suite passed 9/9;
-TypeScript and CSS lint passed. The deployed page is checked again after the CSS build is live.
+inside the viewport while each focused key lies below the television. It also checks a compact
+320 × 500 portrait viewport, taps Sky and Select in a mobile touch context, and checks that the
+screen stays above Select. The focused `0` key and display were inspected together in the
+screenshot. The full Playwright suite passed 10/10; TypeScript and CSS lint passed. The deployed
+page was inspected in light and dark schemes at 320 px and 568 × 320 after the CSS build went live.
 
 A second mobile pass found the display offscreen at 568 × 320 landscape. The local Playwright
 landscape test now checks that the display and Select are both visible, side by side, without

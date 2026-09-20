@@ -1,4 +1,5 @@
 import { decodeServerMessage, encodeKeyMessage } from './wire.js';
+import { describeScreen, unknownScreen } from './screen.js';
 
 const canvasNode = document.querySelector<HTMLCanvasElement>('#screen');
 const statusNode = document.querySelector<HTMLElement>('#box-status');
@@ -29,6 +30,7 @@ let awaitingFullFrame = true;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempts = 0;
 let haltReason = '';
+let screenRevision = 0;
 
 function setKeysEnabled(enabled: boolean): void {
   for (const key of keys) key.disabled = !enabled;
@@ -37,7 +39,16 @@ function setKeysEnabled(enabled: boolean): void {
 function showStatus(state: string, message: string): void {
   document.body.dataset.state = state;
   statusLine.textContent = message;
-  canvas.setAttribute('aria-label', `Sky Digibox screen. ${message}`);
+}
+
+function describeCurrentFrame(): void {
+  const revision = ++screenRevision;
+  canvas.setAttribute('aria-label', unknownScreen);
+  void describeScreen(framebuffer, palette).then(description => {
+    if (revision === screenRevision) canvas.setAttribute('aria-label', description);
+  }).catch(() => {
+    if (revision === screenRevision) canvas.setAttribute('aria-label', unknownScreen);
+  });
 }
 
 function updateKeys(): void {
@@ -93,6 +104,7 @@ function handleMessage(payload: string): void {
         (message.y + row) * width + message.x);
     }
     paint(message.x, message.y, message.w, message.h);
+    describeCurrentFrame();
     if (awaitingFullFrame) {
       awaitingFullFrame = false;
       updateKeys();

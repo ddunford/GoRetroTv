@@ -5,15 +5,22 @@ Scope: the public browser deployment at `https://goretrotv.demosrv.uk`, the WebS
 
 ## Summary
 
-No Critical or High findings were found. The public route serves the real browser emulator over TLS, but the developer surfaces remain unavailable through the public HTTP layer and direct TCP probes. The private firmware and post-acquisition snapshot are mounted read-only at runtime and are not present in tracked source or the built runtime image.
+No Critical or High findings were found. The public route serves the real browser emulator over TLS, but the developer surfaces remain unavailable through the public HTTP layer and direct TCP probes. The private firmware and post-acquisition snapshot are mounted read-only at runtime and are not present in tracked source or the built runtime image. A stale public asset finding discovered after the first audit pass was fixed and retested.
 
 | Severity | Count |
 |---|---:|
 | Critical | 0 |
 | High | 0 |
-| Medium | 0 |
+| Medium (fixed) | 1 |
 | Low | 0 |
 | Informational / accepted | 1 |
+
+## Fixed Finding
+
+1. **[A05] A public cache served stale stylesheet bytes after a deploy — Medium**
+   - Evidence: the public Playwright asset-byte check found `/styles.css` from an older build while the live WebSocket served the new build. This could leave visitors with a mismatched page and handset layout.
+   - Fix: the static route now sends `Cache-Control: no-store`; the HTML names the stylesheet and JavaScript modules with the running build version. The public Playwright check follows those versioned URLs and compares served bytes to the build artifacts.
+   - Verification: `go test -race ./internal/app`, TypeScript typecheck, CSS lint, and `npm run test:e2e:public` passed against the deployed route after the fix (`gort-4sx.20`).
 
 ## Informational / Accepted
 

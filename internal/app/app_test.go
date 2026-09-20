@@ -24,7 +24,8 @@ func TestPageServesOnlyBuiltAssets(t *testing.T) {
 		"index.html":  `<title>Sky box</title><link rel="stylesheet" href="/styles.css"><script type="module" src="/dist/app.js"></script>`,
 		"styles.css":  "body{color:blue}",
 		"favicon.svg": "<svg></svg>", "dist/app.js": "import './wire.js'",
-		"dist/wire.js": "export const wire = 1", "dist/wire_generated.js": "export const version = 1",
+		"dist/screen.js": "export const screen = 1",
+		"dist/wire.js":   "export const wire = 1", "dist/wire_generated.js": "export const version = 1",
 		"app.ts": "private TypeScript source",
 	}
 	for name, content := range assets {
@@ -45,7 +46,7 @@ func TestPageServesOnlyBuiltAssets(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 	for path, want := range map[string]string{
-		"/": `/dist/dev/app.js`, "/styles.css": "body{color:blue}", "/dist/dev/app.js": "import './wire.js'",
+		"/": `/dist/dev/app.js`, "/styles.css": "body{color:blue}", "/dist/dev/app.js": "import './wire.js'", "/dist/dev/screen.js": "export const screen = 1",
 	} {
 		response, err := http.Get(server.URL + path)
 		if err != nil {

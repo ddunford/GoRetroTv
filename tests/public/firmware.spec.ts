@@ -16,6 +16,7 @@ test('deployed HTTPS serves its own assets and no developer routes', async ({ re
   expect(identity.status).toBe('ok');
   for (const [asset, file] of [['/', 'web/index.html'], [`/styles.css?v=${identity.version}`, 'web/styles.css'],
     ['/favicon.svg', 'web/favicon.svg'], [`/dist/${identity.version}/app.js`, 'web/dist/app.js'],
+    [`/dist/${identity.version}/screen.js`, 'web/dist/screen.js'],
     [`/dist/${identity.version}/wire.js`, 'web/dist/wire.js'],
     [`/dist/${identity.version}/wire_generated.js`, 'web/dist/wire_generated.js']] as const) {
     const response = await request.get(asset);

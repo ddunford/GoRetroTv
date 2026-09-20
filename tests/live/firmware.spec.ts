@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { describeScreen, unknownScreen } from '../../web/dist/screen.js';
 
 function indexedHash(pixels: Buffer): number {
   let hash = 2166136261;
@@ -8,10 +9,12 @@ function indexedHash(pixels: Buffer): number {
 }
 
 test('real firmware sends its screen, accepts Sky, and draws the Box Office menu', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   let palette: Buffer | null = null;
   let initialFrame: Buffer | null = null;
+  let frameMessages = 0;
   const livePixels = Buffer.alloc(720 * 576);
   page.on('websocket', socket => socket.on('framereceived', frame => {
     if (typeof frame.payload !== 'string') return;
@@ -20,6 +23,7 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
     if (message.type === 'palette' && message.rgb) palette = Buffer.from(message.rgb, 'base64');
     if (message.type === 'frame' && message.pixels && message.x !== undefined &&
         message.y !== undefined && message.w !== undefined && message.h !== undefined) {
+      frameMessages++;
       const patch = Buffer.from(message.pixels, 'base64');
       for (let y = 0; y < message.h; y++) {
         patch.copy(livePixels, (message.y + y) * 720 + message.x, y * message.w, (y + 1) * message.w);
@@ -46,6 +50,7 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
     rgba[i * 4 + 3] = 255;
   }
   expect(indexedHash(frameBytes)).toBe(0xA6A21DC5); // Pinned by board's real snapshot Compose test.
+  await expect(screen).toHaveAttribute('aria-label', 'Plain dark blue Digibox screen. No menu is visible.');
   const expectedCanvasSHA = createHash('sha256').update(rgba).digest('hex');
   const browserCanvasSHA = await screen.evaluate(async (canvas: HTMLCanvasElement) => {
     const bytes = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -69,11 +74,41 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
 
   await sky.click();
   await expect(page.locator('#key-feedback')).toContainText('sky sent to the box');
-  await expect.poll(countColours,
-  { timeout: 45_000, intervals: [500, 1000] }).toBeGreaterThan(10);
+  try {
+    await expect.poll(countColours,
+    { timeout: 45_000, intervals: [500, 1000] }).toBeGreaterThan(10);
+  } catch (error) {
+    throw new Error(`Sky menu did not reach the canvas: WebSocket frames=${frameMessages}, ` +
+      `latest indexed hash=${indexedHash(livePixels).toString(16)}, page errors=${errors.join('; ')}`, { cause: error });
+  }
   await expect.poll(() => indexedHash(livePixels),
   { timeout: 45_000, intervals: [500, 1000] }).toBe(0xFE8D1CCC); // Pinned by board's post-Sky Compose test.
   await expect(page.locator('#box-status')).toContainText('ready');
+  await expect(screen).toHaveAttribute('aria-label', /Box Office menu.*Selected: Movies by Start Time\./);
+  const changedChrome = Buffer.from(livePixels);
+  changedChrome[0] ^= 1;
+  expect(await describeScreen(changedChrome, palette!)).toBe(unknownScreen);
+  const changedOption = Buffer.from(livePixels);
+  changedOption[164 * 720 + 260] ^= 1;
+  expect(await describeScreen(changedOption, palette!)).toBe(unknownScreen);
+  const changedPalette = Buffer.from(palette!);
+  changedPalette[0] ^= 1;
+  expect(await describeScreen(livePixels, changedPalette)).toBe(unknownScreen);
+  for (let row = 2; row <= 6; row++) {
+    let moved = false;
+    for (let attempt = 0; attempt < 5 && !moved; attempt++) {
+      await page.waitForTimeout(1500);
+      await page.getByRole('button', { name: 'Down' }).click();
+      try {
+        await expect.poll(() => livePixels[(164 + (row - 1) * 32) * 720 + 125], { timeout: 4_000 }).toBe(97);
+        moved = true;
+      } catch { /* The firmware can ignore a key while its menu event is in flight. */ }
+    }
+    expect(moved, `row ${row} was never reached`).toBe(true);
+    await expect(screen).toHaveAttribute('aria-label', new RegExp(`Selected: ${[
+      'Movies by Start Time', 'Movies A–Z', 'New Movies', 'Sports & Events', 'Specialist', 'Free Previews',
+    ][row - 1]}\\.`));
+  }
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('real-firmware-menu-light.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });

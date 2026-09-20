@@ -181,7 +181,15 @@ func runMachine(ctx context.Context, box *board.Runtime, transport *web.Transpor
 		}
 		count = box.Machine.Retired
 		if count%5_000_000 == 0 {
-			logger.Debug("guest progress", "retired", count, "pc", box.Machine.Core.PC)
+			if logger.Enabled(ctx, slog.LevelDebug) {
+				frame, err := box.Compose()
+				if err != nil {
+					haltMachine(transport, logger, err)
+					return
+				}
+				logger.Debug("guest progress", "retired", count, "pc", box.Machine.Core.PC,
+					"csi_pending", box.CSI.Pending(), "frame_hash", fmt.Sprintf("%08X", statehash.HashBytes(frame.Pix)))
+			}
 		}
 		if count%frameInterval == 0 {
 			if err := publishFrame(box, transport); err != nil {

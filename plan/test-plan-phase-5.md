@@ -25,7 +25,7 @@
   snapshot, clicks the page's Sky button, and waits for the firmware's Box Office menu on the
   canvas; `internal/web/transport_test.go` asserts the measured CSI wire frame from a live socket.
 - [x] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
-  **Result:** `npm run test:e2e:public` restarts the public container from the private snapshot,
+  **Result:** `tests/public/firmware.spec.ts` run by `npm run test:e2e:public` restarts the public container from the private snapshot,
   opens `https://goretrotv.demosrv.uk/` in Chromium, captures the real `wss://` frame and checks
   its indexed hash `A6A21DC5` against the entire browser canvas. A click on Sky sends raw
   `0x7D` over that WebSocket and yields the exact composed Box Office menu hash `FE8D1CCC`.
@@ -34,16 +34,17 @@
 - [x] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
   `goretrotv.demosrv.uk`, not localhost**, and every asset it fetches is verified to return its own
   content rather than the SPA fallback.
-  **Result:** `./ctl.sh up-public` built and started the image behind the real Traefik router;
+  **Result:** `tests/public/firmware.spec.ts` and `./ctl.sh up-public` verified the image behind the real Traefik router;
   `https://goretrotv.demosrv.uk/health` returned 200 over verified TLS. The public page, stylesheet,
-  favicon and three JavaScript modules matched their built files byte for byte; an unknown module
+  favicon and four JavaScript modules matched their built files byte for byte; an unknown module
   returned 404. Browser verification at the real URL showed Ready, 24 enabled buttons and the real
   firmware's Box Office menu after Sky was pressed. Light, dark and 390 px mobile screenshots were
   inspected; mobile had no horizontal overflow. `./ctl.sh conformance` passed 7/7 rules and 26/26
   probes, including the firmware-free image check.
 - [x] **TC-5.6: Developer surfaces are unreachable publicly** (covers: TASK-5.6, TASK-5.7) — the gdb port and
   instrument endpoints refuse from outside. Asserted against the deployed host.
-  **Result:** With `https://goretrotv.demosrv.uk/health` returning 200, TCP connections to
+  **Result:** `tests/public/firmware.spec.ts` asserts the HTTPS developer-route boundary;
+  with `https://goretrotv.demosrv.uk/health` returning 200, TCP connections to
   `goretrotv.demosrv.uk:23457` (GDB test port) and `:8099` timed out; direct connections to the
   origin LAN address `192.168.1.12` on both ports were refused. Public requests for
   `/debug/pprof/`, `/debug/pprof/profile`, `/debug/pprof/cmdline`, `/instruments`, `/metrics`,
@@ -55,11 +56,11 @@
 - [x] **TC-5.7: The TS decoder is pinned to the Go encoder's actual bytes** (covers: TASK-5.7, TASK-5.9) — feed the decoder a fixture **captured from the running server** and assert the
   projection. A hand-authored fixture passes while the wire differs, which is the failure mode where
   the contract test exists, is green, and still ships the bug.
-  **Proof:** `internal/web/wire_capture_test.go` captures palette and dirty-frame JSON from an HTTP-upgraded Go WebSocket transport and compares it byte for byte with `tests/fixtures/wire.jsonl`; `tests/wire.test.mjs` decodes the captured bytes and checks colour and pixel projection. `go test -race ./internal/web ./internal/wire`, `npm run wire:check`, and `npm run test:wire` pass.
+  **Result:** `internal/web/wire_capture_test.go` captures palette and dirty-frame JSON from an HTTP-upgraded Go WebSocket transport and compares it byte for byte with `tests/fixtures/wire.jsonl`; `tests/wire.test.mjs` decodes the captured bytes and checks colour and pixel projection. `go test -race ./internal/web ./internal/wire`, `npm run wire:check`, and `npm run test:wire` pass.
 - [x] **TC-5.8: The page survives losing the box** (covers: TASK-5.10, TASK-5.7) — kill the socket
   mid-session: the page says so, reconnects, and resumes. Halt the machine: a readable reason, not a
   frozen canvas. Press a key while disconnected: refused visibly, never swallowed.
-  **Proof:** `tests/e2e/handset.spec.ts` closes a live routed WebSocket, checks the visible
+  **Result:** `tests/e2e/handset.spec.ts` closes a live routed WebSocket, checks the visible
   disconnect and disabled handset, confirms no key was sent, and verifies that the old canvas
   pixel stays drawn. A new socket supplies a full palette/frame and ready state; the new pixels
   appear and the handset sends a key. A second rapid drop waits at least 450 ms before reconnect,
@@ -87,3 +88,12 @@
   visible side by side with no horizontal overflow. The deployed URL at 568 × 320 reported
   screen bounds `121.875..288.265625`, Select bounds `136.9375..183.9375`, `scrollWidth=568`,
   and the screenshot `.artifacts/public-landscape-568x320.png` was inspected.
+- [?] **TC-5.12: The canvas describes the guest screen as it changes** (covers: gort-4sx.22) —
+  the text alternative must name the visible menu and selected option from rendered firmware
+  output, and must not retain a known-screen label after an unrecognised change.
+  **Open:** `tests/live/firmware.spec.ts` passed against real private firmware: it verified the
+  blue screen, all six Box Office selections, and negative controls changing one palette,
+  menu-row, or outside-row byte. `tests/e2e/screen-description.spec.ts` passed with a dirty
+  frame changing a known blue screen to an unknown one; the old label was removed. The
+  classifier covers those measured frames only. Other guest screens and interactive choices
+  still lack verified semantic extraction, so full screen-reader access is not yet proved.

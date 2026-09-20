@@ -28,7 +28,7 @@ func New(cfg *config.Config, logger *slog.Logger, transport *web.Transport) (htt
 		return nil, fmt.Errorf("app: GORETROTV_ENABLE_PPROF requires GORETROTV_ENV=development")
 	}
 	assets := os.DirFS(cfg.WebDir)
-	for _, name := range []string{"index.html", "styles.css", "favicon.svg", "dist/app.js", "dist/wire.js", "dist/wire_generated.js"} {
+	for _, name := range []string{"index.html", "styles.css", "favicon.svg", "dist/app.js", "dist/screen.js", "dist/wire.js", "dist/wire_generated.js"} {
 		if _, err := fs.Stat(assets, name); err != nil {
 			return nil, fmt.Errorf("app: required page asset %s: %w", name, err)
 		}
@@ -49,6 +49,7 @@ func registerRoutes(mux *http.ServeMux, cfg *config.Config, assets fs.FS, transp
 	for path, name := range map[string]string{
 		"/": "index.html", "/styles.css": "styles.css", "/favicon.svg": "favicon.svg",
 		distPrefix + "app.js":            "dist/app.js",
+		distPrefix + "screen.js":         "dist/screen.js",
 		distPrefix + "wire.js":           "dist/wire.js",
 		distPrefix + "wire_generated.js": "dist/wire_generated.js",
 	} {

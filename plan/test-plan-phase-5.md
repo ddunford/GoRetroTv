@@ -143,3 +143,22 @@
   under it, so that copy moved above the television. Mobile was re-checked at 390 × 780: the stage
   is `display: contents` there and the television sticks against the grid as it did before, with
   `scrollWidth` 390. Full local Playwright suite 19/19.
+- [x] **TC-5.15: The box and the whole handset fit the window** (covers: TASK-5.13) — on a desktop
+  window nothing scrolls: the screen, its status line, the reset, and the handset from the sky key
+  to the 0 key are all on screen together, with every key still at 44px.
+  **Result:** `tests/e2e/handset.spec.ts` asserts it at 1366 × 768, 1440 × 900 and 1920 × 1080 —
+  `maxScroll <= 0`, no horizontal scroll, sky/0/number-pad/screen/status/reset all fully in the
+  viewport, the reset not covered by the pinned stage, and the smallest key ≥ 44px. Falsified:
+  deleting the fit-to-window block fails all three. A fourth case covers the honest fallback at
+  1280 × 620, where two columns of 44px keys cannot fit beside a picture: there the page scrolls
+  and the test asserts the picture is **pinned** at the sticky offset rather than merely still on
+  screen. Measured across eight window sizes: zero overflow at every window ≥ 760px tall
+  (768/800/900/1050/1080), scrolling below it.
+  Three mechanisms were tried and two discarded, which the CSS records: a constant subtracted from
+  `100vh` fitted 1440 × 900 exactly and overflowed everywhere else, giving a 138px picture at
+  1280 × 620; `width: fit-content` could not shrink the bezel because a canvas contributes its
+  intrinsic 720px as max-content width whatever height it is drawn at. The set is now sized from
+  the stage's own height with container-query units, so there is nothing to re-sweep when the copy
+  changes. Light and dark inspected at 1366 × 768 (`.artifacts/fit3-1366x768.png`,
+  `fit-dark-1366x768.png`); mobile re-checked at 390 × 780 (`fit-mobile-390.png`) and unchanged.
+  Full local Playwright suite 21/21.

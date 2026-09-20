@@ -15,10 +15,6 @@
   --key-top: #eef0ec;
   --key-bottom: #cbd0cd;
   --key-ink: #152334;
-  /* Everything in the sticky stage that is not the picture: the television's
-     own 92px of casing, the status line, the reset and its note, the margins
-     between them, and the 16px the stage is pinned at. Measured, not guessed. */
-  --stage-chrome: 340px;
   --duration-fast: 110ms;
   --duration-state: 170ms;
   --ease-press: cubic-bezier(.2, .7, .3, 1);
@@ -131,29 +127,149 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .remote-bottom span { width: 15px; height: 2px; border-radius: 2px; background: #80909d; }
 .key-feedback { min-height: 38px; margin: 17px 8px 0; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
 
-/* The screen follows the handset. Below 760px the television is already
-   sticky; above it you had to scroll away from the picture to reach the lower
-   keys. The whole STAGE sticks, not just the television: the status line and
-   the reset are about the screen and have to stay with it, and an earlier
-   version that pinned the television alone had both of them sliding
-   underneath it, which put the recovery control behind the picture at exactly
-   the scroll position a stuck viewer would be at.
+/* On a desktop window nothing scrolls: the screen and the WHOLE handset are
+   side by side, both fully visible. Pinning the screen was not enough -- the
+   remote still scrolled, so the sky key and the number pad were never on
+   screen together and the handset stayed awkward to use.
 
-   .viewer needs the row's full height or the sticky element has nowhere to
-   travel. The stage is capped from the VIEWPORT HEIGHT -- applied as a width,
-   so the 5:4 picture keeps its ratio and the bezel shrinks with it rather
-   than pillarboxing -- because pinning a stage taller than the window would
-   clip the picture, which is worse than the scrolling it fixes. On a tall
-   window the column width is the smaller limit and the cap does nothing. */
+   The picture is sized by LAYOUT, not by arithmetic. An earlier attempt
+   subtracted a measured constant from 100vh, which assumes everything that is
+   not the picture has a fixed height -- and it does not: the standing copy
+   appears on tall windows and the handset compresses on short ones. One swept
+   value fitted 1440x900 exactly and overflowed every other size, giving a
+   138px picture at 1280x620. So the page is a column the height of the
+   window, the picture takes whatever the row has left, and its 5:4 ratio
+   turns that height into a width. Nothing to retune when the copy changes.
+
+   The handset compresses through its SPACING, never its key sizes: the key
+   rows are only ~498px of its natural 719, the rest is padding and gaps, and
+   every key keeps its 44px minimum. A transform: scale() on the remote would
+   shrink the hit areas below the accessible floor, so it is the wrong
+   mechanism however neatly it would fit.
+
+   Below the handset's own floor -- roughly a 700px window -- nothing can fit
+   two columns of 44px keys beside a picture, so the page scrolls again and
+   the sticky stage keeps the picture in view while you reach the keys. */
 @media (min-width: 761px) {
-  .viewer { align-self: stretch; }
+  .experience { align-items: stretch; padding-top: clamp(16px, 3.5vh, 48px); }
+
+  /* The left column is intro (fixed) then stage (takes the rest). */
+  .viewer { display: flex; min-height: 0; flex-direction: column; }
+  .intro { flex: none; }
+  .intro h1 { font-size: clamp(27px, 4.4vh, 44px); }
+  .intro-copy { margin-bottom: clamp(10px, 1.8vh, 22px); }
+
+  /* Sticky still, for the short windows further down that do scroll. */
   .viewer-stage {
     position: sticky;
     top: 16px;
     z-index: 2;
-    max-width: calc((100vh - var(--stage-chrome)) * 1.25 + 56px);
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+  }
+  /* The television takes the height left over and hands it to the picture;
+     the canvas turns that height into a width through its own ratio, so the
+     bezel shrinks with the picture instead of pillarboxing it. */
+  .television { display: flex; min-height: 0; flex: 1; flex-direction: column; }
+  .screen-well { min-height: 0; flex: 1; }
+  .status-panel, .box-actions, .reset-feedback { flex: none; }
+
+  /* The handset compresses through its spacing, never its key sizes. Every
+     key stays at the 44px floor; only the air between them goes. */
+  .controls { display: flex; min-height: 0; flex-direction: column; }
+  .remote { padding-block: clamp(9px, 1.2vh, 14px); }
+  .remote-head { margin-bottom: clamp(6px, 1vh, 10px); }
+  .remote-primary { gap: clamp(5px, 0.7vh, 7px); }
+  .remote-nav {
+    grid-template-rows: repeat(3, 44px);
+    gap: 4px;
+    margin-block: clamp(7px, 1.4vh, 14px) clamp(5px, 0.8vh, 8px);
+  }
+  .remote-secondary { margin-bottom: clamp(6px, 1.1vh, 10px); }
+  .colour-row { gap: 5px; margin-bottom: clamp(7px, 1.3vh, 12px); }
+  .number-pad { gap: clamp(4px, 0.7vh, 6px); }
+  .number-pad .key { min-height: 44px; }
+  .remote-bottom { margin-top: clamp(6px, 1.2vh, 11px); }
+  .key-feedback { min-height: 18px; margin-top: clamp(6px, 1.1vh, 10px); }
+  .controls-heading { margin-bottom: clamp(8px, 1.2vh, 12px); }
+}
+
+/* Short desktop windows give their height to the picture and the keys, not
+   to standing text. The h1 still says what this is. */
+@media (min-width: 761px) and (max-height: 950px) {
+  .intro-copy, .screen-help, .intro .eyebrow { display: none; }
+}
+
+/* Above the handset's floor the page IS the window: a definite height, so the
+   picture's percentage height resolves against something and the row cannot
+   grow past the viewport. Below it, this block simply does not apply and the
+   page scrolls with the stage pinned, which is the honest fallback -- two
+   columns of 44px keys beside a picture do not fit a 700px window. */
+@media (min-width: 761px) and (min-height: 760px) {
+  .site-shell {
+    display: flex;
+    height: 100dvh;
+    flex-direction: column;
+    /* The shell's 48px of bottom padding is dead space when the page is the
+       window, and it was the whole 34px overflow at 1366x768: the handset is
+       already at its floor there, so those pixels come off nothing else. */
+    padding-bottom: clamp(8px, 1.4vh, 20px);
+  }
+  .experience { flex: 1; min-height: 0; }
+  /* The set is sized from the height the row has left, using the stage as a
+     query container so there is no constant to re-sweep when the copy
+     changes. width: fit-content cannot do this: a canvas contributes its
+     INTRINSIC 720px as its max-content width, whatever height it is drawn
+     at, so the bezel stayed full width with the picture centred inside it.
+
+     Only the stage furniture below the television -- status line, reset and
+     its note, and their margins -- is a constant here, and over-estimating
+     it is safe: the television comes out slightly small, never too tall, so
+     it cannot reintroduce an overflow. */
+  .viewer-stage { flex: 1; container-type: size; }
+  .television {
+    width: calc((100cqh - 190px - 92px) * 1.25 + 56px);
+    max-width: 100%;
     margin-inline: auto;
   }
+  .status-panel, .box-actions { max-width: calc((100cqh - 190px - 92px) * 1.25 + 56px); margin-inline: auto; }
+  .reset-note { max-width: 40ch; }
+  .controls-heading { display: block; }
+}
+
+/* Between the handset's floor and a tall window there is no room for
+   furniture above it: its heading costs 62px that the remote cannot give up,
+   and a remote is self-evidently a remote. The h2 stays in the accessibility
+   tree -- the column is named by it through aria-labelledby, so hiding it
+   outright would take the name with it. */
+@media (min-width: 761px) and (max-height: 900px) {
+  .controls-caption { display: none; }
+  .controls-heading { margin-bottom: 0; }
+  .controls-heading .eyebrow { display: none; }
+  .controls-heading h2 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Below the handset's floor the page scrolls, so the picture is capped the
+   way it was before fit-to-window existed: from the viewport height, as a
+   width, so the 5:4 ratio holds and the bezel shrinks with the picture. 340
+   was measured against this regime -- at 1280x620 it keeps the television,
+   the status line, the reset and the number pad all on screen at once at the
+   far end of the scroll. */
+@media (min-width: 761px) and (max-height: 759px) {
+  .viewer-stage { max-width: calc((100vh - 340px) * 1.25 + 56px); margin-inline: auto; }
+  .screen-well canvas { width: 100%; height: auto; }
 }
 
 @media (max-width: 1000px) {

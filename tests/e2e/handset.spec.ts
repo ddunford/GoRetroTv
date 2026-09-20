@@ -272,66 +272,91 @@ test('short landscape keeps screen beside usable handset', async ({ page }, test
   await page.screenshot({ path: testInfo.outputPath('landscape-screen-and-handset.png'), animations: 'disabled' });
 });
 
-// Scrolling down to reach the lower keys used to take the picture off the top
-// of the window, so you could watch the box or press its keys but not both.
-// Both desktop heights are checked because the fix is height-dependent: the
-// stage is capped from the viewport so it can be pinned without being clipped,
-// and a cap that is right at 900px can still be wrong at 620px.
-for (const [width, height] of [[1280, 620], [1440, 900]] as const) {
-  test(`screen, status and reset stay with the handset while scrolling at ${width}x${height}`, async ({ page }, testInfo) => {
+// The handset has to be usable without scrolling away from the picture. Above
+// the handset's floor that means the whole page fits the window; below it the
+// page scrolls and the pinned stage keeps the picture in view while you reach
+// the keys. Both regimes are asserted, because the fix for one is not the fix
+// for the other and a single size would hide whichever broke.
+const geometry = (page: import('@playwright/test').Page) => page.evaluate(() => {
+  const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+  const visible = (selector: string) => {
+    const rect = box(selector);
+    return rect.top >= 0 && rect.bottom <= innerHeight;
+  };
+  const keys = [...document.querySelectorAll<HTMLElement>('#handset button[data-raw]')];
+  return {
+    scrollY: Math.round(scrollY),
+    maxScroll: Math.round(document.body.scrollHeight - innerHeight),
+    screen: visible('#screen'),
+    status: visible('.status-panel'),
+    reset: visible('#reset-box'),
+    sky: visible('#handset button[data-raw="0x7D"]'),
+    zeroKey: visible('#handset button[data-raw="0x00"]'),
+    numberPad: visible('.number-pad'),
+    screenTop: Math.round(box('#screen').top),
+    // Nothing in the pinned stage may be covered by it.
+    resetOnTop: document.elementFromPoint(
+      box('#reset-box').left + 4, box('#reset-box').top + 4)?.closest('#reset-box') !== null,
+    smallestKey: Math.round(Math.min(...keys.map(key => Math.min(
+      key.getBoundingClientRect().width, key.getBoundingClientRect().height)))),
+    scrollWidth: document.documentElement.scrollWidth,
+  };
+});
+
+for (const [width, height] of [[1366, 768], [1440, 900], [1920, 1080]] as const) {
+  test(`the box and the whole handset fit ${width}x${height} without scrolling`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
     await page.routeWebSocket('**/ws', ws => sendReady(ws));
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
 
-    const geometry = async () => page.evaluate(() => {
-      const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-      const visible = (selector: string) => {
-        const rect = box(selector);
-        return rect.top >= 0 && rect.bottom <= innerHeight;
-      };
-      return {
-        scrollY: Math.round(scrollY),
-        maxScroll: Math.round(document.body.scrollHeight - innerHeight),
-        screen: visible('#screen'),
-        status: visible('.status-panel'),
-        reset: visible('#reset-box'),
-        numberPad: visible('.number-pad'),
-        // The stage is pinned, so nothing inside it may be covered by it.
-        resetOnTop: document.elementFromPoint(
-          box('#reset-box').left + 4, box('#reset-box').top + 4)?.closest('#reset-box') !== null,
-        screenTop: Math.round(box('#screen').top),
-        scrollWidth: document.documentElement.scrollWidth,
-      };
-    });
-
-    const top = await geometry();
-    expect(top.maxScroll).toBeGreaterThan(0); // otherwise this proves nothing
-    // Not asserted at scroll 0: the intro sits above the television there, so
-    // the picture has always started partly below the fold on a short window.
-    // What changed is that scrolling no longer takes it away.
-
-    await page.evaluate(() => window.scrollTo(0, Math.round(document.body.scrollHeight / 2)));
-    expect((await geometry()).screen).toBe(true);
-
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    const bottom = await geometry();
-    expect(bottom.scrollY).toBe(bottom.maxScroll);
-    // The whole point: at the far end of the scroll the picture is still there,
-    // with the keys you scrolled down to reach.
-    expect(bottom.screen).toBe(true);
-    expect(bottom.numberPad).toBe(true);
-    // And the controls travelled with it rather than sliding underneath.
-    expect(bottom.status).toBe(true);
-    expect(bottom.reset).toBe(true);
-    expect(bottom.resetOnTop).toBe(true);
-    // Pinned, not merely still on screen. Capping the stage's height alone
-    // shortens the page enough that everything happens to fit at the bottom
-    // -- which is why removing the sticky positioning left this test passing
-    // until it asserted the position. The picture holds its place instead of
-    // creeping to the top edge as you scroll.
-    expect(bottom.screenTop).toBeGreaterThanOrEqual(16);
-    expect(bottom.scrollWidth).toBe(width);
-    await page.screenshot({ path: testInfo.outputPath(`scrolled-${width}x${height}.png`), animations: 'disabled' });
+    const fitted = await geometry(page);
+    // The point of the whole layout: no scrolling at all.
+    expect(fitted.maxScroll).toBeLessThanOrEqual(0);
+    expect(fitted.scrollWidth).toBe(width);
+    // Both ends of the handset at once, which is what scrolling used to cost.
+    expect(fitted.sky).toBe(true);
+    expect(fitted.zeroKey).toBe(true);
+    expect(fitted.numberPad).toBe(true);
+    // And the box it drives, with its status and its recovery control.
+    expect(fitted.screen).toBe(true);
+    expect(fitted.status).toBe(true);
+    expect(fitted.reset).toBe(true);
+    expect(fitted.resetOnTop).toBe(true);
+    // The handset shrank by giving up spacing, never target size.
+    expect(fitted.smallestKey).toBeGreaterThanOrEqual(44);
+    await page.screenshot({ path: testInfo.outputPath(`fits-${width}x${height}.png`), animations: 'disabled' });
   });
 }
+
+test('a window too short to fit the handset scrolls with the picture pinned', async ({ page }, testInfo) => {
+  // Two columns of 44px keys beside a picture do not fit 620px of height, so
+  // this is the honest fallback rather than a layout failure.
+  await page.setViewportSize({ width: 1280, height: 620 });
+  await page.routeWebSocket('**/ws', ws => sendReady(ws));
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeEnabled();
+
+  const top = await geometry(page);
+  expect(top.maxScroll).toBeGreaterThan(0); // otherwise this proves nothing
+
+  await page.evaluate(() => window.scrollTo(0, Math.round(document.body.scrollHeight / 2)));
+  expect((await geometry(page)).screen).toBe(true);
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const bottom = await geometry(page);
+  expect(bottom.scrollY).toBe(bottom.maxScroll);
+  expect(bottom.screen).toBe(true);
+  expect(bottom.numberPad).toBe(true);
+  expect(bottom.status).toBe(true);
+  expect(bottom.reset).toBe(true);
+  expect(bottom.resetOnTop).toBe(true);
+  expect(bottom.scrollWidth).toBe(1280);
+  // Pinned, not merely still on screen. Capping the stage's height alone
+  // shortens the page enough that everything happens to fit at the bottom,
+  // which is why removing the sticky positioning left an earlier version of
+  // this test passing until it asserted the position.
+  expect(bottom.screenTop).toBeGreaterThanOrEqual(16);
+  expect(bottom.smallestKey).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: testInfo.outputPath('short-window-scrolled.png'), animations: 'disabled' });
+});

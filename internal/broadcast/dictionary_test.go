@@ -96,3 +96,34 @@ func TestTheRealTableGivesSpaceItsShortCode(t *testing.T) {
 		t.Errorf("round trip gave %q ok=%v", text, ok)
 	}
 }
+
+// The padding path's other end: a text whose code lands EXACTLY on a byte
+// boundary needs no padding at all, and must not acquire a spare byte of it.
+//
+// It is here because the fix for the trailing "s" is a loop that fills the tail
+// of the last byte, and a loop like that is most likely to be wrong when there
+// is nothing to do. "NNNNNNN" is seventy bits in the Sky table -- six in the
+// first byte and sixty-four after it -- which is the case the six reference
+// vectors happen not to cover.
+func TestATextThatEndsOnAByteBoundaryGainsNoPadding(t *testing.T) {
+	path := filepath.Join("..", "..", "dictionaries", "skyuk.dict")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		t.Skip("the Sky EPG huffman dictionary is not installed; see dictionaries/MANIFEST.md")
+	}
+	dict, err := broadcast.LoadHuffmanDictionary(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const text = "NNNNNNN" // seventy bits including the terminator
+	encoded, err := dict.Encode(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) != 9 { // one six-bit byte plus eight
+		t.Errorf("%q encoded to %d bytes, want 9; a text that fills its last byte exactly must "+
+			"not gain another one of padding", text, len(encoded))
+	}
+	if back, ok := dict.Decode(encoded); !ok || back != text {
+		t.Errorf("round trip gave %q ok=%v", back, ok)
+	}
+}

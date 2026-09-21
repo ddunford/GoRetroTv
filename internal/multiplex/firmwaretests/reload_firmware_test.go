@@ -1,4 +1,4 @@
-package multiplex_test
+package firmwaretests_test
 
 import (
 	"os"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ddunford/goretrotv/internal/multiplex"
+	"github.com/ddunford/goretrotv/internal/multiplex/multiplextest"
 )
 
 // TC-6.8 against the real firmware: an edit made while the box is running
@@ -20,7 +21,7 @@ import (
 // change on screen.
 func TestAnEditReachesARunningBox(t *testing.T) {
 	dir := t.TempDir()
-	schedule(t, dir, "default.json", 3)
+	multiplextest.Schedule(t, dir, "default.json", 3)
 	guide, err := multiplex.LoadGuide(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +49,7 @@ func TestAnEditReachesARunningBox(t *testing.T) {
 	}
 
 	// Now edit it, the way somebody would with the demo running.
-	schedule(t, dir, "default.json", 6)
+	multiplextest.Schedule(t, dir, "default.json", 6)
 	edited := 0
 	at := runUntil(t, box, transmitter, 60_000_000, registeringProgrammes(box, 6, &edited))
 	t.Logf("after the edit the box took %d programmes by instruction %d", edited, at)

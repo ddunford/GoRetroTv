@@ -3,43 +3,18 @@ package multiplex_test
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/ddunford/goretrotv/internal/multiplex"
+	"github.com/ddunford/goretrotv/internal/multiplex/multiplextest"
 )
-
-// schedule writes a one-channel schedule whose programme count says which
-// version of the file it is, so a reload is visible in the content rather than
-// only in a return value.
-func schedule(t *testing.T, dir, name string, programmes int) {
-	t.Helper()
-	var body strings.Builder
-	body.WriteString(`{"bouquet":"Sky Digital","services":[{"name":"Sky One","channel":101,` +
-		`"serviceId":100,"listingsId":101,"programmes":[`)
-	for i := 0; i < programmes; i++ {
-		if i > 0 {
-			body.WriteString(",")
-		}
-		// EVENING programmes, because the firmware test that shares this
-		// fixture runs a 19:00 clock and the box registers the six-hour block
-		// its clock is in. A morning schedule is broadcast, parsed and
-		// discarded, which looks exactly like an edit that never arrived.
-		body.WriteString(`{"start":"` + [...]string{"18", "19", "20", "21", "22", "23"}[i%6] +
-			`:00","minutes":60,"title":"Programme"}`)
-	}
-	body.WriteString(`]}]}`)
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(body.String()), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
 
 // TC-6.8. An edit reaches the air; a malformed edit does not, and the last
 // good schedule stays on.
 func TestAnEditIsPickedUpAndAMalformedOneKeepsTheLastGood(t *testing.T) {
 	dir := t.TempDir()
-	schedule(t, dir, "default.json", 3)
+	multiplextest.Schedule(t, dir, "default.json", 3)
 	guide, err := multiplex.LoadGuide(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +32,7 @@ func TestAnEditIsPickedUpAndAMalformedOneKeepsTheLastGood(t *testing.T) {
 	}
 
 	// A real edit.
-	schedule(t, dir, "default.json", 5)
+	multiplextest.Schedule(t, dir, "default.json", 5)
 	changed, err := guide.Reload()
 	if err != nil || !changed {
 		t.Fatalf("an edited schedule reported changed=%v err=%v", changed, err)
@@ -85,7 +60,7 @@ func TestAnEditIsPickedUpAndAMalformedOneKeepsTheLastGood(t *testing.T) {
 	// And a broken file stays retryable: saving a fix takes effect without
 	// anything being restarted, which is only true because the failed reload
 	// did not record the broken bytes as the ones it had loaded.
-	schedule(t, dir, "default.json", 2)
+	multiplextest.Schedule(t, dir, "default.json", 2)
 	changed, err = guide.Reload()
 	if err != nil || !changed {
 		t.Fatalf("the repaired schedule reported changed=%v err=%v", changed, err)
@@ -100,7 +75,7 @@ func TestAnEditIsPickedUpAndAMalformedOneKeepsTheLastGood(t *testing.T) {
 // under the other, which broadcasts plausibly and wrongly.
 func TestAScheduleThatParsesButIsWrongAlsoKeepsTheLastGood(t *testing.T) {
 	dir := t.TempDir()
-	schedule(t, dir, "default.json", 3)
+	multiplextest.Schedule(t, dir, "default.json", 3)
 	guide, err := multiplex.LoadGuide(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +101,7 @@ func TestAScheduleThatParsesButIsWrongAlsoKeepsTheLastGood(t *testing.T) {
 // gets added for the day it was printed for, and it must not need a restart.
 func TestADatedFileAddedWhileRunningIsPickedUp(t *testing.T) {
 	dir := t.TempDir()
-	schedule(t, dir, "default.json", 3)
+	multiplextest.Schedule(t, dir, "default.json", 3)
 	guide, err := multiplex.LoadGuide(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +110,7 @@ func TestADatedFileAddedWhileRunningIsPickedUp(t *testing.T) {
 	if got := len(guide.On(day).Services[0].Programmes); got != 3 {
 		t.Fatalf("started with %d programmes, want the default's 3", got)
 	}
-	schedule(t, dir, "1998-12-24.json", 6)
+	multiplextest.Schedule(t, dir, "1998-12-24.json", 6)
 	if changed, err := guide.Reload(); err != nil || !changed {
 		t.Fatalf("a new dated file reported changed=%v err=%v", changed, err)
 	}

@@ -1,4 +1,4 @@
-package multiplex_test
+package firmwaretests_test
 
 import (
 	"bytes"
@@ -47,11 +47,11 @@ var (
 
 func restoredBox(t *testing.T) *board.Runtime {
 	t.Helper()
-	dir := filepath.Join("..", "..", "firmware")
+	dir := filepath.Join("..", "..", "..", "firmware")
 	if _, err := os.Stat(filepath.Join(dir, firmware.FileU202)); os.IsNotExist(err) {
 		t.Skip("private firmware is not installed")
 	}
-	snapshot := filepath.Join("..", "..", "snapshots", "post-acquisition.snapshot")
+	snapshot := filepath.Join("..", "..", "..", "snapshots", "post-acquisition.snapshot")
 	if _, err := os.Stat(snapshot); os.IsNotExist(err) {
 		t.Skip("private post-acquisition snapshot is not installed")
 	}
@@ -113,7 +113,7 @@ func programmesInTheBlock(t *testing.T, guide *multiplex.Guide, day time.Time) i
 
 func demoGuide(t *testing.T) *multiplex.Guide {
 	t.Helper()
-	guide, err := multiplex.LoadGuide(filepath.Join("..", "..", "listings"))
+	guide, err := multiplex.LoadGuide(filepath.Join("..", "..", "..", "listings"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func demoGuide(t *testing.T) *multiplex.Guide {
 
 func demoDictionary(t *testing.T) *broadcast.HuffmanDictionary {
 	t.Helper()
-	path := filepath.Join("..", "..", "dictionaries", "skyuk.dict")
+	path := filepath.Join("..", "..", "..", "dictionaries", "skyuk.dict")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		t.Skip("the Sky EPG huffman dictionary is not installed; see dictionaries/MANIFEST.md")
 	}

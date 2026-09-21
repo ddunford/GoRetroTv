@@ -1,4 +1,4 @@
-package multiplex_test
+package firmwaretests_test
 
 import (
 	"fmt"
@@ -41,6 +41,22 @@ import (
 // It asserts its own subject: if the push is refused, or the control and test
 // runs do not execute the same number of instructions before the push, the
 // instrument is broken and says so rather than reporting a quiet zero.
+// censusBudget is how far each side of a differential runs after the push, and
+// it has a FLOOR that is a property of the instrument rather than a guess.
+//
+// At 5,000,000 the discrimination collapses -- measured: 2,391 exclusive PCs
+// for the target against 966 for the wrong PID and 979 for the wrong extension,
+// where at 10,000,000 the same three are 553, 8 and 22. The reason is that the
+// two runs have not converged yet: early on they are still covering ordinary
+// routine code at slightly different moments, and that shows up as "exclusive"
+// noise which swamps the signal. Both sides need to reach a steady state before
+// the residue between them means anything.
+//
+// 10,000,000 is where that holds and it is half what this cost originally. Do
+// not lower it without re-checking all three numbers: a budget that quietly
+// stops discriminating reports a healthy-looking count and no failure.
+const censusBudget = 10_000_000
+
 func TestWhetherAnythingWantsTableC1(t *testing.T) {
 	const (
 		tableC1   = 0xC1
@@ -60,7 +76,7 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		}
 		want := programmesInTheBlock(t, guide, day)
 		registered := 0
-		if at := runUntil(t, box, transmitter, 120_000_000,
+		if at := runUntil(t, box, transmitter, 15_000_000,
 			registeringProgrammes(box, want, &registered)); at < 0 {
 			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
 		}
@@ -71,7 +87,7 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		}
 		seen := make(map[uint32]int, 8192)
 		start := box.Machine.Retired
-		runUntil(t, box, transmitter, 20_000_000, func(int) bool {
+		runUntil(t, box, transmitter, censusBudget, func(int) bool {
 			seen[box.Machine.Core.State().PC&^1]++
 			return false
 		})
@@ -124,10 +140,10 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		runPrev = pc
 	}
 	flush(runPrev)
-	if err := os.MkdirAll(filepath.Join("..", "..", ".artifacts"), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join("..", "..", "..", ".artifacts"), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	name := filepath.Join("..", "..", ".artifacts", "table-c1-exclusive-pcs.txt")
+	name := filepath.Join("..", "..", "..", ".artifacts", "table-c1-exclusive-pcs.txt")
 	body := "# lo       hi       pcs  executions   (PCs run ONLY when a 0xC1 section was delivered)\n" +
 		strings.Join(out, "\n") + "\n"
 	if err := os.WriteFile(name, []byte(body), 0o600); err != nil {
@@ -209,7 +225,7 @@ func TestWhetherTheBoxKeepsTheTableC1Payload(t *testing.T) {
 		}
 		want := programmesInTheBlock(t, guide, day)
 		registered := 0
-		if at := runUntil(t, box, transmitter, 120_000_000,
+		if at := runUntil(t, box, transmitter, 15_000_000,
 			registeringProgrammes(box, want, &registered)); at < 0 {
 			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
 		}
@@ -219,7 +235,7 @@ func TestWhetherTheBoxKeepsTheTableC1Payload(t *testing.T) {
 				t.Fatalf("harness: the box refused the probe section: %v", err)
 			}
 		}
-		runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })
+		runUntil(t, box, transmitter, censusBudget, func(int) bool { return false })
 
 		// Every 32-bit-aligned position in DRAM. The marker is eight bytes, so a
 		// copy that kept alignment is found wherever it landed.

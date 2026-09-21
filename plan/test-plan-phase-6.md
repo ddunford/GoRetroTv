@@ -121,7 +121,7 @@
   end by `TestTheBoxTakesProgrammesOffTheModelledMultiplex`, which drives the real firmware off the
   real schedule and counts the box's own per-event register: **67 of 67 programmes registered**,
   across six channels.
-  **Result:** `internal/multiplex/multiplex_firmware_test.go` holds
+  **Result:** `internal/multiplex/firmwaretests/multiplex_firmware_test.go` holds
   `TestTheBoxTakesProgrammesOffTheModelledMultiplex`.
 
   **Two assumptions in the addressing were wrong, and both presented as "the box is not asking".**
@@ -158,7 +158,7 @@
   programmes, the file is edited to 6 while it runs, and the box takes all 6 about one line-up
   period later. Then the file is truncated mid-object and the transmitter names the fault and keeps
   broadcasting the last good schedule.
-  **Result:** `internal/multiplex/reload_firmware_test.go` holds `TestAnEditReachesARunningBox`;
+  **Result:** `internal/multiplex/firmwaretests/reload_firmware_test.go` holds `TestAnEditReachesARunningBox`;
   the loader half is `internal/multiplex/reload_test.go`.
 
   **The version bump is the part that would have been missed.** A receiver ignores a repeat of an SI
@@ -182,7 +182,7 @@
   do) and `TestTheGuideSubscribesForTheBlockOfTheDayItIsIn` (the block read off the box's own
   notification slot at noon and at seven). Swept while closing: all eight day-slots draw at midday,
   where none did before, and every block of the day draws when the schedule has television in it.
-  **Result:** `internal/multiplex/notify_firmware_test.go` holds
+  **Result:** `internal/multiplex/firmwaretests/notify_firmware_test.go` holds
   `TestTheOnAirTitleReachesTheScreenOutsideTheEveningBlock` and
   `TestTheGuideSubscribesForTheBlockOfTheDayItIsIn`.
 
@@ -232,9 +232,9 @@
   agreement between our encoder and our decoder can hide. Falsified both ways: restore the
   keep-the-last-duplicate bug and the first pair collide; restore the zero-fill and the second pair
   do.
-  **Result:** `internal/multiplex/encoder_screen_test.go` holds
+  **Result:** `internal/multiplex/firmwaretests/encoder_screen_test.go` holds
   `TestTheDrawnTitleDistinguishesWhatTheEncoderCouldGetWrong`; the screen instruments it
-  uses are in `internal/multiplex/rununtil_test.go`.
+  uses are in `internal/multiplex/firmwaretests/rununtil_test.go`.
 
   **TASK-6.9 asked for a cross-check against the reference DECODER and it is deliberately not that.**
   That instrument is the one that failed: a round trip, byte-for-byte vectors and a transcribed

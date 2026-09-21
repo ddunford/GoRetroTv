@@ -1,4 +1,4 @@
-package multiplex_test
+package firmwaretests_test
 
 import (
 	"image/png"
@@ -260,10 +260,10 @@ func dumpScreen(t *testing.T, box *board.Runtime, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join("..", "..", ".artifacts"), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Join("..", "..", "..", ".artifacts"), 0o750); err != nil {
 		return err
 	}
-	file, err := os.Create(filepath.Join("..", "..", ".artifacts", name)) // #nosec G304 -- fixed test artefact name
+	file, err := os.Create(filepath.Join("..", "..", "..", ".artifacts", name)) // #nosec G304 -- fixed test artefact name
 	if err != nil {
 		return err
 	}

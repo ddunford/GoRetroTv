@@ -6812,7 +6812,7 @@ third assertion â€” that two titles differing in two ways must not draw alike â€
 worth copying.
 
 So a screen instrument needs both halves: **ignore what was already up, and wait for something new
-to hold still.** `internal/multiplex/rununtil_test.go` has `drawnScreen` doing exactly that, and
+to hold still.** `internal/multiplex/firmwaretests/rununtil_test.go` has `drawnScreen` doing exactly that, and
 `screenNow` to capture the before.
 
 ### And it is the only independent check the codecs have

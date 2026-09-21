@@ -1,4 +1,4 @@
-package multiplex_test
+package firmwaretests_test
 
 import (
 	"testing"
@@ -50,7 +50,7 @@ func TestWhichPIDAndExtensionTheTableC1ConsumerWants(t *testing.T) {
 		}
 		want := programmesInTheBlock(t, guide, day)
 		registered := 0
-		if at := runUntil(t, box, transmitter, 120_000_000,
+		if at := runUntil(t, box, transmitter, 15_000_000,
 			registeringProgrammes(box, want, &registered)); at < 0 {
 			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
 		}
@@ -62,7 +62,7 @@ func TestWhichPIDAndExtensionTheTableC1ConsumerWants(t *testing.T) {
 			}
 		}
 		seen := make(map[uint32]int, 8192)
-		runUntil(t, box, transmitter, 20_000_000, func(int) bool {
+		runUntil(t, box, transmitter, censusBudget, func(int) bool {
 			seen[box.Machine.Core.State().PC&^1]++
 			return false
 		})

@@ -1,10 +1,15 @@
 package multiplex_test
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/dvb"
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
@@ -43,7 +48,7 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		extension = 0x0100
 	)
 
-	run := func(t *testing.T, push bool) (map[uint32]bool, uint64) {
+	run := func(t *testing.T, push bool) (map[uint32]int, uint64) {
 		t.Helper()
 		guide := demoGuide(t)
 		dict := demoDictionary(t)
@@ -64,10 +69,10 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 				t.Fatalf("harness: the box refused the probe section: %v", err)
 			}
 		}
-		seen := make(map[uint32]bool, 8192)
+		seen := make(map[uint32]int, 8192)
 		start := box.Machine.Retired
 		runUntil(t, box, transmitter, 20_000_000, func(int) bool {
-			seen[box.Machine.Core.State().PC&^1] = true
+			seen[box.Machine.Core.State().PC&^1]++
 			return false
 		})
 		return seen, box.Machine.Retired - start
@@ -84,7 +89,7 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 
 	var only []uint32
 	for pc := range test {
-		if !control[pc] {
+		if control[pc] == 0 {
 			only = append(only, pc)
 		}
 	}
@@ -96,14 +101,39 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		t.Log("         not on PID 0x52, or not with this extension, or not in this state.")
 		return
 	}
-	t.Logf("VERDICT: %d guest PCs ran ONLY when the 0xC1 section was delivered:", len(only))
-	for i, pc := range only {
-		if i >= 40 {
-			t.Logf("    ... and %d more", len(only)-i)
-			break
+	t.Logf("VERDICT: %d guest PCs ran ONLY when the 0xC1 section was delivered", len(only))
+
+	// The whole census goes to an artefact so it can be cross-referenced against
+	// the measured record instead of skimmed in a terminal. Clustered into
+	// contiguous runs, because a run's LOWEST address is where a function starts
+	// and that is the thing worth naming.
+	var out []string
+	runLo, runPrev := only[0], only[0]
+	flush := func(hi uint32) {
+		total := 0
+		for pc := runLo; pc <= hi; pc += 2 {
+			total += test[pc]
 		}
-		t.Logf("    %08X", pc)
+		out = append(out, fmt.Sprintf("%08X %08X %5d %6d", runLo, hi, (hi-runLo)/2+1, total))
 	}
+	for _, pc := range only[1:] {
+		if pc-runPrev > 8 {
+			flush(runPrev)
+			runLo = pc
+		}
+		runPrev = pc
+	}
+	flush(runPrev)
+	if err := os.MkdirAll(filepath.Join("..", "..", ".artifacts"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.Join("..", "..", ".artifacts", "table-c1-exclusive-pcs.txt")
+	body := "# lo       hi       pcs  executions   (PCs run ONLY when a 0xC1 section was delivered)\n" +
+		strings.Join(out, "\n") + "\n"
+	if err := os.WriteFile(name, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("%d contiguous runs written to .artifacts/table-c1-exclusive-pcs.txt", len(out))
 }
 
 // sectionC1 builds a minimal long-form private section: a real header, a real
@@ -119,6 +149,90 @@ func sectionC1(tableID byte, extension uint16) []byte {
 		0, 0, 0, 0,
 	}
 	length := len(body) + 4 // + CRC
+	section := append([]byte{tableID, 0xB0 | byte(length>>8), byte(length)}, body...)
+	crc := dvb.MPEGCRC32(section)
+	return append(section, byte(crc>>24), byte(crc>>16), byte(crc>>8), byte(crc))
+}
+
+// DOES THE BOX KEEP WHAT WE SENT? The differential proved it RUNS code for a
+// 0xC1 section, including its allocator at 0x800CCECC -- which is what
+// acceptance looks like and not what discarding looks like, but allocation
+// alone does not prove the payload was read.
+//
+// So this sends a payload nothing else in the machine would contain and then
+// searches all of DRAM for it. A box that copied our bytes somewhere has
+// PARSED and STORED them; a box that never did has, at most, looked at the
+// header. The control is the same run without the push: the marker must not be
+// present there, or the marker is not distinctive and the instrument is lying.
+func TestWhetherTheBoxKeepsTheTableC1Payload(t *testing.T) {
+	const probePID, extension = 0x52, 0x0100
+	marker := []byte{0xDE, 0xAD, 0xC1, 0x05, 0x5E, 0xC7, 0x10, 0x4E}
+
+	run := func(t *testing.T, push bool) int {
+		t.Helper()
+		guide := demoGuide(t)
+		dict := demoDictionary(t)
+		box := restoredBox(t)
+		day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+		transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := programmesInTheBlock(t, guide, day)
+		registered := 0
+		if at := runUntil(t, box, transmitter, 120_000_000,
+			registeringProgrammes(box, want, &registered)); at < 0 {
+			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+		}
+		if push {
+			section := sectionC1WithBody(0xC1, extension, marker)
+			if err := box.Demux.Push(probePID, section); err != nil {
+				t.Fatalf("harness: the box refused the probe section: %v", err)
+			}
+		}
+		runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })
+
+		// Every 32-bit-aligned position in DRAM. The marker is eight bytes, so a
+		// copy that kept alignment is found wherever it landed.
+		found, size := 0, box.RAM.Size()
+		first := uint32(0x100000000 - 1)
+		for off := uint32(0); off+8 <= size; off += 4 {
+			if box.RAM.Read(off, bus.Word) != 0xDEADC105 {
+				continue
+			}
+			if box.RAM.Read(off+4, bus.Word) == 0x5EC7104E {
+				found++
+				if off < first {
+					first = off
+				}
+			}
+		}
+		if found > 0 {
+			t.Logf("marker found %d time(s), first at DRAM offset %08X", found, first)
+		}
+		return found
+	}
+
+	if n := run(t, false); n != 0 {
+		t.Fatalf("harness: the control run already contains the marker %d time(s), so it is not distinctive", n)
+	}
+	t.Log("control: marker absent, as it must be")
+
+	if n := run(t, true); n == 0 {
+		t.Log("VERDICT: the box did NOT keep the payload. It ran 544 addresses and allocated, but our")
+		t.Log("         bytes are nowhere in DRAM -- so it inspected the section and did not store it.")
+	} else {
+		t.Logf("VERDICT: the box KEPT the payload -- %d copies in DRAM. It parsed a 0xC1 section and", n)
+		t.Log("         stored what we sent, which is acceptance rather than rejection.")
+	}
+}
+
+// sectionC1WithBody is sectionC1 with a caller-supplied payload.
+func sectionC1WithBody(tableID byte, extension uint16, payload []byte) []byte {
+	body := make([]byte, 0, 5+len(payload))
+	body = append(body, byte(extension>>8), byte(extension&0xff), 0xC1, 0x00, 0x00)
+	body = append(body, payload...)
+	length := len(body) + 4
 	section := append([]byte{tableID, 0xB0 | byte(length>>8), byte(length)}, body...)
 	crc := dvb.MPEGCRC32(section)
 	return append(section, byte(crc>>24), byte(crc>>16), byte(crc>>8), byte(crc))

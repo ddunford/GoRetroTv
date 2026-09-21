@@ -6494,9 +6494,38 @@ Bit-packed, in the same manner as the `0xB1` line-up entry. The in-memory header
 **ten-byte stride**, at guest `0x80544260`. The spacing is the claim; presence alone would prove
 nothing, since the box copies any section it is handed into the heap.
 
-**Still unknown:** what rec[4..8] carry, what the six-bit packed field and the flag MEAN, what the
-two accepted extensions (`0x0000` and `0x0100`) select, and what reads the assembled array
-afterwards.
+#### Every bit of rec[2] and rec[3], swept
+
+*Seventeen single-bit cases plus three combinations, all as RECORDS IN ONE SECTION so the whole
+sweep costs one acquisition rather than twenty.*
+
+    baseline  rec[2]=00 rec[3]=00   ->  out = b0 00 | 00 | aa | 00 00 00 00 00 00
+
+    rec[2] bit 4..7   ->  out[2] bits 4..7          the high nibble, as the disassembly said
+    rec[3] bit 6..7   ->  out[2] bits 0..1          >> 6, as the disassembly said
+    rec[3] bit 0..5   ->  NOTHING CHANGES           six wire bits this parser does not read
+    rec[2] bit 0..3   ->  out[3], one 2-BIT FIELD EACH:
+        bit 0  aa -> 6a   (out[3] bits 7..6)
+        bit 1  aa -> 9a   (out[3] bits 5..4)
+        bit 2  aa -> a6   (out[3] bits 3..2)
+        bit 3  aa -> a9   (out[3] bits 1..0)
+
+**`out[3]` IS FOUR TWO-BIT FIELDS, not a counter.** Each is **1** when its `rec[2]` bit is set and
+**2** when clear, packed MSB-first in the order `rec[2]` bit 0, 1, 2, 3 — which is why an all-clear
+record reads `0xAA` rather than zero. This CORRECTS the reading taken from the disassembly above,
+where the walk was followed only as far as `sb zero,3(v1)` / `addiu a0,1` and reported as "a flag
+that increments the byte at +3". It increments nothing; the code builds `(v<<2) | (flag ? 1 : 2)`
+four times and only the first branch was read.
+
+**Held as PREDICTIONS rather than a fit**, because a rule derived from single bits will fit almost
+anything. `rec[2]=0x0F` must give `01 01 01 01` = `0x55`; `rec[2]=0x05` must give `01 10 01 10` =
+`0x66`; `rec[2]=0xF0` with `rec[3]=0xC0` must give `out[2]=0xF3`. A rule that counted set bits or
+OR-ed them gives none of those. All three measured exactly as predicted.
+
+**Still unknown:** what rec[4..8] carry — **this sweep did not vary them**, it held them at zero
+throughout, so their silence here is not evidence; what the six-bit `out[2]` value and the four
+2-bit states MEAN; what the two accepted extensions (`0x0000` and `0x0100`) select; and what reads
+the assembled array afterwards.
 
 **There is no unit matching `0x70`.** Feeding a TDT alone — correctly built, correct MJD, pushed to
 PID `0x14` — moves nothing: not the requested day, not the PID, not the table id. Feeding a TOT for

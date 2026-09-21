@@ -21,7 +21,7 @@ re-derived — `docs/reference/digibox-emulation.md` and `digibox-next-session.m
 - [x] `TASK-6.10` ⫘ Playwright: press tv guide, read now and next → `/qa-test-engineer` [TC-6.9]
 - [x] `TASK-6.13` Five days in eight arm the listings PID and program no title filter — ANSWERED, and not by the title: a day of listings is broadcast in four six-hour blocks and the table id's low two bits say which, so one section stamped `0xA3` filled the guide at 19:00 and left it empty at every other hour on every day. The box programs a match unit only for a day whose slot is in {1,3,6} (and in the evening it will do so for tomorrow), the transmitter derives the addressing for the rest, and the day now goes out as four blocks on the PID its own day names. Any date, any hour → `/go-engineer` [TC-6.13]
 - [x] `TASK-6.14` Huffman-encoded titles lose their spaces and gain a trailing character — `Dream Team` draws as `DreamTeams`. Present since the first title section went on air and invisible because every title tested stayed legible; the encoder's round-trip test against its own decoder cannot see it, because the two share the mistake → `/go-engineer` [TC-6.14]
-- [ ] `TASK-6.11` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
+- [x] `TASK-6.11` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Key patterns (measured — do not re-derive)
 - **`9E 8B` is the MJD.** Twice recorded as refuted, and both refutations moved the clock *after* the

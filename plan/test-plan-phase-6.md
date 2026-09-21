@@ -65,7 +65,7 @@
   tasks are that work.
 - [x] **TC-6.4: Twelve records arrive as twelve** (covers: TASK-6.4, TASK-6.9) — and with the length field
   computed openTVtoXML's way, the box must read two. The wrong version has to be shown failing.
-  **Proved, at the byte level:** `internal/broadcast/titles_test.go` builds a twelve-record section
+  **Result:** `internal/broadcast/titles_test.go` builds a twelve-record section
   and walks it twice. The firmware's arithmetic — `local_84 += local_8a + 4` with
   `memcpy(dst, section + local_84 + 4, local_8a)`, which tvheadend reads the same way — finds
   **12 of 12**. openTVtoXML's, advancing by the field alone, finds **1 of 12, silently**, on the
@@ -98,6 +98,8 @@
 - [x] **TC-6.5: Clock first changes the request** (covers: TASK-6.5, TASK-6.9) — proved by
   `TestTheClockTableChoosesTheDayAndThePIDTheBoxAsksFor`, four cases, falsified twice against the
   product (the MJD anchor one day out, and a TOT carrying a zero MJD).
+  **Result:** `internal/broadcast/clock_firmware_test.go` holds
+  `TestTheClockTableChoosesTheDayAndThePIDTheBoxAsksFor`.
 
   **The case as originally written could not be run, and finding out why is the result.** It read
   "with a clock the box asks for a real MJD; without one it asks for 40587". Neither half holds on
@@ -119,6 +121,8 @@
   end by `TestTheBoxTakesProgrammesOffTheModelledMultiplex`, which drives the real firmware off the
   real schedule and counts the box's own per-event register: **67 of 67 programmes registered**,
   across six channels.
+  **Result:** `internal/multiplex/multiplex_firmware_test.go` holds
+  `TestTheBoxTakesProgrammesOffTheModelledMultiplex`.
 
   **Two assumptions in the addressing were wrong, and both presented as "the box is not asking".**
   A census that skipped any table match whose mask was not `0xFE` missed a unit reading `a3/ff` with
@@ -139,6 +143,9 @@
   and `TestAScheduleDirectoryWithoutADefaultIsRefused`. Verified on the real box, both ways: pinned
   to Christmas Eve 1998 the banner reads `7.00pm Thu 24` (it was a Thursday); on the live clock it
   read `8.22pm Sun 20` for 20 September 2026 (a Sunday).
+  **Result:** `internal/multiplex/listings_test.go` holds
+  `TestADatedScheduleReplacesTheDefaultOnItsOwnDay` and
+  `TestAScheduleDirectoryWithoutADefaultIsRefused`.
 
   **The 28-day loop the task asked for was not built, deliberately.** It would answer a question
   nobody has: the guide is per-date files, so a real listings page keeps its own date and every
@@ -151,6 +158,8 @@
   programmes, the file is edited to 6 while it runs, and the box takes all 6 about one line-up
   period later. Then the file is truncated mid-object and the transmitter names the fault and keeps
   broadcasting the last good schedule.
+  **Result:** `internal/multiplex/reload_firmware_test.go` holds `TestAnEditReachesARunningBox`;
+  the loader half is `internal/multiplex/reload_test.go`.
 
   **The version bump is the part that would have been missed.** A receiver ignores a repeat of an SI
   version it has already parsed, so an edited line-up sent under the old version number is dropped
@@ -173,10 +182,16 @@
   do) and `TestTheGuideSubscribesForTheBlockOfTheDayItIsIn` (the block read off the box's own
   notification slot at noon and at seven). Swept while closing: all eight day-slots draw at midday,
   where none did before, and every block of the day draws when the schedule has television in it.
+  **Result:** `internal/multiplex/notify_firmware_test.go` holds
+  `TestTheOnAirTitleReachesTheScreenOutsideTheEveningBlock` and
+  `TestTheGuideSubscribesForTheBlockOfTheDayItIsIn`.
+
 - [x] **TC-6.14: A title draws on screen with its spaces** (covers: TASK-6.14) — the guide draws
   `Dream Team` and `Walker Texas Ranger`, where it drew `DreamTeams` and `WalkerTexasRangers`.
   Pinned by `TestTheDictionaryIsReadTheWayAnEncoderNeedsIt` (shortest-code-wins, and `=` parsed as a
   value) and `TestTheRealTableGivesSpaceItsShortCode`.
+  **Result:** `internal/broadcast/dictionary_test.go` holds
+  `TestTheDictionaryIsReadTheWayAnEncoderNeedsIt` and `TestTheRealTableGivesSpaceItsShortCode`.
 
   **Three defects, all invisible to every instrument that shared the encoder's reading.** A value
   has many codes and only the shortest is real (SPACE appears 65 times, once as `110` and 62 times
@@ -193,6 +208,7 @@
   click in the page, over the WebSocket, into the CSI link, and the drawn frame back out. The
   framebuffer is reconstructed from the socket rather than read off the canvas, so the assertions
   are about the pixels the box sent.
+  **Result:** `tests/live/guide.spec.ts`, run by `npm run test:e2e:live`.
 
   Two claims. The banner is DRAWN — the band across the bottom is not a flat colour, and its digest
   is taken only once something new has been drawn and has held still, because a digest at a fixed
@@ -216,6 +232,9 @@
   agreement between our encoder and our decoder can hide. Falsified both ways: restore the
   keep-the-last-duplicate bug and the first pair collide; restore the zero-fill and the second pair
   do.
+  **Result:** `internal/multiplex/encoder_screen_test.go` holds
+  `TestTheDrawnTitleDistinguishesWhatTheEncoderCouldGetWrong`; the screen instruments it
+  uses are in `internal/multiplex/rununtil_test.go`.
 
   **TASK-6.9 asked for a cross-check against the reference DECODER and it is deliberately not that.**
   That instrument is the one that failed: a round trip, byte-for-byte vectors and a transcribed

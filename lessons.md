@@ -45,3 +45,26 @@ screen nobody had checked — this file's oldest failure mode, and the record na
 distinct sky code exists and has not been found. Establish a code by pressing it from a screen that
 is *not* already its destination and comparing frame hashes; never from a public key table and never
 from the label someone gave it.
+
+### A coverage check greps for a TOKEN, and the token is narrower than the claim
+
+Twice on 2026-09-21, in two unrelated places, a check reported clean because what it searched for
+was narrower than what it claimed to cover.
+
+`ARCH-FW-1` says "firmware bytes are absent from git and built images" and matches the three names,
+sizes and digests in `firmware/MANIFEST.md` plus the U202 magic. The Sky Huffman dictionary carries
+the *same* stated licence contract — `dictionaries/MANIFEST.md` says "never committed and never
+baked into a published image" — and the rule has no concept of it, so two tracked copies sat on a
+public remote from the first commit with 7/7 rules passing over them the whole time. The same hour,
+auditing for exactly that, a sweep of `git ls-files` grepped for paths containing `dictionar` and
+missed both, because they live in `tools/skyepg/` and `web/data/` and are named `skyuk.dict`.
+
+**Search by the thing's own identity — extension, size, digest, magic — not by where you expect it
+to live.** `git ls-files '*.dict'` finds both copies; `grep dictionar` finds neither. And when a
+rule's invariant names a CLASS of thing ("firmware bytes", "non-redistributable data"), enumerate
+every member of that class and check the scope against the list, because a rule that covers one
+member and passes reads exactly like a rule that covers them all.
+
+This is the project's own instrument rule wearing different clothes: *a census that cannot find the
+thing it is counting is a harness failure, never a count of zero.* A green check whose subject was
+never in scope is a zero dressed as a pass.

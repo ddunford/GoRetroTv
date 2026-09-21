@@ -48,7 +48,7 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		extension = 0x0100
 	)
 
-	run := func(t *testing.T, push bool) (map[uint32]int, uint64) {
+	run := func(t *testing.T, table byte) (map[uint32]int, uint64) {
 		t.Helper()
 		guide := demoGuide(t)
 		dict := demoDictionary(t)
@@ -64,8 +64,8 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 			registeringProgrammes(box, want, &registered)); at < 0 {
 			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
 		}
-		if push {
-			if err := box.Demux.Push(probePID, sectionC1(tableC1, extension)); err != nil {
+		if table != 0 {
+			if err := box.Demux.Push(probePID, sectionC1(table, extension)); err != nil {
 				t.Fatalf("harness: the box refused the probe section: %v", err)
 			}
 		}
@@ -78,8 +78,8 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		return seen, box.Machine.Retired - start
 	}
 
-	control, controlRan := run(t, false)
-	test, testRan := run(t, true)
+	control, controlRan := run(t, 0)
+	test, testRan := run(t, tableC1)
 	if controlRan != testRan {
 		t.Fatalf("harness: control ran %d instructions and the test ran %d; the runs are not comparable",
 			controlRan, testRan)
@@ -134,6 +134,29 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("%d contiguous runs written to .artifacts/table-c1-exclusive-pcs.txt", len(out))
+
+	// THE CONTROL: a table id the box filters for nothing and we never send. If
+	// it wakes the same code, then none of the above is about 0xC1 -- it is what
+	// ANY unexpected section on an armed PID does, and the finding is generic.
+	other, _ := run(t, 0xA5)
+	var otherOnly []uint32
+	for pc := range other {
+		if control[pc] == 0 {
+			otherOnly = append(otherOnly, pc)
+		}
+	}
+	shared := 0
+	for _, pc := range only {
+		if other[pc] != 0 {
+			shared++
+		}
+	}
+	t.Logf("CONTROL table 0xA5: %d exclusive PCs, sharing %d of 0xC1's %d",
+		len(otherOnly), shared, len(only))
+	if len(only) > 0 && shared*100/len(only) >= 90 {
+		t.Logf("VERDICT: 0xC1 IS NOT SPECIAL -- %d%% of its exclusive PCs also run for 0xA5.",
+			shared*100/len(only))
+	}
 }
 
 // sectionC1 builds a minimal long-form private section: a real header, a real
@@ -154,16 +177,22 @@ func sectionC1(tableID byte, extension uint16) []byte {
 	return append(section, byte(crc>>24), byte(crc>>16), byte(crc>>8), byte(crc))
 }
 
-// DOES THE BOX KEEP WHAT WE SENT? The differential proved it RUNS code for a
-// 0xC1 section, including its allocator at 0x800CCECC -- which is what
-// acceptance looks like and not what discarding looks like, but allocation
-// alone does not prove the payload was read.
+// THIS TEST EXISTS TO SHOW THAT STORAGE IS NOT AN ACCEPTANCE SIGNAL, which is
+// the opposite of why it was written.
 //
-// So this sends a payload nothing else in the machine would contain and then
-// searches all of DRAM for it. A box that copied our bytes somewhere has
-// PARSED and STORED them; a box that never did has, at most, looked at the
-// header. The control is the same run without the push: the marker must not be
-// present there, or the marker is not distinctive and the instrument is lying.
+// It sends a payload nothing else in the machine contains and searches all of
+// DRAM for it. The marker IS found -- twice, in ordinary heap -- and the
+// control without the push does not contain it, so the box really does copy our
+// bytes out of the ring. The reading taken from that, "so the box accepted our
+// 0xC1 section", was WRONG, and the sweep's table-id control is what killed it:
+// the box keeps the payload of 0xA5, 0x9E, 0xC2 and 0x42 as readily, none of
+// which it filters for. Something copies every section delivered on an armed
+// PID, so this measures that copy.
+//
+// It is kept because it is the evidence for that, and because it is the shape
+// of mistake worth leaving a marker on: a positive result with no negative
+// control. The signal that DOES discriminate is the exclusive-PC differential
+// in TestWhetherAnythingWantsTableC1 -- 544 for 0xC1 against 8 for 0xA5.
 func TestWhetherTheBoxKeepsTheTableC1Payload(t *testing.T) {
 	const probePID, extension = 0x52, 0x0100
 	marker := []byte{0xDE, 0xAD, 0xC1, 0x05, 0x5E, 0xC7, 0x10, 0x4E}
@@ -222,8 +251,8 @@ func TestWhetherTheBoxKeepsTheTableC1Payload(t *testing.T) {
 		t.Log("VERDICT: the box did NOT keep the payload. It ran 544 addresses and allocated, but our")
 		t.Log("         bytes are nowhere in DRAM -- so it inspected the section and did not store it.")
 	} else {
-		t.Logf("VERDICT: the box KEPT the payload -- %d copies in DRAM. It parsed a 0xC1 section and", n)
-		t.Log("         stored what we sent, which is acceptance rather than rejection.")
+		t.Logf("the box kept the payload -- %d copies in DRAM. This is NOT acceptance: it keeps any", n)
+		t.Log("table id delivered on an armed PID. See the table-id control in the sweep.")
 	}
 }
 

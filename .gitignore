@@ -37,3 +37,7 @@ node_modules/
 # have carries no licence header. It is treated exactly like the firmware: required to build a
 # listings feed, supplied locally, never committed. See dictionaries/MANIFEST.md.
 /dictionaries/*.dict
+
+# The Ghidra analysis database and the staged application image: derived, large, and the
+# image is the non-redistributable firmware under another name.
+/ghidra/

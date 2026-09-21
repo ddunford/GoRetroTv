@@ -6453,6 +6453,51 @@ behaviour -- no MIPS disassembler exists on this machine -- and are clustered in
 `.artifacts/table-c1-exclusive-pcs.txt`, with `0x800CCECC` among them, which this file's listings
 ladder already names as the allocator.
 
+### The `0xC1` format, read off the parser and confirmed on the box
+
+*2026-09-21. The first thing this project has been able to READ rather than infer, because until
+now nothing here could disassemble MIPS16 — see `tools/disasm.sh`.*
+
+The consumer is at **`0x800C4C34`**, a 96-byte frame taking the section pointer in `a1`. Its header
+arithmetic is the format:
+
+    lbu v1,1(s1) / lbu v0,2(s1) / sll v1,8 / addu v1,v0
+    li  a0,4095  / and v1,a0            section_length & 0x0FFF
+    addiu v1,-9                         payload = section_length - 9
+    lbu v0,3(s1) / lbu a3,4(s1)         extension, 16 bits
+    li  v0,9     / div zero,v1,v0       DIVIDED BY NINE
+    mflo a0      / sh a0,0(sp+14)       ...which is the RECORD COUNT
+    lhu a1,0(sp+14) / li v1,10 / mult a1,v1
+    mflo a0      / addiu a0,12 / jalr   alloc(count * 10 + 12)
+
+**So the payload is an array of NINE-BYTE records**, `count = (section_length - 9) / 9`, held in
+memory as twelve bytes of header followed by **ten** bytes per record. That `jalr` is the allocator
+at `0x800CCECC` this file already names, which is why it turned up in the 544.
+
+The walk starts at **section + 8** — the ordinary long-section header — and per record:
+
+    lbu a0,0(v1) / lbu v1,1(v1) / sll a0,8 / addu a0,v1 / sh a0,0(a3)
+        rec[0..1] is a 16-bit id, stored first in the in-memory record
+    lbu v0,0(a0) / li v1,240 / and v0,v1            rec[2] & 0xF0
+    lbu a0,1(a0) / li v0,192 / and a0,v0 / sra a0,6 rec[3] & 0xC0 >> 6
+    or  v0,a0    / sb v0,2(v1)                      the two packed into one byte
+    sb  zero,3(v1)
+    lbu a0,0(a0) / li v0,8 / and a0,v0              rec[2] & 0x08, a flag
+    beqz a0,…    / lbu a0,3(v1) / addiu a0,1        which increments the byte at +3
+
+Bit-packed, in the same manner as the `0xB1` line-up entry. The in-memory header holds
+`section[6]` — the section number — at +0 and the record count at +2.
+
+**CONFIRMED ON THE MACHINE, because a static reading of this firmware has been backwards twice.**
+`TestTheTableC1PayloadIsNineByteRecords` sends four records carrying ids `0xBEEF`, `0xCAFE`,
+`0xF00D` and `0xD00D` at the nine-byte stride the divisor implies, and finds all four in DRAM at a
+**ten-byte stride**, at guest `0x80544260`. The spacing is the claim; presence alone would prove
+nothing, since the box copies any section it is handed into the heap.
+
+**Still unknown:** what rec[4..8] carry, what the six-bit packed field and the flag MEAN, what the
+two accepted extensions (`0x0000` and `0x0100`) select, and what reads the assembled array
+afterwards.
+
 **There is no unit matching `0x70`.** Feeding a TDT alone — correctly built, correct MJD, pushed to
 PID `0x14` — moves nothing: not the requested day, not the PID, not the table id. Feeding a TOT for
 the same instant moves the entire request together. Swept across five dates, the result is binary

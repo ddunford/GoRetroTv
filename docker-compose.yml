@@ -21,7 +21,14 @@ services:
       # and a clone without it broadcasts nothing rather than failing to build.
       GORETROTV_LISTINGS_PATH: /listings
       GORETROTV_DICTIONARY_PATH: /dictionaries/skyuk.dict
-      GORETROTV_BROADCAST_DATE: ${GORETROTV_BROADCAST_DATE:-1998-12-24}
+      # "now" runs the box on real London wall-clock time: today's date on screen and the
+      # schedule playing at the hour it actually is. It became a sensible default only when the
+      # day started going out in its four six-hour blocks (TASK-6.13) -- before that the guide
+      # filled between 18:00 and midnight and said FURTHER SCHEDULE INFORMATION IS NOT AVAILABLE
+      # for the other eighteen hours, which is why this used to pin an evening. Set the variable
+      # to a YYYY-MM-DD date to pin one again; a pinned date is the only way to reach a dated
+      # schedule in listings/, since "now" will not be 1998.
+      GORETROTV_BROADCAST_DATE: ${GORETROTV_BROADCAST_DATE:-now}
       GORETROTV_LOG_LEVEL: ${GORETROTV_LOG_LEVEL:-debug}
       GORETROTV_LOG_FORMAT: ${GORETROTV_LOG_FORMAT:-json}
       # Inside the container the listener must accept the published mapping, so it binds all

@@ -6558,10 +6558,40 @@ sequence byte the array carries alongside what arrived.
     +2  0x002E = 46 = the record count we sent, as `sh v1,2(a1)` said
     +4..11  zero
 
+#### NOTHING READS THE ARRAY — on any screen this port can reach
+
+*The bridge question, and the answer is a negative worth as much as a positive: the box parses a
+`0xC1` section, allocates for it and assembles the array, and then does not look at it again.*
+
+A bus observer watching every data read inside the array and its header, over four windows:
+
+    idle          4,000,000 instructions   NOTHING
+    tv guide      8,000,000                NOTHING
+    box office    8,000,000                NOTHING
+    interactive   8,000,000                NOTHING
+
+**The observer is proved rather than assumed** — over 200,000 instructions it sees 38,234 data
+reads, 37,930 of them in DRAM, and 16,668 writes. A hook that never fired would report these zeros
+just as confidently, and this file's own rule is that an instrument which cannot find its subject is
+a harness failure and not a count. It also watches EVERY ten-byte-stride copy in DRAM rather than
+the first, because watching a dead copy while the live one is read elsewhere is the obvious way to
+manufacture this result.
+
+**One screen could not be tried, and it is the best candidate.** `lessons.md` records raw `0x7E` as
+the Sky menu's SERVICES tab, measured against frame `64AF0A8D`. It is unreachable: `handsetRaw` in
+`internal/web/transport.go` has never contained `0x7E`, so `decodeKey` refuses it (`gort-p5x`).
+Pushing the key straight at the CSI would bypass the product path and prove nothing about it, so the
+test says so instead of faking a result. **Fixing `gort-p5x` is now on the critical path for this
+question, not just a UI defect.**
+
+What this does NOT establish: that the array is never read. It is not read in these four states
+within these budgets. A completeness condition (this was one section with `last_section_number` 0),
+a deeper menu, or another table referencing it would all look identical from here.
+
 **Still unknown:** what `out[5]` is filled from; what the six-bit `out[2]` value, the four 2-bit
 states and the five verbatim bytes MEAN; why `rec[3]` bits 0..5 exist at all if nothing reads them;
-what the two accepted extensions (`0x0000` and `0x0100`) select; and what reads the assembled array
-afterwards. The STRUCTURE is now complete; the SEMANTICS are untouched.
+what the two accepted extensions (`0x0000` and `0x0100`) select; and what consumes the array. The
+STRUCTURE is complete; the SEMANTICS are untouched.
 
 **There is no unit matching `0x70`.** Feeding a TDT alone — correctly built, correct MJD, pushed to
 PID `0x14` — moves nothing: not the requested day, not the PID, not the table id. Feeding a TOT for

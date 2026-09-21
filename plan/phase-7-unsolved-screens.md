@@ -22,6 +22,11 @@ rule for this phase: **do not guess a format** — let the box name what it want
 - [ ] `TASK-7.6` Establish whether the firmware drives audio at all — a measurement, not an implementation task → `/go-engineer` [TC-7.5]
 - [ ] `TASK-7.7` Implement whatever 7.1–7.6 prove is needed; the shape cannot honestly be planned before they run → `/go-engineer` [TC-7.1, TC-7.2, TC-7.3]
 - [ ] `TASK-7.8` ⫘ Playwright: navigate sky → TV GUIDE → ALL CHANNELS and assert channels with programmes → `/qa-test-engineer` [TC-7.6]
+- [ ] `TASK-7.10` Establish how many services the grid is actually iterating, LIVE and in RAM. The record
+  has the box counting **twelve** channels and holding "all twelve services", while the demo schedule
+  names **six** — so the restored line-up and the broadcast line-up may disagree, which is a plausible
+  way to draw a header and no rows. Cheap, decisive, and it runs before any disassembly →
+  `/go-engineer` [TC-7.7]
 - [ ] `TASK-7.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Closing gates

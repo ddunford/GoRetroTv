@@ -13,3 +13,7 @@
 - [ ] **TC-7.5: Whether audio is driven at all** (covers: TASK-7.6) — a yes or a no, both acceptable.
 - [ ] **TC-7.6: ALL CHANNELS lists channels with programmes** (covers: TASK-7.8) — SPEC success
   criterion 5.
+- [ ] **TC-7.7: The number of services the grid iterates is known, and whether it matches the
+  broadcast** (covers: TASK-7.10) — the count read off the running machine rather than off the
+  record, with the schedule's own service count beside it. A disagreement is the finding; so is
+  agreement, because it closes the cheapest explanation for the empty grid.

@@ -28,7 +28,7 @@ in four places is false, and nothing would ever have failed.**
 | Critical | 0 |
 | High | 1 |
 | Medium | 1 |
-| Low | 2 |
+| Low | 3 |
 | Informational | 2 |
 
 ## Findings
@@ -95,11 +95,44 @@ bouquet (`NIT: network name too long`), 86 services (`SDT: section length 1637 e
 every title is unencodable (`records(): not even one programme fits in a title section`). The bad
 edit is swapped in live: `Reload after channel=5000 edit: changed=true err=<nil>`.
 
-**Propagation**, read from code: `multiplex.go:259/263/267/366` → `carousel.go:177/191` →
-`multiplex.go:203` → `cmd/goretrotv/main.go:428-429` `return stopHalt, err` → `haltMachine`
-(`main.go:352-357`) pushes phase `halted` to every browser. On reset, `transmitterFor`
-(`main.go:345`) rebuilds over the same swapped guide, so it halts again at the next wave. **It does
-not self-recover until the file is fixed.**
+**Propagation:** `multiplex.go:259/263/267/366` → `carousel.go:177/191` → `multiplex.go:203` →
+`cmd/goretrotv/main.go:428-429` `return stopHalt, err` → `haltMachine` (`main.go:352-357`), which
+pushes phase `halted` to every browser.
+
+**The halt was driven, not inferred.** The real binary on the real firmware, restored from
+`snapshots/post-acquisition.snapshot`, against a control and a poison that are byte-identical
+except for the titles of one existing channel — same six channels, same ids, same times, so the
+only variable is the thing under test.
+
+| run | what happened |
+|---|---|
+| control, 45s | `programmes on air`, `title_waves: 1`, no halt |
+| poison, 45s | `broadcast loaded channels:6 programmes:67` — **accepted at load, same counts as the control** — then, 2.8s later, `guest halted` |
+
+```
+16:33:41.380 ERROR guest halted
+  err="broadcast: carousel title wave at 1112001536:
+       multiplex: \"Sky One\": not even one programme fits in a title section"
+```
+
+**And through the live-reload path, which is the claim that matters** — a healthy, broadcasting box
+brought down by an edit underneath it, with no restart:
+
+```
+16:34:44.752 INFO  programmes on air    (healthy, title_waves: 1)
+16:35:04.855 INFO  schedule reloaded    (the edit is ACCEPTED and swapped in)
+16:35:05.379 ERROR guest halted         (same error)
+```
+
+**524 milliseconds** from the reload accepting the edit to the box stopping. On reset,
+`transmitterFor` (`main.go:345`) rebuilds over the same swapped guide, so it halts again at the next
+wave: it does not self-recover until the file is fixed.
+
+**The run showed two things the code read did not.** First, the log line says **`guest halted`**.
+The guest did nothing — a host-side schedule fault is reported as a firmware halt, which is the
+misattribution this project is careful to avoid everywhere else, and it is the first thing anyone
+debugging would chase. Second, **`/health` still answered `status: ok` twenty-two seconds after the
+halt** — filed separately as `gort-f9w`, because it is not specific to this bug.
 
 **Two claims this falsifies.** `listings.go:176` ("A MALFORMED EDIT KEEPS THE LAST GOOD SCHEDULE")
 and `main.go:82` ("validated BEFORE the listener opens") are both true only to `validate()` depth.
@@ -150,7 +183,39 @@ the button should not be there. Measure it; do not guess.
 than assumed: `runMachine`/`resetState` (`main.go:340-390`) reset only on `stopReset` or an explicit
 reset request. The impact is a visible control that disconnects you, not a shared-state attack.
 
-### F-4 [A05] Unbounded reads and quadratic re-encoding on the instruction loop — Low
+### F-4 [A05] A halted box still answers `/health` ok — Low
+
+Tracked as `gort-f9w`. Found by driving F-2 rather than by reading, and it is **not specific to
+F-2** — it applies to every `stopHalt`.
+
+**Trust boundary:** not itself reachable by anyone; it is a blindness in the checks, and it widens
+the impact of anything that halts the box.
+
+**Evidence.** A box halted at `16:35:05.379` answered, at `16:35:27`:
+
+```json
+{"status":"ok","version":"dev","commit":"unknown","timestamp":"2026-09-21T16:35:27Z"}
+```
+
+`internal/httpx/handlers/health.go:24-31` is a static handler — status `ok`, version, commit,
+timestamp, and no reference to machine state. So `./ctl.sh health`, `./ctl.sh health-public` and any
+external monitor report a healthy box that is stopped. **The boot gate's liveness stage is this
+endpoint**: `tools/boot-gate.sh:162-205` asserts `health answers ok` and `health names this build`,
+and both pass over a halted guest. The gate proves the HTTP server is up and the binary is the
+intended one — it does prove that, and it is honest about calling it an identity claim — but it is
+the only thing standing in the liveness position.
+
+Viewers are not affected: `haltMachine` pushes phase `halted` with its reason over the WebSocket, so
+a browser shows it at once. The blindness is confined to the HTTP surface, which is exactly what
+automation watches.
+
+**Fix.** Either have `/health` report the machine phase and answer non-200 when halted, or give the
+boot gate a real liveness assertion — the retired instruction count moving between two reads. Prefer
+the second if `/health`'s build-identity contract is load-bearing for the deploy gate, which Phase
+5's audit records as deliberate; changing its shape would touch `tools/boot-gate.sh` and the public
+Playwright checks that parse it.
+
+### F-5 [A05] Unbounded reads and quadratic re-encoding on the instruction loop — Low
 
 Tracked as `gort-bek`. **Not timed — treat the magnitude as unmeasured.**
 
@@ -204,7 +269,7 @@ are not served. Tracked with I-1 as `gort-a8a`; do it in the same pass as F-1, w
   refused at startup otherwise (`main.go:246-258`); a schedule configured without a dictionary is
   refused rather than silently broadcasting nothing (`main.go:213-217`); `docker-compose.yml` still
   binds `127.0.0.1:${GORETROTV_PORT:-8099}:8099` with a literal `GORETROTV_BIND_ALL_INTERFACES`;
-  all three new mounts are `:ro`. `ARCH-DEV-1` passes all seven probes. Gaps: F-1, F-4.
+  all three new mounts are `:ro`. `ARCH-DEV-1` passes all seven probes. Gaps: F-1, F-4, F-5.
 - **A06 vulnerable components.** `./ctl.sh vuln` → `vulncheck: 0 called vulnerabilities`.
   `npm audit --omit=dev --audit-level=moderate` and `npm audit --audit-level=moderate` → `found 0
   vulnerabilities`. `go vet ./...` clean; `golangci-lint` 0 issues; `go.mod`/`go.sum` unchanged in
@@ -228,17 +293,18 @@ are not served. Tracked with I-1 as `gort-a8a`; do it in the same pass as F-1, w
 | "A MALFORMED EDIT KEEPS THE LAST GOOD SCHEDULE" (`listings.go:176`) | True for JSON/`validate()` failures; **FALSE** for builder-refused schedules (F-2) |
 | "loaded and validated BEFORE the listener opens" (`main.go:82`) | Only to `validate()` depth (F-2) |
 | `#nosec G304` ×3 (`listings.go:223,273`; `huffman.go:52`) | **Honest.** `ReadDir` names cannot contain `/`, and non-default names must parse as `2006-01-02` (`listings.go:154`) — no traversal. Symlinks resolve to operator files on a `:ro` mount |
-| "Pump is cheap when nothing is due" (`main.go:422`) | True (`multiplex.go:199-201` compares `NextDue`); the reload cost lands in the line-up wave instead (F-4) |
+| "Pump is cheap when nothing is due" (`main.go:422`) | True (`multiplex.go:199-201` compares `NextDue`); the reload cost lands in the line-up wave instead (F-5) |
 | `LiveClock` vs the icount rule | True — `LiveClock` reads the wall (`multiplex.go:110-113`) but carousel timing is icount-only (`carousel.go:151-196`); `ARCH-DET-1` passes and its census excludes `internal/multiplex`, consistent with the record |
 
 ## Limitations
 
-- **F-2's final hop** (a `Pump` error reaching `stopHalt` and browsers seeing `halted`) is read from
-  `main.go:428-429` and `352-357`, **not driven on real firmware**. Both halves either side — the
-  validator accepting and the builder refusing, and the reload swapping the bad file in — were
-  measured.
-- **F-4 was not timed.** No instructions-per-second figure with a large schedule directory exists in
-  the repo, so the magnitude is unknown.
+- **F-5 was not timed.** No instructions-per-second figure with a large schedule directory exists in
+  the repo, so the magnitude is unknown. It is the one finding here still resting on a code read.
+- **F-2's non-recovery after a reset** is read from `main.go:345`, not driven — the halt itself and
+  the live-reload path were. Driving the reset needs a WebSocket client to ask for one.
+- **F-4's effect on the boot gate** is established from `tools/boot-gate.sh:162-205` and a measured
+  `/health` response over a halted box; the gate was not itself run against a deliberately halted
+  guest.
 - The audit covers Phase 6. It does not cover the Phase 7 screens, video, or the interactive/return
   path, none of which exist yet.
 - This audit does not re-derive Phase 5's conclusions beyond confirming they still hold at
@@ -262,19 +328,31 @@ are not served. Tracked with I-1 as `gort-a8a`; do it in the same pass as F-1, w
   404 probes for the developer and data paths
 - Live browser: pressing `services` on the real handset and sampling `#key-feedback` (F-3)
 - `go test -overlay` harness for the validator/builder disagreement cases (F-2), tree untouched
+- **The halt, driven** (F-2, F-4): the real binary on real firmware from
+  `snapshots/post-acquisition.snapshot` on `127.0.0.1:8100`, with a control and a poison differing
+  only in one channel's titles — control on air and no halt; poison accepted at load then
+  `guest halted` 2.8s later; and a live edit under a healthy box halting it 524ms after
+  `schedule reloaded`. `/health` polled 22s after the halt still returned `status: ok`.
 
 ## Method
 
 Produced by a `/security-reviewer` agent running on a **different model** from the one that built
 Phase 6, read-only, with every load-bearing finding re-verified independently before it was written
-down. F-1, F-2's two halves and F-3 were each reproduced by hand; F-3 was confirmed against the live
-public demo. Where the reviewer's reading and mine disagreed, the disagreement was resolved by
-running the thing rather than by preferring either account — which is how the `AfterPump`
-mis-citation in F-2's chain was caught and corrected to `main.go:428-429`.
+down. F-1 was reproduced by hand; F-3 was confirmed against the live public demo by pressing the
+button; and **F-2's halt was driven end to end on real firmware with a control**, which is how F-4
+was found at all — it does not appear in any code read. Where the reviewer's reading and mine
+disagreed, the disagreement was resolved by running the thing rather than by preferring either
+account, which is how the `AfterPump` mis-citation in F-2's chain was caught and corrected to
+`main.go:428-429`.
+
+One finding, F-5, still rests on a code read and is labelled as such. The report distinguishes
+throughout between what was measured and what was reasoned, because this project's own record says
+an instrument that cannot find what it counts must fail rather than report zero — and a security
+finding asserted from a code path nobody executed is the same shape of claim.
 
 ## Gate
 
 **F-1 blocks nothing technically but should land before the phase is called done**, because the
-claim it falsifies is one the repository makes to anyone reading it. F-2, F-3 and F-4 are filed and
-do not block. All four are tracked: `gort-a40`, `gort-sgc`, `gort-p5x`, `gort-bek`, plus `gort-a8a`
-for the tidy-ups.
+claim it falsifies is one the repository makes to anyone reading it. F-2 through F-5 are filed and
+do not block. All five are tracked: `gort-a40`, `gort-sgc`, `gort-p5x`, `gort-f9w`, `gort-bek`,
+plus `gort-a8a` for the tidy-ups.

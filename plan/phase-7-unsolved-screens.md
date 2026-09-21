@@ -16,9 +16,20 @@ rule for this phase: **do not guess a format** — let the box name what it want
 
 - [ ] `TASK-7.1` Find the grid's row loop: disassemble outward from the executed reads of `DS+0x02E20C` at `0x9FC75F7B` and `0x9FC762FD` — **not** the one at `0x9FC77D41`, which feeds `add -12; switch` and is a view selector rather than a channel count → `/go-engineer` [TC-7.1]
 - [ ] `TASK-7.2` Determine whether the loop runs and draws nothing, or never runs. Different faults, same blank screen; the widget count per iteration separates them → `/go-engineer` [TC-7.1]
-- [ ] `TASK-7.3` Feed PID `0x52` — the one PID the box arms that nobody has ever fed — and identify what consumes it → `/go-engineer` [TC-7.2]
+- [ ] `TASK-7.3` **Premise corrected 2026-09-21 — do not "feed PID `0x52`".** The record already
+  settles it: `0x52` is transient, opens in response to our own NIT and closes again, and is the
+  box's OWN subtable registration for network `0x20`; the earlier "nothing feeds PID `0x52`"
+  reading is named in the record as an artefact of a join. The live question is instead: **signal
+  an application in the programme stream and find how this firmware expects to see it.** OpenTV 1.x
+  auto-downloads a flow's directory module "when an application is signalled in the programme
+  stream" (LTU 2000:075 §3.3–3.6), and we signal none. PAT/PMT is the cheap standard-DVB first
+  attempt, NOT a diagnosis — the record mentions PAT and PMT zero times and no observation shows a
+  PID `0x00` filter. Pass/fail is `0x800BECF0` executing once → `/go-engineer` [TC-7.2]
 - [ ] `TASK-7.4` Establish what makes the box ask for a carousel at all. Every carousel-side function is currently cold; `0x800BECF0`, the Huffman decompressor, **has never executed once** and is the cleanest marker that a module was accepted → `/go-engineer` [TC-7.3]
-- [ ] `TASK-7.5` Once it asks: the DSM-CC module format, read off the parser the way the `0xB1` entry layout was read → `/go-engineer` [TC-7.4]
+- [ ] `TASK-7.5` Once it asks: the module format, read off the parser the way the `0xB1` entry layout
+  was read. **Not DSM-CC — corrected 2026-09-21.** OpenTV 1.x uses module "flows" with a directory
+  module, not a DSM-CC object carousel (LTU 2000:075). Building to DSM-CC would be the guessed
+  fifth format this phase's own rule forbids → `/go-engineer` [TC-7.4]
 - [ ] `TASK-7.6` Establish whether the firmware drives audio at all — a measurement, not an implementation task → `/go-engineer` [TC-7.5]
 - [ ] `TASK-7.7` Implement whatever 7.1–7.6 prove is needed; the shape cannot honestly be planned before they run → `/go-engineer` [TC-7.1, TC-7.2, TC-7.3]
 - [ ] `TASK-7.8` ⫘ Playwright: navigate sky → TV GUIDE → ALL CHANNELS and assert channels with programmes → `/qa-test-engineer` [TC-7.6]

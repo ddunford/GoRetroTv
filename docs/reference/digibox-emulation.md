@@ -16,8 +16,19 @@ ORIGINAL ASE, not MIPS16e: `SAVE`/`RESTORE` appears nowhere, and a VR4111 would 
 demux, video encoder or framebuffer. Its on-chip registers live at physical `0x0B00_xxxx`, i.e.
 KSEG1 `0xAB00_0000`. **Our peripherals at `0xB0000000` map to physical `0x1000_0000` — ISA-MEM,
 the EXTERNAL system bus.** They are a separate Pace/ST ASIC and no public manual documents them.
-The VR4111's on-chip modem (HSP) and keyboard (KIU) units are the Digibox's phone line and front
-panel, which fits.
+~~The VR4111's on-chip modem (HSP) and keyboard (KIU) units are the Digibox's phone line and front
+panel, which fits.~~ **WITHDRAWN 2026-09-21. It does not fit, and the firmware's own behaviour says
+so.** The VR4111's on-chip HSP lives at physical `0x0C00_xxxx` (KSEG1 `0xAC00_xxxx`) and its KIU at
+`0x0B00_xxxx` (`0xAB00_xxxx`) -- and **the oracle's complete address census contains zero hits for
+either range**. The modem this firmware drives is an external UART at `0xB2001000`, which is
+physical `0x12001000`, inside ISA-MEM. A firmware arming three interrupts on a discrete VR4111 could
+not avoid ICU1/ICU2 and never touch them, so the chip is very likely NOT a discrete VR4111: drew1440
+records that the 2500N (9F04, 2000) "replaced the ST processor with a NEC EMMA processor, which was
+MIPS based", and the VR4111 manual's own §1.1 says the VR4111 is a VR4110 core plus seventeen
+peripheral units -- so the Nucleus `NEC4111` port string names a core family and does not prove the
+part. **The specific part number is NOT established**: no source found names a µPD61030 or ties a
+VR4110 core to the 2500N. Treat `0xB0xxxxxx`/`0xB2xxxxxx` as the peripherals of an unidentified
+NEC set-top SoC rather than as glue around a handheld CPU.
 
 ## The board's other chips — what is known, and the one lead worth chasing
 
@@ -47,6 +58,19 @@ marked `OMEGA / STi5512SWE`, so the S-series is a **different generation and its
 nothing about ours**. What is NOT confirmed is the EMMA claim for the 2500N, and it does not sit
 easily beside the RTOS naming a 4111 — NEC's EMMA1 (µPD61050) integrates a VR4120 core rather than
 pairing with a discrete VR4111.
+
+**The reasoning in that last sentence is WEAKENED, 2026-09-21, and the part number is unsourced.**
+The VR4111 manual's own §1.1 states the VR4111 *is* a VR4110 core plus seventeen peripheral units,
+so an RTOS port string of `NEC4111` names a CORE FAMILY and is perfectly consistent with a VR411x
+-core SoC — it does not argue against EMMA at all. Two research passes could not source the
+`µPD61050`/VR4120 pairing given here, and one found NEC's set-top part of that era described as the
+`µPD61030` with a VR4110 core (EE Times, 9 Oct 1998) while the other could corroborate neither part
+number. What IS sourced is drew1440's statement that the 2500N (9F04) "replaced the ST processor
+with a NEC EMMA processor, which was MIPS based". **So: EMMA for the 2500N is now better supported
+than when this paragraph was written, the specific NEC part number is unestablished in either
+direction, and `µPD61050`/VR4120 should not be relied on.** The decisive evidence remains the one
+named below — a board photo — plus the census point now recorded at the head of this file: the
+firmware never touches a VR4111's internal I/O ranges.
 
 It is worth settling because of what it would buy: if the media ASIC is an EMMA, its OSD and
 blitter have vendor documentation and a Linux port (`arch/mips/emma`), which is a register map for
@@ -6361,7 +6385,31 @@ At rest the fixture's match units are:
     unit  2: 42/fb 00/ff 20/ff ...        SDT
     unit  3: 4a/ff 10/ff 00/ff ...        BAT, bouquet 0x1000
     unit  5: 73/ff 00/00 00/00 ...        TOT
-    unit 10: c1/ff 01/fe ff/00 ...
+    unit 10: c1/ff 01/fe ff/00 ...      TABLE 0xC1 -- see below, 2026-09-21
+
+**Unit 10 was listed here unannotated for as long as this section has existed, and it is the one
+filter nothing has ever answered.** A match unit skips `section_length`, so byte 0 is the table id
+and bytes 1..2 are the extension -- which is exactly how unit 3 reads as "BAT, bouquet `0x1000`" and
+unit 1 as "NIT, network `0x0020`". So unit 10 asks for a **long-form section with table id `0xC1`
+and an extension whose high byte is `0x00` or `0x01`**. This transmitter has never sent one: the
+builders emit `0x40`, `0x42`, `0x4A`, `0x70`, `0x73` and `0xA0..0xA3`, and nothing else.
+
+**Answered once, and the box did a great deal with it.** `TestWhetherAnythingWantsTableC1` restores
+two boxes from the same snapshot, lets both acquire the same block's listings, and runs both for
+twenty million instructions -- giving only one of them a minimal long-form `0xC1` section, real
+header and real CRC, payload deliberately all zeroes because the format is not known and guessing it
+is what this phase forbids. The machine is deterministic, so every PC in the test run and not in the
+control was caused by that section:
+
+    control  16,888 distinct PCs
+    test     17,432 distinct PCs        over 20,000,000 instructions each
+    ONLY WITH THE SECTION: 544 PCs, led by 0x80004760 and a long contiguous run from 0x8007F0FC
+
+**What this does NOT establish** is what those 544 addresses do -- acceptance, or a rejection path
+walked at length. Either answer is progress, because the box has named a table it wants and this is
+now a repeatable way to ask it questions. It was pushed on PID `0x52` (the one armed PID this
+transmitter never feeds) with extension `0x0100`; neither the PID nor the extension is established
+as the right one, only as ones that produced a response.
 
 **There is no unit matching `0x70`.** Feeding a TDT alone — correctly built, correct MJD, pushed to
 PID `0x14` — moves nothing: not the requested day, not the PID, not the table id. Feeding a TOT for

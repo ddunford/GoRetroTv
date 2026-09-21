@@ -197,12 +197,14 @@ func TestWhatReadsTheAssembledTableC1Array(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	// SERVICES (0x7E) IS THE ONE SCREEN THIS CANNOT TRY, and it is a plausible
-	// consumer: lessons.md records 0x7E as the Sky menu's SERVICES tab, measured
-	// against frame 64AF0A8D. It is unreachable here because handsetRaw
-	// (internal/web/transport.go) has never contained 0x7E, so decodeKey refuses
-	// it -- gort-p5x. Sending it through box.CSI.Key would bypass that and prove
-	// nothing about the product, so this says so rather than faking the result.
-	t.Log("services (0x7E) NOT TRIED: gort-p5x -- the code is measured as the Services tab but " +
-		"handsetRaw rejects it, so the screen is unreachable until that is fixed")
+	// SERVICES, the screen this could not reach until gort-p5x was fixed. 0x7E is
+	// the Sky menu's Services tab (lessons.md, frame 64AF0A8D) and the product
+	// now delivers it -- handsetRaw accepts it and a page/server agreement test
+	// keeps the two from drifting apart again. So pressing it here is the same
+	// key a viewer presses, which is what makes the answer worth anything.
+	watch("services", 8_000_000, func() {
+		if err := box.CSI.Key(0x7E, 0); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

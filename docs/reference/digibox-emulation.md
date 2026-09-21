@@ -6569,6 +6569,7 @@ A bus observer watching every data read inside the array and its header, over fo
     tv guide      8,000,000                NOTHING
     box office    8,000,000                NOTHING
     interactive   8,000,000                NOTHING
+    services      8,000,000                NOTHING
 
 **The observer is proved rather than assumed** — over 200,000 instructions it sees 38,234 data
 reads, 37,930 of them in DRAM, and 16,668 writes. A hook that never fired would report these zeros
@@ -6577,12 +6578,16 @@ a harness failure and not a count. It also watches EVERY ten-byte-stride copy in
 the first, because watching a dead copy while the live one is read elsewhere is the obvious way to
 manufacture this result.
 
-**One screen could not be tried, and it is the best candidate.** `lessons.md` records raw `0x7E` as
-the Sky menu's SERVICES tab, measured against frame `64AF0A8D`. It is unreachable: `handsetRaw` in
-`internal/web/transport.go` has never contained `0x7E`, so `decodeKey` refuses it (`gort-p5x`).
-Pushing the key straight at the CSI would bypass the product path and prove nothing about it, so the
-test says so instead of faking a result. **Fixing `gort-p5x` is now on the critical path for this
-question, not just a UI defect.**
+**Services was the best candidate and it is now ruled out.** `gort-p5x` was fixed to reach it --
+`0x7E` is the Sky menu's Services tab and `handsetRaw` had never contained it -- and with the
+product delivering the key, the screen reads nothing either. All five reachable screens are now
+negative.
+
+**So the consumer is not a top-level screen.** What remains: a completeness condition (every probe
+so far has sent ONE section with `last_section_number` 0); a deeper navigation rather than merely
+opening a menu; another table that references this one; or a consumer that runs during ACQUISITION
+and has moved on by the time a restored box is probed -- which this file's own note that PID `0x52`
+"opens in response to our NIT and closes again" makes the most interesting of the four.
 
 What this does NOT establish: that the array is never read. It is not read in these four states
 within these budgets. A completeness condition (this was one section with `last_section_number` 0),

@@ -205,7 +205,7 @@ func TestTransportRejectsInvalidHandsetMessages(t *testing.T) {
 			t.Errorf("accepted %s", payload)
 		}
 	}
-	for _, raw := range []uint8{0, 9, 0x3c, 0x58, 0x5c, 0x6d, 0x70, 0x7d, 0x80, 0xcc, 0xf5} {
+	for _, raw := range []uint8{0, 9, 0x3c, 0x58, 0x5c, 0x6d, 0x70, 0x7d, 0x7e, 0x80, 0xcc, 0xf5} {
 		data, err := json.Marshal(wire.KeyMessage{Type: "key", Version: wire.Version, Raw: raw, Source: 0})
 		if err != nil {
 			t.Fatal(err)

@@ -47,6 +47,16 @@ var (
 
 func restoredBox(t *testing.T) *board.Runtime {
 	t.Helper()
+	// -short SKIPS EVERY BOX IN THIS PACKAGE, which is what makes a per-turn gate
+	// possible. Restoring a box and running millions of guest instructions costs
+	// tens of seconds under -race; the full suite is a pre-push and CI concern
+	// (./ctl.sh test), and ./ctl.sh test:fast is the same suite with these
+	// skipped. The gate is HERE, at the one function every firmware test in this
+	// package goes through, so a test added later gets it without anyone
+	// remembering to.
+	if testing.Short() {
+		t.Skip("skipping a real-firmware box under -short; run ./ctl.sh test for these")
+	}
 	dir := filepath.Join("..", "..", "..", "firmware")
 	if _, err := os.Stat(filepath.Join(dir, firmware.FileU202)); os.IsNotExist(err) {
 		t.Skip("private firmware is not installed")

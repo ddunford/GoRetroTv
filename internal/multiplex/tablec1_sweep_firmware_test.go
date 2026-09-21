@@ -78,28 +78,37 @@ func TestWhichPIDAndExtensionTheTableC1ConsumerWants(t *testing.T) {
 		return seen, n
 	}
 
+	// FOUR ACQUISITIONS, NOT FIFTEEN. The exhaustive sweep that established this
+	// is written up in docs/reference/digibox-emulation.md and does not need
+	// re-deriving on every run: at fifteen it put internal/multiplex past the
+	// Makefile's 30-minute ceiling and failed the whole suite. What belongs here
+	// is a regression that ASSERTS the finding -- 0xC1 on PID 0x52 with
+	// extension 0x0100 is special and the two nearest misses are not.
 	control, _ := exclusive(t, 0, 0, 0, nil)
 	t.Logf("control: %d distinct PCs with nothing delivered", len(control))
 
-	t.Log("=== which armed PID carries a 0xC1 the consumer reacts to? (exclusive PCs) ===")
-	for _, c := range []struct {
-		name string
-		pid  uint16
-	}{
-		{"0x10 (NIT)", 0x10}, {"0x11 (SDT/BAT)", 0x11}, {"0x14 (TDT/TOT)", 0x14},
-		{"0x33 (titles)", 0x33}, {"0x34 (titles)", 0x34}, {"0x52", 0x52},
-		{"0x00 (PAT, not armed)", 0x00},
-	} {
-		if _, n := exclusive(t, 0xC1, c.pid, 0x0100, control); n >= 0 {
-			t.Logf("  PID %-22s -> %4d exclusive PCs", c.name, n)
-		}
-	}
+	_, onTarget := exclusive(t, 0xC1, 0x52, 0x0100, control)
+	_, wrongPID := exclusive(t, 0xC1, 0x11, 0x0100, control)
+	_, wrongExt := exclusive(t, 0xC1, 0x52, 0x0200, control)
+	t.Logf("PID 0x52 ext 0x0100 -> %d exclusive PCs", onTarget)
+	t.Logf("PID 0x11 ext 0x0100 -> %d exclusive PCs   (wrong PID)", wrongPID)
+	t.Logf("PID 0x52 ext 0x0200 -> %d exclusive PCs   (extension outside 0x0000/0x0100)", wrongExt)
 
-	t.Log("=== which extension, on PID 0x52? (exclusive PCs) ===")
-	for _, ext := range []uint16{0x0000, 0x0001, 0x0100, 0x01FF, 0x0200, 0x8000, 0xFF00} {
-		if _, n := exclusive(t, 0xC1, 0x52, ext, control); n >= 0 {
-			t.Logf("  extension %04X -> %4d exclusive PCs", ext, n)
-		}
+	// Deliberately loose bounds. The exact counts -- 544, 8 and 22 when this was
+	// measured -- are a property of this fixture and this instruction budget,
+	// and pinning them would turn any unrelated change into a false finding.
+	// What must hold is that the addressing DISCRIMINATES.
+	if onTarget < 100 {
+		t.Errorf("0xC1 on PID 0x52 extension 0x0100 woke only %d exclusive PCs; it woke 544 when this was "+
+			"established, so either the consumer is gone or this instrument is broken", onTarget)
+	}
+	if wrongPID*4 >= onTarget {
+		t.Errorf("the wrong PID woke %d exclusive PCs against the target's %d -- too close to call the "+
+			"addressing established", wrongPID, onTarget)
+	}
+	if wrongExt*4 >= onTarget {
+		t.Errorf("an extension outside 0x0000/0x0100 woke %d against the target's %d -- the extension "+
+			"no longer discriminates", wrongExt, onTarget)
 	}
 }
 

@@ -6522,10 +6522,46 @@ anything. `rec[2]=0x0F` must give `01 01 01 01` = `0x55`; `rec[2]=0x05` must giv
 `0x66`; `rec[2]=0xF0` with `rec[3]=0xC0` must give `out[2]=0xF3`. A rule that counted set bits or
 OR-ed them gives none of those. All three measured exactly as predicted.
 
-**Still unknown:** what rec[4..8] carry — **this sweep did not vary them**, it held them at zero
-throughout, so their silence here is not evidence; what the six-bit `out[2]` value and the four
-2-bit states MEAN; what the two accepted extensions (`0x0000` and `0x0100`) select; and what reads
-the assembled array afterwards.
+#### rec[4..8], swept — and the tenth byte the box adds
+
+*Forty single-bit cases plus five whole-byte ones, again as records in one section. All
+forty-five changed the stored record, so none of these five bytes is ignored.*
+
+    rec[4] -> out[4]      rec[6] -> out[7]      rec[8] -> out[9]
+    rec[5] -> out[6]      rec[7] -> out[8]
+
+Every one is copied **verbatim**, bit for bit — `0xFF` in gives `0xFF` out, and each single bit
+lands on its own. **But `rec[5]` skips `out[5]` and lands at `out[6]`**, and that gap is the whole
+reason a nine-byte record becomes ten in memory:
+
+    wire (9 bytes)                     memory (10 bytes)
+    rec[0..1]  16-bit id           ->  out[0..1]
+    rec[2] bits 7..4               ->  out[2] bits 7..4
+    rec[3] bits 7..6               ->  out[2] bits 1..0
+    rec[2] bits 3..0               ->  out[3], four 2-bit fields, 1 set / 2 clear
+    rec[3] bits 5..0               ->  NOTHING
+    rec[4]                         ->  out[4]
+       (nothing from the record)   ->  out[5]
+    rec[5]                         ->  out[6]
+    rec[6]                         ->  out[7]
+    rec[7]                         ->  out[8]
+    rec[8]                         ->  out[9]
+
+`out[5]` reads `0x00` in all forty-six records here. It is filled from somewhere that is not the
+section, which makes it the box's own per-record state rather than broadcast data — a status or
+sequence byte the array carries alongside what arrived.
+
+**The twelve-byte header is confirmed as well**, read directly for the first time:
+
+    00 00 00 2e 00 00 00 00 00 00 00 00
+    +0  section_number, as the disassembly's `sb a2,0(a1)` said
+    +2  0x002E = 46 = the record count we sent, as `sh v1,2(a1)` said
+    +4..11  zero
+
+**Still unknown:** what `out[5]` is filled from; what the six-bit `out[2]` value, the four 2-bit
+states and the five verbatim bytes MEAN; why `rec[3]` bits 0..5 exist at all if nothing reads them;
+what the two accepted extensions (`0x0000` and `0x0100`) select; and what reads the assembled array
+afterwards. The STRUCTURE is now complete; the SEMANTICS are untouched.
 
 **There is no unit matching `0x70`.** Feeding a TDT alone — correctly built, correct MJD, pushed to
 PID `0x14` — moves nothing: not the requested day, not the PID, not the table id. Feeding a TOT for

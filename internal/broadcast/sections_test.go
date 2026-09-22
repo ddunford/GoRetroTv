@@ -483,3 +483,119 @@ func TestTheSDTDivergesByExactlyTheSpecifier(t *testing.T) {
 			"  ours    = %x\n  expected = %x", got, spliced)
 	}
 }
+
+// THE INDEX SECTION IS CHECKED AGAINST THE CONSUMER'S OWN ARITHMETIC.
+//
+// A builder tested against what its author meant is a builder that agrees with itself. The box's
+// parser at 0x800C4C34 states the format in code: it takes the twelve-bit section length,
+// SUBTRACTS NINE and DIVIDES BY NINE to get the record count, and it walks from section+8. So the
+// test worth writing is that recomputing the count the way the firmware does gives back the number
+// of records that went in -- and that the walk lands on each record's id.
+func TestIndexSectionMatchesTheConsumersArithmetic(t *testing.T) {
+	t.Parallel()
+	records := []IndexRecord{
+		{ID: 0xBEEF, Packed: 0x5a, Selector: 0xc0, Data: [5]byte{1, 2, 3, 4, 5}},
+		{ID: 0xCAFE},
+		{ID: 0xF00D, Data: [5]byte{9, 8, 7, 6, 5}},
+	}
+	letter, err := IndexLetter('M')
+	if err != nil {
+		t.Fatal(err)
+	}
+	section, err := IndexSection(letter, 0, 0, 0, records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if section[0] != 0xc1 {
+		t.Fatalf("table id = %#02x, want 0xC1", section[0])
+	}
+	if got := uint16(section[3])<<8 | uint16(section[4]); got != 'M' {
+		t.Fatalf("extension = %#04x, want %#04x for 'M'", got, uint16('M'))
+	}
+	// The firmware's own count, computed the firmware's own way.
+	length := int(section[1]&0x0f)<<8 | int(section[2])
+	if length+3 != len(section) {
+		t.Fatalf("declared length %d, actual %d", length, len(section)-3)
+	}
+	if count := (length - 9) / 9; count != len(records) {
+		t.Fatalf("the consumer would read %d records from this section, not the %d it carries",
+			count, len(records))
+	}
+	// And the walk, from section+8, nine bytes at a time.
+	for i, want := range records {
+		at := 8 + i*9
+		if got := uint16(section[at])<<8 | uint16(section[at+1]); got != want.ID {
+			t.Fatalf("record %d id = %#04x at offset %d, want %#04x", i, got, at, want.ID)
+		}
+	}
+	if dvb.MPEGCRC32(section) != 0 {
+		t.Fatalf("whole-section CRC = %#x", dvb.MPEGCRC32(section))
+	}
+}
+
+// EVERY EXTENSION THE CONSUMER DISPATCHES, AND NOTHING ELSE.
+//
+// The parser allocates and fills the record array BEFORE it branches on the extension, so a
+// mis-addressed section is decoded and then leaked -- indistinguishable from silence at the screen.
+// The accepted set is 0x0000, 'A'..'Z', 0x00FF and 0x0100..0x01CF, and this pins all four arms
+// because an earlier reading of the same parser admitted only the letters and would have refused
+// the sixty-four genre extensions the box actually subscribes to.
+func TestIndexSectionAcceptsExactlyWhatTheConsumerDispatches(t *testing.T) {
+	t.Parallel()
+	for _, good := range []uint16{0x0000, 'A', 'M', 'Z', 0x0100, 0x010f, 0x0140, 0x018f, 0x01cf, 0x00ff} {
+		if !IndexDispatched(good) {
+			t.Fatalf("IndexDispatched(%#04x) = false, but the consumer routes it", good)
+		}
+		if _, err := IndexSection(good, 0, 0, 0, []IndexRecord{{ID: 1}}); err != nil {
+			t.Fatalf("IndexSection(%#04x) was refused: %v", good, err)
+		}
+	}
+	for _, bad := range []uint16{0x0001, '@', '[', 'a', 0x00fe, 0x01d0, 0x0200, 0xffff} {
+		if IndexDispatched(bad) {
+			t.Fatalf("IndexDispatched(%#04x) = true, but the consumer falls through and frees "+
+				"the list it built", bad)
+		}
+		if _, err := IndexSection(bad, 0, 0, 0, []IndexRecord{{ID: 1}}); err == nil {
+			t.Fatalf("IndexSection(%#04x) was accepted; the consumer would decode and leak it", bad)
+		}
+	}
+}
+
+// THE GENRE EXTENSION IS SIXTEEN CATEGORIES BY FOUR BLOCKS, AND THE SLOT ARITHMETIC IS THE BOX'S.
+//
+// 0x800C4C34 picks its list head with `(ext & 0x0F) * 4 + ((ext & 0xC0) >> 6)`. Recomputing that
+// from every extension IndexCategory builds must land on each of the sixty-four slots exactly once
+// -- if two categories aliased onto one slot, one genre screen would quietly overwrite another.
+func TestEveryGenreExtensionLandsOnItsOwnSlot(t *testing.T) {
+	t.Parallel()
+	seen := map[int][]uint16{}
+	for category := byte(0); category < 16; category++ {
+		for block := byte(0); block < 4; block++ {
+			ext, err := IndexCategory(category, block)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !IndexDispatched(ext) {
+				t.Fatalf("IndexCategory(%d,%d) = %#04x, which the consumer does not dispatch",
+					category, block, ext)
+			}
+			slot := int(ext&0x0f)*4 + int(ext&0xc0)>>6
+			seen[slot] = append(seen[slot], ext)
+		}
+	}
+	if len(seen) != 64 {
+		t.Fatalf("the sixty-four category/block pairs land on %d distinct slots", len(seen))
+	}
+	for slot, exts := range seen {
+		if len(exts) != 1 {
+			t.Fatalf("slot %d is claimed by %d extensions %#04x -- one genre screen would "+
+				"overwrite another", slot, len(exts), exts)
+		}
+	}
+	if _, err := IndexCategory(16, 0); err == nil {
+		t.Fatal("category 16 was accepted, but the consumer masks the extension's low nibble")
+	}
+	if _, err := IndexCategory(0, 4); err == nil {
+		t.Fatal("block 4 was accepted, but a day is four six-hour blocks")
+	}
+}

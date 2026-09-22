@@ -164,22 +164,27 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 		pids = append(pids, p)
 	}
 	sort.Slice(pids, func(a, b int) bool { return byPID[pids[a]] > byPID[pids[b]] })
-	armedPIDs := map[uint16]bool{}
+	// THE NODE FIELD IS NOT A PID, AND IT IS NOT A FILTER HANDLE EITHER. Both readings were tried
+	// and both were destroyed by the same check: the tree puts table 0xA3 on "0x17" while the box's
+	// own match unit asks for that table on PID 0x33, and the demux's armed channels are numbered
+	// 19..24 so 0x10+channel does not reach 0x10..0x1F. What the field is remains UNESTABLISHED,
+	// and it is printed below as an opaque handle rather than given a name it has twice failed.
+	//
+	// The PID a table arrives on is settled by pushing a section and watching the parser run --
+	// TestWhichPIDCarriesTheIndexTable does exactly that, and it is how table 0xC1 was placed on
+	// PID 0x52. Do not transmit on a PID read off this tree.
 	for _, f := range box.Demux.ArmedFilters() {
-		armedPIDs[f.PID] = true
+		t.Logf("    demux channel %2d is armed for PID %#04x", f.Filter, f.PID)
 	}
 	for _, p := range pids {
-		note := ""
-		if armedPIDs[p] {
-			note = "  (armed in the demux)"
-		}
-		t.Logf("  PID %#04x: %d nodes%s", p, byPID[p], note)
+		t.Logf("  handle %#04x: %d nodes", p, byPID[p])
 	}
 	// GROUPED BY THE TOP-LEVEL TABLE ID, because that is the question. A title section's extension
 	// is the LISTINGS ID, so a branch under table 0xA0..0xA4 lists the channels the box will accept
 	// programmes for -- and a channel missing from it is a channel whose programmes are delivered
 	// to nobody, however correctly they are transmitted.
 	type branch struct {
+		pid              uint16
 		table, tableMask uint16
 		children         []uint16
 	}
@@ -187,7 +192,7 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 	var current *branch
 	for _, s := range found {
 		if s.depth == 0 {
-			current = &branch{table: s.tag, tableMask: s.tagMask}
+			current = &branch{pid: s.pid, table: s.tag, tableMask: s.tagMask}
 			branches = append(branches, current)
 			continue
 		}
@@ -209,8 +214,8 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 		case b.table == 0xc1:
 			kind = "  <- the A-Z index: its children are letters"
 		}
-		t.Logf("  table %02X under mask %02X, %d children%s",
-			b.table, b.tableMask, len(b.children), kind)
+		t.Logf("  handle %#04x  table %02X under mask %02X, %d children%s",
+			b.pid, b.table, b.tableMask, len(b.children), kind)
 		line, shown := "", 0
 		for _, c := range b.children {
 			if name, mine := ours[c]; mine {

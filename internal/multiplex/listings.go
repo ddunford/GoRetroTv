@@ -49,6 +49,19 @@ type ListedService struct {
 	// join between a channel and its programmes, and matching it is how a
 	// title section reaches the right row of the guide.
 	ListingsID uint16 `json:"listingsId"`
+	// Kind is the byte the line-up entry carries at +2, between the service id
+	// and the listings id.
+	//
+	// EVERY FEED THIS PORT HAS EVER SENT SET IT TO 1, and 1 was a guess made
+	// when the entry was first laid out. It sits in the one descriptor that
+	// ties a channel to its programmes, so a value that means "this channel
+	// has no schedule" would empty the guide's grid while leaving the tuned
+	// service -- which nothing filters -- showing programmes perfectly. That
+	// is the exact shape of the failure, which is why the field is now
+	// transmittable instead of hard-coded. What the values MEAN is not
+	// established and is not guessed at; left unset it keeps the long-standing
+	// 1 so no existing schedule changes behaviour.
+	Kind byte `json:"kind,omitempty"`
 	// Flags is the four-bit field the line-up entry carries in the low nibble
 	// at +7..8. The guest unpacks it into a word the TV GUIDE's list screens
 	// mask before they will show a channel at all, so a channel with no flags

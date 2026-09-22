@@ -306,7 +306,7 @@ func (m *Multiplex) transport(sub Subscription, listings *Listings) broadcast.Tr
 		})
 		transport.Lineup = append(transport.Lineup, broadcast.LineupEntry{
 			ServiceID: service.ServiceID,
-			Kind:      1,
+			Kind:      lineupKind(service.Kind),
 			Listings:  service.ListingsID,
 			Extra:     service.ListingsID,
 			Channel:   service.Channel,
@@ -339,6 +339,22 @@ const inTheGuide = 0x06
 func lineupFlags(declared byte) byte {
 	if declared == 0 {
 		return inTheGuide
+	}
+	return declared
+}
+
+// lineupKind defaults a channel with no declared kind to the value every feed
+// before the field existed transmitted.
+//
+// It is deliberately NOT named for a meaning. 1 is what this port has always
+// sent and what the box has always accepted into its line-up; whether it says
+// "television" or "has a schedule" or something else is unmeasured, and a
+// constant called kindTelevision would assert what nobody here has shown.
+const lineupKindDefault = 1
+
+func lineupKind(declared byte) byte {
+	if declared == 0 {
+		return lineupKindDefault
 	}
 	return declared
 }

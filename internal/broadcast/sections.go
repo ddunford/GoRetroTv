@@ -574,3 +574,139 @@ func PAT(transportStreamID uint16, version byte, programmes []Programme) ([]byte
 	}
 	return longSection(0x00, transportStreamID, version, loop)
 }
+
+// IndexRecord is one nine-byte entry of a table 0xC1 A-Z index section.
+//
+// The box subscribes to table 0xC1 under an extension PER LETTER -- ninety-two such subscriptions
+// were walked out of its own dispatcher tree -- and this port has never answered one. The consumer
+// at 0x800C4C34 states the format in its own arithmetic: it takes the section length, subtracts
+// nine, divides by NINE for the record count, and allocates ten bytes per record plus a twelve-byte
+// header. So the wire record is nine bytes and the stored one is ten.
+//
+// WHAT IS MEASURED AND WHAT IS NOT. The FIELD WIDTHS are measured, by sweeping every bit of every
+// byte through a real box and watching where each one lands:
+//
+//	wire (9 bytes)                     memory (10 bytes)
+//	rec[0..1]  a 16-bit id         ->  out[0..1]
+//	rec[2] bits 7..4               ->  out[2] bits 7..4
+//	rec[3] bits 7..6               ->  out[2] bits 1..0
+//	rec[2] bits 3..0               ->  out[3], as four TWO-BIT fields, 1 set / 2 clear
+//	rec[3] bits 5..0               ->  nothing; six wire bits this parser does not read
+//	rec[4] -> out[4]   rec[5] -> out[6]   rec[6] -> out[7]
+//	rec[7] -> out[8]   rec[8] -> out[9]        (out[5] is the box's own, never from the wire)
+//
+// **What those bytes MEAN is not established**, so this type carries them and names none of them.
+// A field named on a guess is worse than a field named Data: the name gets believed.
+type IndexRecord struct {
+	// ID is the sixteen-bit identifier at rec[0..1], stored first in the in-memory record.
+	ID uint16
+	// Packed is rec[2]: its high nibble is copied straight through and its low nibble is unpacked
+	// into four two-bit fields.
+	Packed byte
+	// Selector is rec[3]. Only its top two bits are read; the low six are ignored by the parser.
+	Selector byte
+	// Data is rec[4..8], copied verbatim into the stored record.
+	Data [5]byte
+}
+
+// indexRecordSize is the wire size the consumer's own divisor declares.
+const indexRecordSize = 9
+
+// The extensions the 0xC1 consumer dispatches, and the ONLY ones worth transmitting.
+//
+// 0x800C4C34 ends in a four-way branch on the table-id extension, and an extension that falls
+// through it is not merely ignored: the parser has already allocated and filled the whole record
+// array by that point, so the section is decoded, dropped and LEAKED. From outside, a screen fed a
+// mis-addressed index looks exactly like a screen fed nothing.
+//
+//	0x0000                one list head                       the alphabetical family
+//	'A'..'Z'  0x41..0x5A  twenty-six list heads                the A-Z LISTINGS screens
+//	0x00FF                one list head                        the alphabetical family
+//	0x0100..0x01CF        indexed [category*4 + block]         the genre screens
+//
+// The genre arm computes its slot as `(ext & 0x0F) * 4 + ((ext & 0xC0) >> 6)` -- SIXTEEN categories
+// by FOUR six-hour blocks, the same four blocks the title tables' low two bits select. Bits 4 and 5
+// take no part in that sum, so 0x0110 aliases onto 0x0100's slot; the box subscribes only to the
+// forms with those bits clear, and IndexCategory builds only those.
+//
+// AN EARLIER READING OF THIS PARSER SAID "THE EXTENSION MUST BE A LETTER". That was taken from the
+// free path at 0x800C4F94 alone and it is wrong in the expensive direction: it refuses precisely
+// the sixty-four genre extensions the box subscribes to, which is most of what table 0xC1 is for.
+const (
+	indexCategories = 16
+	indexBlocks     = 4
+)
+
+// IndexLetter is the extension for one A-Z LISTINGS screen.
+func IndexLetter(letter byte) (uint16, error) {
+	if letter < 'A' || letter > 'Z' {
+		return 0, fmt.Errorf("broadcast: index letter %q is outside 'A'..'Z'; the consumer's "+
+			"letter arm indexes twenty-six list heads and nothing else reaches them", letter)
+	}
+	return uint16(letter), nil
+}
+
+// IndexCategory is the extension for one genre screen's six-hour block.
+//
+// The category is the guide's own genre number and the block is the quarter of the day, the same
+// one TitleTableID stamps into a title section's low two bits. Neither is named here: which number
+// is MOVIES and which is KIDS is not established, and a constant called indexCategoryMovies would
+// assert what nobody has measured.
+func IndexCategory(category, block byte) (uint16, error) {
+	if category >= indexCategories {
+		return 0, fmt.Errorf("broadcast: index category %d is outside 0..%d; the consumer masks "+
+			"the extension's low nibble", category, indexCategories-1)
+	}
+	if block >= indexBlocks {
+		return 0, fmt.Errorf("broadcast: index block %d is outside 0..%d; a day is four six-hour "+
+			"blocks", block, indexBlocks-1)
+	}
+	return 0x0100 | uint16(block)<<6 | uint16(category), nil
+}
+
+// IndexDispatched reports whether the consumer would route a section carrying this extension, or
+// decode it and throw it away.
+func IndexDispatched(extension uint16) bool {
+	switch {
+	case extension == 0x0000, extension == 0x00ff:
+		return true
+	case extension >= 'A' && extension <= 'Z':
+		return true
+	case extension >= 0x0100 && extension <= 0x01cf:
+		return true
+	default:
+		return false
+	}
+}
+
+// IndexSection builds one table 0xC1 index section.
+//
+// Build the extension with IndexLetter or IndexCategory rather than writing a number: a section the
+// consumer does not dispatch is decoded, dropped and leaked, and says nothing on the way past.
+func IndexSection(extension uint16, version, sectionNumber, lastSectionNumber byte,
+	records []IndexRecord) ([]byte, error) {
+	if !IndexDispatched(extension) {
+		return nil, fmt.Errorf("broadcast: extension %#04x is not one the 0xC1 consumer "+
+			"dispatches, so the box would build the record array and free it", extension)
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("broadcast: an index section for extension %#04x with no records "+
+			"announces nothing", extension)
+	}
+	payload := make([]byte, 0, len(records)*indexRecordSize)
+	for _, record := range records {
+		payload = appendU16(payload, record.ID)
+		payload = append(payload, record.Packed, record.Selector)
+		payload = append(payload, record.Data[:]...)
+	}
+	section, err := longSection(0xc1, extension, version, payload)
+	if err != nil {
+		return nil, err
+	}
+	// The consumer reads the section and last-section numbers out of the long-section header, and
+	// longSection writes zeros there because every other table this port sends is a single section.
+	// The section number is not decoration here: the parser stores it as the list's first byte and
+	// hands it to the screen alongside the records.
+	section[6], section[7] = sectionNumber, lastSectionNumber
+	return withCRC(section[:len(section)-4]), nil
+}

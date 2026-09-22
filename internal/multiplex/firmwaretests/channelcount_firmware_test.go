@@ -52,6 +52,14 @@ func TestHowManyChannelsEachScreenThinksThereAre(t *testing.T) {
 		bannerBounds map[bound]int
 		gridCounts   map[uint32]int
 		gridBounds   map[bound]int
+		// DID THE SUBTESTS RUN AT ALL? Under -short every box in this package skips, and a skip
+		// unwinds the subtest without unwinding the parent -- so the cross-screen assertion below
+		// ran against two empty maps and FAILED the per-turn gate, reporting "the two addresses
+		// this probe is built on are wrong" about a probe that had not executed a single
+		// instruction. A subject assertion has to be able to tell "measured nothing" from "did not
+		// measure", and this is the flag that lets it.
+		bannerRan bool
+		gridRan   bool
 	)
 	t.Run("the now-and-next banner", func(t *testing.T) {
 		bannerCounts, bannerBounds = countChannelEntryPoints(t, "banner", func(press pressFunc, watch func(bool)) uint32 {
@@ -62,6 +70,7 @@ func TestHowManyChannelsEachScreenThinksThereAre(t *testing.T) {
 			}
 			return drew
 		})
+		bannerRan = true
 	})
 	t.Run("the ALL CHANNELS grid", func(t *testing.T) {
 		gridCounts, gridBounds = countChannelEntryPoints(t, "all-channels",
@@ -76,8 +85,13 @@ func TestHowManyChannelsEachScreenThinksThereAre(t *testing.T) {
 					return press(raw, name, budget)
 				}, ".artifacts/channel-count-all-channels.png", false)
 			})
+		gridRan = true
 	})
 
+	if !bannerRan && !gridRan {
+		t.Skip("neither screen was measured -- the firmware, the dictionary or the snapshot is " +
+			"absent, or this is a -short run, in which every box in this package skips")
+	}
 	if len(bannerCounts) == 0 && len(gridCounts) == 0 {
 		t.Fatal("harness: neither entry point was reached on either screen, so the two addresses " +
 			"this probe is built on are wrong and its zeros describe the instrument")

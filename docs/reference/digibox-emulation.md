@@ -8470,3 +8470,58 @@ fires. The rows are not refused by the loop.
 > The row callback IS the thing that should draw a row. It is called once per channel, it answers
 > "no error" every time, and the drawing surface takes not one extra write. **Whatever it tests
 > before declining to draw is the remaining question, and it is inside `0x800CB7B8`.**
+
+### The row callback asks for descriptor 0x5F, and nothing in this box had one
+
+Ghidra decompiles the grid's row callback and its opening is a gate:
+
+    if (*(short *)(*(int *)(param_2 + 8) + 4) != 0x10) {
+      iVar1 = (*DAT_800cba38)(param_3, 0x5f, &local_9c, ...);   a query by TAG 0x5F
+      if ((iVar1 != 3) && (iVar1 != 4))  return DAT_800cba7c;   0xFFFFFFFE, -2, "abandon this row"
+      if (local_9c == 0)                 return DAT_800cbd70;   0xFFFFFFFF, -1
+      iVar1 = (*DAT_800cba38)(local_8c, 0xb2, &local_10, ...);  a query by TAG 0xB2
+
+**Traced rather than inferred**, because the function is long and another `-1` further down would
+look identical from outside — and twice the same day a reading taken from a listing was wrong in
+exactly that way. One complete invocation, from the callback's first instruction until control is
+back at its caller:
+
+    the first invocation ran 580 instructions and answered FFFFFFFF (-1)
+        1: tag 0x005f -> wrote 00000000 at 801D608C
+
+**One lookup, tag `0x5F`, zero, and it returns without drawing.** It never reaches the `0xB2` query
+below it.
+
+A census of every tag lookup both screens make settles what `0x5F` is worth here:
+
+| screen | `0x4A` linkage | `0x4D` short event | `0x5F` |
+|---|---|---|---|
+| now-and-next banner | 2 asked, **1 non-zero** | 1 asked, **1 non-zero** | 1 asked, **0** |
+| ALL CHANNELS grid | 1 asked, **1 non-zero** | — | 6 asked, **0** |
+
+These are DVB descriptor tags, and `0x5F` — the private_data_specifier — answered **zero on seven
+attempts out of seven, across both screens**. Nothing in this box had ever had one.
+
+**And the reason is ours.** DVB scopes a private_data_specifier to the descriptors that follow it in
+the same loop, and this port's BAT already carried one ahead of its `0xB1` line-up for exactly that
+reason. No loop carried one per SERVICE. The SDT's service descriptor loop held a `0x48` and nothing
+else, so a service object in the box had no specifier at all.
+
+**Transmitting one per service moves the callback two gates:**
+
+| | before | after |
+|---|---|---|
+| tag `0x5F` | 6 asked, 0 non-zero | 6 asked, **non-zero** |
+| tag `0xB2` | **never reached** | **6 asked**, resolves to a pointer |
+| the callback | 580 instructions, answered **-1** | **1284** instructions, answered **0** |
+
+The screen is still `42DBD889`. So this is not the end — but it is the first change all session that
+moves the machine rather than describing it, and the callback is now past the gate it was stuck on
+and into the one below.
+
+**It diverges from the oracle, deliberately and provably by one descriptor.** The oracle's `__siSDT`
+emits no specifier, and the oracle's ALL CHANNELS grid is empty too — which is the shape the
+project's own rule warns about: *where both are wrong in the same way they agree*. So the oracle's
+SDT vector is kept and `TestTheSDTDivergesByExactlyTheSpecifier` splices the six bytes into it,
+widens both length fields and recomputes the CRC, and requires the result to be byte-for-byte what
+this port transmits. Anything else that ever drifts from the oracle fails that test.

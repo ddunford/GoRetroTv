@@ -50,7 +50,11 @@ func TestOracleSectionVectors(t *testing.T) {
 		crc  bool
 	}{
 		{"NIT", nit, "40b0320020c10000f00d400b536b79204469676974616cf01800200020f012430b01177800028281002750024103006401b953f16a", true},
-		{"SDT", sdt, "42b0220020c100000020ff0064fd8011480f010542536b794207536b79204f6e656121a203", true},
+		// THE SDT IS THIS PORT'S, NOT THE ORACLE'S, AND THE DIFFERENCE IS DELIBERATE. It carries a
+		// 5f 04 00 00 00 02 private_data_specifier at the head of each service's descriptor loop,
+		// which the oracle's builder does not emit. TestTheSDTDivergesByExactlyTheSpecifier below
+		// proves that is the ONLY difference, so the oracle keeps its value as an instrument.
+		{"SDT", sdt, "42b0280020c100000020ff0064fd80175f0400000002480f010542536b794207536b79204f6e6542e5c7f4", true},
 		{"TDT", tdt, "707005c67e120000", false},
 		{"TOT", tot, "73701ac67e120000f00f580d474252020000c67e12000000005b445d38", true},
 	} {
@@ -415,5 +419,67 @@ func TestBATRefusesATransportWithNoServiceToLink(t *testing.T) {
 	}
 	if _, err := BAT(0x1000, 0, "Sky", nil); err == nil {
 		t.Error("built a BAT announcing no transport at all")
+	}
+}
+
+// THE SDT DIVERGES FROM THE ORACLE BY EXACTLY ONE DESCRIPTOR, AND THIS PROVES IT IS ONLY THAT.
+//
+// The oracle is a measuring instrument, not a sibling implementation, and the one move that
+// destroys its value is editing it to agree with this port. The opposite move -- letting this port
+// drift from it silently -- costs the same thing, so a deliberate divergence has to be stated and
+// bounded rather than merely allowed.
+//
+// WHY THE DIVERGENCE EXISTS. Every service this port announces now carries a
+// private_data_specifier (0x5F, value 2) at the head of its descriptor loop. The oracle's __siSDT
+// emits none, and its ALL CHANNELS grid is empty too -- which is precisely the shape the project's
+// own rule warns about: "where both are wrong in the same way they agree".
+//
+// It was found by measurement, not by reading a standard. The grid's row callback at 0x800CB7B8
+// asks its object for descriptor tag 0x5F, and a census of every tag lookup both screens make had
+// 0x4A and 0x4D answering non-zero while 0x5F answered ZERO on seven attempts out of seven. With
+// the specifier transmitted, the same callback gets 1 back, goes on to the 0xB2 lookup it had never
+// reached, and runs 1284 instructions instead of 580.
+//
+// WHAT THIS TEST GUARANTEES. Take the oracle's own SDT bytes, splice the six-byte specifier in at
+// the head of the service's descriptor loop, widen both length fields by six and recompute the CRC
+// -- and the result must be byte-for-byte what this port transmits. If anything else about the SDT
+// ever drifts from the oracle, this fails.
+func TestTheSDTDivergesByExactlyTheSpecifier(t *testing.T) {
+	t.Parallel()
+	const oracleSDT = "42b0220020c100000020ff0064fd8011480f010542536b794207536b79204f6e656121a203"
+	want, err := hex.DecodeString(oracleSDT)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The oracle's layout: 11 bytes of section header, then the service's 3-byte header (id and
+	// flags) and its 2-byte descriptors_loop_length. The descriptors begin at 16.
+	const (
+		sectionLengthAt = 1
+		loopLengthAt    = 14
+		descriptorsAt   = 16
+	)
+	specifier := []byte{0x5f, 4, 0x00, 0x00, 0x00, skyPrivateDataSpecifier}
+
+	spliced := make([]byte, 0, len(want)+len(specifier))
+	spliced = append(spliced, want[:descriptorsAt]...)
+	spliced = append(spliced, specifier...)
+	spliced = append(spliced, want[descriptorsAt:len(want)-4]...) // the oracle's CRC is recomputed
+	widen := func(at int) {
+		v := int(spliced[at]&0x0f)<<8 | int(spliced[at+1])
+		v += len(specifier)
+		spliced[at] = spliced[at]&0xf0 | byte(v>>8) // #nosec G115 -- masked to four bits
+		spliced[at+1] = byte(v)                     // #nosec G115 -- low byte
+	}
+	widen(sectionLengthAt)
+	widen(loopLengthAt)
+	spliced = withCRC(spliced)
+
+	got, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, spliced) {
+		t.Fatalf("this port's SDT is not the oracle's plus the specifier and nothing else:\n"+
+			"  ours    = %x\n  expected = %x", got, spliced)
 	}
 }

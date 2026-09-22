@@ -140,10 +140,23 @@ func SDT(transportID, networkID uint16, version byte, services []Service) ([]byt
 		if err != nil {
 			return nil, fmt.Errorf("broadcast: service %d name: %w", svc.ID, err)
 		}
-		if len(provider) > 255 || len(name) > 255 || len(provider)+len(name)+3 > 255 {
+		if len(provider) > 255 || len(name) > 255 || len(provider)+len(name)+9 > 255 {
 			return nil, fmt.Errorf("broadcast: service %d descriptor too long", svc.ID)
 		}
-		desc := make([]byte, 0, 5+len(provider)+len(name))
+		// THE PRIVATE DATA SPECIFIER GOES FIRST, AND IT IS WHY THE GUIDE'S LIST SCREENS ARE EMPTY.
+		//
+		// DVB scopes a private_data_specifier to the descriptors that FOLLOW it in the same loop,
+		// and the BAT already carries one ahead of its 0xB1 line-up for exactly that reason. What
+		// no loop carried until now is one per SERVICE -- so a service object in the box had no
+		// specifier at all.
+		//
+		// Measured, not reasoned: the ALL CHANNELS grid's row callback (0x800CB7B8) asks its
+		// object for descriptor tag 0x5F, gets ZERO, and returns -1 without drawing, once per
+		// channel. A census of every tag lookup both screens make found 0x4A and 0x4D answering
+		// non-zero and 0x5F answering ZERO on seven attempts out of seven, across both screens.
+		// Nothing in this box has ever had one.
+		desc := make([]byte, 0, 11+len(provider)+len(name))
+		desc = append(desc, 0x5f, 4, 0x00, 0x00, 0x00, skyPrivateDataSpecifier)
 		desc = append(desc, 0x48, byte(3+len(provider)+len(name)), serviceType(svc), byte(len(provider))) // #nosec G115 -- both lengths checked above
 		desc = append(desc, provider...)
 		desc = append(desc, byte(len(name))) // #nosec G115 -- name length checked above
@@ -268,6 +281,11 @@ func linkageDescriptor(tr Transport) ([]byte, error) {
 // DVB's assigned range, which is why it is here and not in a public table.
 const linkageGuideSchedule = 0x91
 
+// skyPrivateDataSpecifier is the namespace Sky's private descriptors live in. DVB scopes a
+// private_data_specifier to the descriptors that follow it in the same loop, and with any other
+// value the guest walks straight past them.
+const skyPrivateDataSpecifier = 2
+
 // lineupGate is the halfword the guest tests before it will read a single
 // entry. Anything else and it re-reads those two bytes and returns, decoding
 // nothing at all and reporting nothing -- a descriptor the box accepts and
@@ -289,7 +307,7 @@ func lineupDescriptors(lineup []LineupEntry) ([]byte, error) {
 	// The specifier goes FIRST and once: DVB scopes it to the descriptors that
 	// follow it in the same loop, so a 0xB1 ahead of its own namespace is one
 	// the guest walks past without looking.
-	out := []byte{0x5f, 4, 0x00, 0x00, 0x00, 0x02}
+	out := []byte{0x5f, 4, 0x00, 0x00, 0x00, skyPrivateDataSpecifier}
 	for start := 0; start < len(lineup); start += maxLineupEntries {
 		end := min(start+maxLineupEntries, len(lineup))
 		body := []byte{lineupGate >> 8, lineupGate & 0xff}

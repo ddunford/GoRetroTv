@@ -6616,20 +6616,17 @@ outside the range is discarded -- which is the whole of the earlier "nothing rea
 explained, and the letter dispatch confirmed from the data structure rather than from an
 instruction count.
 
-#### THE BOX WEDGES AFTER A FEW MENU PRESSES -- and it is the smartcard module that moves
+#### THE BOX WEDGES AFTER A FEW MENU PRESSES -- a self-deadlock on the event pipe
 
-*~~The TV GUIDE menu will not move past entry 6.~~ **WITHDRAWN the same day it was written.** That
-reading was wrong, and the thing underneath it is worse and more useful. 2026-09-22.*
+*~~The TV GUIDE menu will not move past entry 6.~~ **WITHDRAWN the same day it was written**, and
+what is underneath it is worse and more useful. 2026-09-22.*
 
 The TV GUIDE tab lists ten entries -- ALL CHANNELS, ENTERTAINMENT, MOVIES, SPORTS,
 NEWS & DOCUMENTARIES, KIDS, MUSIC & RADIO, SPECIALIST, **A-Z LISTINGS**, PERSONAL PLANNER. The
 highlight moves a few entries down and then stops, and the first reading of that was "the menu
-refuses entries 7..10". **It is not a menu refusal at all.** Two things broke it:
-
-- **UP stops working too**, and so does `box office`, which leaves the menu entirely. Nothing moves
-  the screen.
-- **The stop point VARIES** -- five moves on one run, three on the next. A disabled entry 7 does not
-  move.
+refuses entries 7..10". **It is not a menu refusal at all.** Two things broke it: **UP stops working
+too**, and so does `box office`, which leaves the menu entirely; and **the stop point VARIES** --
+five moves on one run, three on the next. A disabled entry 7 does not move.
 
 At the wall `[0x801072B0]` -- Nucleus's `TCD_Execute_Task`, the single cheapest health check on the
 whole system -- reads **zero**, and so does `[0x801072D8]`. Every task is blocked and the guest is
@@ -6640,8 +6637,9 @@ while unresponsive.
 
 This section first reported that reading as the answer. **It is not, and a control taken before any
 key is pressed is what shows it**: a box sitting between events has every task blocked too. Each of
-the forty-two tasks waits on its own private event group named `EVENT00`, or on the command queue
-its subsystem is fed through, and that is simply what idle looks like on this firmware:
+the forty-two tasks -- not the eight this file used to list, because the old census only asked about
+names it already knew -- waits on its own private event group named `EVENT00`, or on the command
+queue its subsystem is fed through, and that is simply what idle looks like on this firmware:
 
     TASK6   QUEU BlitReq     the blitter, waiting for something to draw
     TASK7   QUEU dmxmsgQ     the demux message queue
@@ -6656,31 +6654,124 @@ its subsystem is fed through, and that is simply what idle looks like on this fi
     EMM     QUEU EMM         entitlement management messages
     SMNTask EVNT SMNEvts     as the smartcard section above records
 
-Twenty-two further tasks sit on an `EVENT00` of their own. **So the question is not "why is
-everything blocked" but "which task is blocked on something DIFFERENT from when the handset
-worked", and the answer is three of forty-two.**
+**So the question is not "why is everything blocked" but "which task is blocked on something
+DIFFERENT from when the handset worked", and the answer is three of forty-two.**
 
-##### THE THREE THAT MOVE
+##### THE THREE THAT MOVE, AND THE ONE THAT STOPS RUNNING
 
-    SMTTask   status=7 EVNT SMTEvts  ->  status=5, nothing names it
-    SMHKTask  status=7 EVNT SHKEvts  ->  status=5, nothing names it
-    EVTTask   status=6 SEMA EVTTick  ->  status=5 SEMA EVQS0002 + PIPE EVQP0002
+    SMTTask   status=7 EVNT SMTEvts  ->  status=5 PIPE EVQP0002
+    SMHKTask  status=7 EVNT SHKEvts  ->  status=5 PIPE EVQP0002
+    EVTTask   status=6 SEMA EVTTick  ->  status=5 PIPE EVQP0002
 
 *(A fourth line, `TASK15 status=0 -> status=7`, is the sample instant rather than the wedge: TASK15
 held the CPU when the control was taken. The instrument labels it, because a reader would not.)*
 
-**Two of the three are the smartcard module** -- `SMTTask` is its transmit task and `SMHKTask` the
-housekeeping task whose periodic `0x18` heartbeat this file already documents as having "no retry
-counter and nothing that will ever stop it". Both leave their event groups for a state in which **no
-kernel object names them at all**, which is not what a semaphore or event-group wait looks like.
+**All three end up queued on the SAME PIPE -- `EVQP0002`, at guest `0x8011B834`.** Two are the
+smartcard module: `SMTTask` its transmit task and `SMHKTask` the housekeeping task whose periodic
+`0x18` heartbeat this file documents as having "no retry counter and nothing that will ever stop
+it". The third is `EVTTask`, the event task.
 
-**The third is the event task itself.** `EVTTask` leaves `SEMA EVTTick` -- its tick -- for the event
-queue pair `EVQS0002`/`EVQP0002`. A handset press has to become an event before any screen sees it,
-and the task that delivers events is the one that has moved.
+Naming all three took a fix to the instrument rather than another run. Only the first waiter is
+reachable directly from an object; the rest hang off it on the list node. Stopping at the head
+reported `EVTTask` as "status 5, nothing names it" -- **a task waiting on something unknown, rather
+than the third member of a pile-up on one pipe.** The two readings suggest entirely different next
+steps, and only one of them is true.
 
-**What this does NOT yet say** is which way the causation runs, and the temptation to assert it
-should be resisted: the smartcard module stalling and the event task stalling are both consistent
-with the other happening first. What it does say is where to look, and it is not the menu.
+**And `EVTTask` STOPS BEING SCHEDULED ENTIRELY.** Status is a state and a state can be one a task
+passes through constantly; the task's own run counter says whether it is passing through at all.
+Over the same two-million-instruction window, sampled either side:
+
+    working, idle:   EVTTask +89   SMNTask +23   SMTTask +4   TASK2 +2   TASK24 +3   TASK15 +1
+    at the wall:                   SMNTask +6                 TASK2 +2   TASK24 +2   FETask +1
+
+**The hardware underneath is still going, so it is not an input that died.** Over the same two
+windows: the board timer is accessed **176 times on both sides**, identical; the interrupt
+controller 214 against 188; the CPU enters its exception vector 116 times against 102. The CSI link
+the handset arrives on still carries traffic -- 54 reads and 15 data writes while working, 18 and 6
+at the wall -- and **nothing is left queued on it**, so the key bytes were delivered and consumed.
+The press reaches the guest. What fails is downstream.
+
+##### THE PIPE IS FULL AND NOBODY IS LOOKING AT IT
+
+Read out of the box itself, the same two windows side by side:
+
+    EVQP0002 while working:  empty, 0 tasks suspended on it,  read 8011B780 write 8011B780
+    EVQP0002 at the wall:    FULL -- not one of its 160 bytes free, holding 20 messages,
+                             3 tasks suspended on it,         read 8011B7A0 write 8011B7A0
+
+    EVQP0002 while working:  53 distinct PCs touched it
+    EVQP0002 at the wall:    NOTHING touched it
+
+**Fifty-three pieces of code read and write that pipe while the handset works. At the wall, across
+two million instructions, not one instruction touches it at all** -- while three tasks sit queued on
+it and every byte of it is spoken for. It is not contended, it is ABANDONED.
+
+##### THE PIPE DRIVER, READ OUT OF THE IMAGE
+
+*The 53 PCs, disassembled with `tools/disasm.sh`. They are three clusters, not one.*
+
+    0x800CEBA0   the SEND half      adds one to the message count at 0x800CED50, and every store
+                                    to the free-byte field SUBTRACTS
+    0x800CED68   the RECEIVE half   takes one off the count at 0x800CEEDE, and every store to the
+                                    free-byte field ADDS
+    0x80034734   the application's consumer, which calls the receive wrapper and switches on the
+                 status it returns
+
+Both halves are reached through checking wrappers: `0x800CF1A4` tail-calls the send worker and
+`0x800CF218` the receive worker, each through a word in its own literal pool. The wrappers validate
+the caller's pointer against the four-character `"PIPE"` id held at `0x800CF294` -- **the same magic
+the object census finds by scanning DRAM, arrived at from the other direction**, which is as good a
+check on the census as this port is going to get.
+
+The whole control block falls out of those two routines:
+
+| offset | | how it is known |
+|---|---|---|
+| `+0x0C` | the `"PIPE"` id | compared at `0x800CF1BC` against `0x800CF294` |
+| `+0x18` | first byte: 0 = variable-size messages | branched on at `0x800CF1D0` |
+| `+0x1C` | buffer length, 160 | equals the free count when the pipe is empty |
+| `+0x20` | messages held | send `+1` at `0x800CED50`, receive `-1` at `0x800CEEDE` |
+| `+0x24` | the message size | the caller's length is checked against it at `0x800CF1E4` |
+| `+0x28` | bytes free | send subtracts, receive adds |
+| `+0x2C` / `+0x30` | buffer start and end | the wrap target and the bound in both halves |
+| `+0x34` | read pointer | written only by receive, at `0x800CEED4` |
+| `+0x38` | write pointer | written only by send, at `0x800CED46` |
+| `+0x3C` | tasks suspended | send adds one at `0x800CEC0C` when there is no room |
+| `+0x44` | the suspension list | send passes its address at `0x800CEC32` |
+
+**The pipe is EMBEDDED in a composite object**, and that explains the addresses that looked odd: the
+semaphore `EVQS0002` is at `0x8011B80C`, the pipe control block at `0x8011B834` -- `+0x28` inside
+it -- and the pipe's 160-byte buffer runs `0x8011B76C..0x8011B80C`, ending exactly where the
+composite begins. The consumer at `0x80034734` takes the composite and passes `composite+0x28`.
+
+##### ONE PRODUCER, ONE CONSUMER, AND THE CONSUMER IS BLOCKED SENDING
+
+Naming the code was not enough, because code does not deadlock -- tasks do. Reading
+`TCD_Execute_Task` at each access names the task behind every one:
+
+    EVQP0002 while working:  EVTTask SENDING to it,       16 accesses
+                             SMTTask RECEIVING from it,   15 accesses
+                             (7 and 17 more in the wrappers and the application's own code)
+    EVQP0002 at the wall:    NOTHING touched it
+
+**`EVTTask` is the only task that ever sends to this pipe and `SMTTask` is the only task that ever
+receives from it.** And at the wall `SMTTask` -- the sole consumer -- is itself suspended on the
+SEND side of the same pipe, with `EVTTask` and `SMHKTask` piled up behind it.
+
+So the wedge is a **self-deadlock**, and the whole of it is measured. The only task that can drain
+`EVQP0002` blocks trying to add to it; once that happens nothing can ever take a message out, the
+producer and the heartbeat queue up behind, and no key press can become an event again. That is the
+whole symptom, from the menu that would not move to `box office` that would not redraw.
+
+**Counting control-block reads against writes does NOT separate sending from receiving**, and the
+first attribution here did exactly that: both halves read most of the block and write a few words of
+it, so a task that only ever receives still reads as "writing". Splitting by which half of the
+driver the program counter is in is what separated them.
+
+**WHAT IS STILL OPEN is why the pipe fills.** Twenty four-byte messages fit in it, and while the
+handset works it sits empty -- so something changes the rate rather than the mechanism. The
+measurement that decides it is cheap: if the pipe fills on a box that is never touched at all, the
+keys are incidental and the cause is upstream of them.
 
 ##### THE TASK STATUS NUMBERS, MEASURED OFF THIS BOX
 
@@ -6701,7 +6792,7 @@ Every suspended status has exactly one object type against it, which is what mak
 rather than impressions -- and status 5 only got there after the chain walk above, because two of
 its three tasks were queued behind another and read as blocked on nothing.
 
-##### HOW THE OBJECTS GET NAMED, AND THE ARTEFACT THAT HAD TO BE RULED OUT
+##### HOW THE OBJECTS GET NAMED, AND THE ARTEFACTS THAT HAD TO BE RULED OUT
 
 Every Nucleus control block opens the same way -- a twelve-byte list node, a four-character type
 magic, an eight-byte name -- which is why `TASK` at `+0x0C` finds a task. The same shape finds the
@@ -6710,44 +6801,65 @@ semaphores, event groups, queues, pipes and HISRs, and reading their names is ho
 objects: 138 `SEMA`, 42 `TASK`, 31 `EVNT`, 13 `HISR`, 11 `QUEU`, 5 `PIPE`** -- and two residual
 false positives, which are left visible rather than tuned away.
 
-Three things had to be got right, and each was got wrong first:
+Five things had to be got right, and every one was got wrong first. **They are kept because each
+wrong version was perfectly readable**, which is the failure mode that matters here.
 
 - **Scanning for pointers TO a task finds its stale stack, not its suspension.** The first version
-  looked for words equal to a task's control block and reported `TASK0` queued on six semaphores at
-  once, all through one address inside a stack. A task that has obtained and released semaphores for
-  millions of instructions leaves the pointers lying in its frames. **The linkage has to close on
-  both sides**: the object must point at the block, and the block must name both the object and the
-  task. Walking from the object is what does that.
+  reported `TASK0` queued on six semaphores at once, all through one address inside a stack. A task
+  that has obtained and released semaphores for millions of instructions leaves the pointers lying
+  in its frames. **The linkage has to close on both sides**: the object must point at the block, and
+  the block must name both the object and the task.
 - **A four-letter magic and a printable name is what ORDINARY ENGLISH looks like.** Allowing digits
-  gave eight hundred types like `1032` and `0870`; allowing letters alone still gave `AVAILABLE` and
+  gave eight hundred types like `1032` and `0870`; letters alone still gave `AVAILABLE` and
   `BACKGROUND`. What separates a control block from a message is **the created-list node in front of
   it** -- two DRAM pointers, which no string has.
 - **The name field carries stale bytes past its terminator.** `TASK0`'s reads
   `54 41 53 4b 30 00 30 00`: "TASK0", a NUL, then a leftover `0`. A reader that insists on a clean
   tail drops exactly the task the smartcard finding is about.
+- **Two addresses that coincide are not a pointer.** This file previously said the pipe block
+  "carries pointers to its sibling objects where the textbook layout carries a buffer bound", on the
+  evidence that `+0x30` holds `0x8011B80C` and the census names that the semaphore `EVQS0002`. Both
+  halves true, conclusion wrong: `+0x30` is the buffer's end, and the buffer runs up to the
+  composite that encloses the pipe. **Adjacency is the commonest way for a memory dump to look like
+  a design.**
+- **A dump must be trimmed to its block.** Reading `0x40` words past a control block under `0x50`
+  bytes long printed twenty lines of the enclosing structure's fields as though they were the
+  pipe's -- orderly, plausible, and not the subject.
+
+**And one withdrawal about sizes.** This file briefly said the `32` at `+0x24` was unidentified and
+the messages were 8 bytes. Both size-looking fields are real and mean different things: `+0x24` is
+the message size the API validates against -- and this pipe is VARIABLE-SIZE, its flag byte zero, so
+that is a **maximum** rather than a stride -- while `+0x20` is how many messages are in it. The
+messages actually sent are four bytes stored in eight, so twenty fill the buffer exactly, and the
+`32` is the largest that would have been allowed. **The self-check that refused to name the layout
+refused for the wrong reason** -- it tested the read pointer for a multiple of `+0x24`, which only
+holds for a fixed-size pipe -- but a check that refuses on a false premise still beats a reader that
+names a field it has not earned. What settled the layout was the disassembly, not a better guess.
 
 **There are forty-two tasks on the created list**, not the eight this file previously listed -- the
 earlier census only asked about names it already knew, so the other thirty-four were invisible
 rather than absent. Forty-two is also the count the Sky menu gates trigger on, which is consistent
 rather than coincidental.
 
-**This supersedes the menu explanation and probably others.** It is `gort-slq`, recorded as "a key
-press is intermittently absorbed", and that description understates it: the box does not drop a
-press, it stops running anything. Any measurement taken after several menu presses is suspect until
-this is understood, and "the screen would not open" is now a symptom to check against this rather
-than a finding about the screen. Entries 7..10 remain unreachable, A-Z LISTINGS among them, so
-whether that screen draws what was linked is still unmeasured.
+##### WHAT THIS SUPERSEDES
+
+It is `gort-slq`, recorded as "a key press is intermittently absorbed", and that description
+understates it: the box does not drop a press, it stops running anything. **Any measurement taken
+after several menu presses is suspect until this is fixed**, and "the screen would not open" is now
+a symptom to check against this rather than a finding about the screen. Entries 7..10 remain
+unreachable, A-Z LISTINGS among them, so whether that screen draws what was linked is unmeasured.
 
 **The number keys do not work here either.** Pressing `0x09` left the highlight on entry 1.
 `lessons.md` records that only four handset codes were ever proved against a screen and the digits
 are not among them, so `0x09` meaning "9" is an assumption this menu does not support.
 
 The reproduction is `internal/multiplex/firmwaretests/wedge_firmware_test.go`. It takes the control,
-walks the box to the wall in about twenty seconds, and prints the diff. **It reports rather than
-fails**, because a test that fails on a tracked defect reds the suite until the defect is fixed;
-what it asserts is its own route, its own presses, and that the census can still find `Periph`,
-`SMNEvts` and `CSIHISR` -- the three objects this file names with addresses, so a census that cannot
-find them is not reading the machine and its silence about everything else would mean nothing.
+walks the box to the wall in about twenty seconds, and prints the diff, the pipe and the tasks
+behind every access. **It reports rather than fails**, because a test that fails on a tracked defect
+reds the suite until the defect is fixed; what it asserts is its own route, its own presses, and
+that the census can still find `Periph`, `SMNEvts` and `CSIHISR` -- the three objects this file
+names with addresses, so a census that cannot find them is not reading the machine.
+
 
 #### NOTHING READS THE ARRAY — on any screen this port can reach
 

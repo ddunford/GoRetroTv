@@ -6616,10 +6616,10 @@ outside the range is discarded -- which is the whole of the earlier "nothing rea
 explained, and the letter dispatch confirmed from the data structure rather than from an
 instruction count.
 
-#### THE BOX WEDGES AFTER A FEW MENU PRESSES -- every task blocked
+#### THE BOX WEDGES AFTER A FEW MENU PRESSES -- and it is the smartcard module that moves
 
 *~~The TV GUIDE menu will not move past entry 6.~~ **WITHDRAWN the same day it was written.** That
-reading was wrong, and the thing underneath it is worse and more useful.*
+reading was wrong, and the thing underneath it is worse and more useful. 2026-09-22.*
 
 The TV GUIDE tab lists ten entries -- ALL CHANNELS, ENTERTAINMENT, MOVIES, SPORTS,
 NEWS & DOCUMENTARIES, KIDS, MUSIC & RADIO, SPECIALIST, **A-Z LISTINGS**, PERSONAL PLANNER. The
@@ -6631,38 +6631,107 @@ refuses entries 7..10". **It is not a menu refusal at all.** Two things broke it
 - **The stop point VARIES** -- five moves on one run, three on the next. A disabled entry 7 does not
   move.
 
-**The RTOS says what it actually is.** At the wall, `[0x801072B0]` -- Nucleus's `TCD_Execute_Task`,
-which this file calls the single cheapest health check on the whole system -- reads **zero**, and so
-does `[0x801072D8]`. Every task is blocked and the guest is in the idle loop at `0x800D35DC`. It is
-not halted: it retired two million further instructions while unresponsive. **It is WEDGED.**
+At the wall `[0x801072B0]` -- Nucleus's `TCD_Execute_Task`, the single cheapest health check on the
+whole system -- reads **zero**, and so does `[0x801072D8]`. Every task is blocked and the guest is
+in the idle loop at `0x800D35DC`. It is not halted: it retired two million further instructions
+while unresponsive.
 
-The task census at the wall:
+##### "EVERY TASK IS BLOCKED" IS NOT A FINDING, AND THE CONTROL SAYS SO
 
-    TASK0      status=7  runs=1883    EVENT WAIT
-    TASK1      status=7  runs=75      EVENT WAIT
-    SMNTask    status=7  runs=10430   EVENT WAIT
-    SMHKTask   status=5  runs=5
-    SMTTask    status=5  runs=2189
-    EVTTask    status=5  runs=49124
-    FETask     status=6  runs=11978
-    SCTask     status=6  runs=1
+This section first reported that reading as the answer. **It is not, and a control taken before any
+key is pressed is what shows it**: a box sitting between events has every task blocked too. Each of
+the forty-two tasks waits on its own private event group named `EVENT00`, or on the command queue
+its subsystem is fed through, and that is simply what idle looks like on this firmware:
 
-Only status 7 is established by this file as an event wait; 5 and 6 are printed as raw numbers
-rather than named, because naming them would put a guess where a reader would take a reading.
+    TASK6   QUEU BlitReq     the blitter, waiting for something to draw
+    TASK7   QUEU dmxmsgQ     the demux message queue
+    TASK8   SEMA dmxExISR    the demux's extension ISR
+    TASK9   SEMA dmxExPES    the demux's PES path
+    TASK13  QUEU NDSCASec    NDS conditional access
+    TASK18  QUEU ttxtmxq     teletext
+    TASK19  QUEU subtmxq     subtitles
+    FETask  SEMA FeCmd       the front end, waiting for a command
+    SCTask  SEMA SCSV0       the smartcard service
+    ECM     QUEU ECM         entitlement control messages
+    EMM     QUEU EMM         entitlement management messages
+    SMNTask EVNT SMNEvts     as the smartcard section above records
 
-**This supersedes the menu explanation and probably others.** It is `gort-slq` -- recorded as "a key
-press is intermittently absorbed" -- and that description understates it: the box does not drop a
+Twenty-two further tasks sit on an `EVENT00` of their own. **So the question is not "why is
+everything blocked" but "which task is blocked on something DIFFERENT from when the handset
+worked", and the answer is three of forty-two.**
+
+##### THE THREE THAT MOVE
+
+    SMTTask   status=7 EVNT SMTEvts  ->  status=5, nothing names it
+    SMHKTask  status=7 EVNT SHKEvts  ->  status=5, nothing names it
+    EVTTask   status=6 SEMA EVTTick  ->  status=5 SEMA EVQS0002 + PIPE EVQP0002
+
+*(A fourth line, `TASK15 status=0 -> status=7`, is the sample instant rather than the wedge: TASK15
+held the CPU when the control was taken. The instrument labels it, because a reader would not.)*
+
+**Two of the three are the smartcard module** -- `SMTTask` is its transmit task and `SMHKTask` the
+housekeeping task whose periodic `0x18` heartbeat this file already documents as having "no retry
+counter and nothing that will ever stop it". Both leave their event groups for a state in which **no
+kernel object names them at all**, which is not what a semaphore or event-group wait looks like.
+
+**The third is the event task itself.** `EVTTask` leaves `SEMA EVTTick` -- its tick -- for the event
+queue pair `EVQS0002`/`EVQP0002`. A handset press has to become an event before any screen sees it,
+and the task that delivers events is the one that has moved.
+
+Only status 7 is established here as an event wait. 5 and 6 are printed raw rather than named,
+because naming them would put a guess where a reader would take a reading.
+
+**What this does NOT yet say** is which way the causation runs, and the temptation to assert it
+should be resisted: the smartcard module stalling and the event task stalling are both consistent
+with the other happening first. What it does say is where to look, and it is not the menu.
+
+##### HOW THE OBJECTS GET NAMED, AND THE ARTEFACT THAT HAD TO BE RULED OUT
+
+Every Nucleus control block opens the same way -- a twelve-byte list node, a four-character type
+magic, an eight-byte name -- which is why `TASK` at `+0x0C` finds a task. The same shape finds the
+semaphores, event groups, queues, pipes and HISRs, and reading their names is how "blocked" becomes
+"blocked on `FeCmd`". The census the port now carries (`internal/board/nucleus.go`) finds **242
+objects: 138 `SEMA`, 42 `TASK`, 31 `EVNT`, 13 `HISR`, 11 `QUEU`, 5 `PIPE`** -- and two residual
+false positives, which are left visible rather than tuned away.
+
+Three things had to be got right, and each was got wrong first:
+
+- **Scanning for pointers TO a task finds its stale stack, not its suspension.** The first version
+  looked for words equal to a task's control block and reported `TASK0` queued on six semaphores at
+  once, all through one address inside a stack. A task that has obtained and released semaphores for
+  millions of instructions leaves the pointers lying in its frames. **The linkage has to close on
+  both sides**: the object must point at the block, and the block must name both the object and the
+  task. Walking from the object is what does that.
+- **A four-letter magic and a printable name is what ORDINARY ENGLISH looks like.** Allowing digits
+  gave eight hundred types like `1032` and `0870`; allowing letters alone still gave `AVAILABLE` and
+  `BACKGROUND`. What separates a control block from a message is **the created-list node in front of
+  it** -- two DRAM pointers, which no string has.
+- **The name field carries stale bytes past its terminator.** `TASK0`'s reads
+  `54 41 53 4b 30 00 30 00`: "TASK0", a NUL, then a leftover `0`. A reader that insists on a clean
+  tail drops exactly the task the smartcard finding is about.
+
+**There are forty-two tasks on the created list**, not the eight this file previously listed -- the
+earlier census only asked about names it already knew, so the other thirty-four were invisible
+rather than absent. Forty-two is also the count the Sky menu gates trigger on, which is consistent
+rather than coincidental.
+
+**This supersedes the menu explanation and probably others.** It is `gort-slq`, recorded as "a key
+press is intermittently absorbed", and that description understates it: the box does not drop a
 press, it stops running anything. Any measurement taken after several menu presses is suspect until
 this is understood, and "the screen would not open" is now a symptom to check against this rather
-than a finding about the screen.
-
-So entries 7..10 are unreachable, A-Z LISTINGS among them, and the screen cannot be opened to see
-whether it draws what was linked. The same shape as the ALL CHANNELS grid: the screen exists, the
-box declines to enter it.
+than a finding about the screen. Entries 7..10 remain unreachable, A-Z LISTINGS among them, so
+whether that screen draws what was linked is still unmeasured.
 
 **The number keys do not work here either.** Pressing `0x09` left the highlight on entry 1.
 `lessons.md` records that only four handset codes were ever proved against a screen and the digits
 are not among them, so `0x09` meaning "9" is an assumption this menu does not support.
+
+The reproduction is `internal/multiplex/firmwaretests/wedge_firmware_test.go`. It takes the control,
+walks the box to the wall in about twenty seconds, and prints the diff. **It reports rather than
+fails**, because a test that fails on a tracked defect reds the suite until the defect is fixed;
+what it asserts is its own route, its own presses, and that the census can still find `Periph`,
+`SMNEvts` and `CSIHISR` -- the three objects this file names with addresses, so a census that cannot
+find them is not reading the machine and its silence about everything else would mean nothing.
 
 #### NOTHING READS THE ARRAY — on any screen this port can reach
 

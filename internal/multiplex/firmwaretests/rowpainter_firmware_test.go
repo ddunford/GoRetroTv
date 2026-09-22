@@ -246,3 +246,315 @@ func paintersFor(t *testing.T, wantGrid bool) map[painterSite]int {
 	}
 	return sites
 }
+
+// DOES ANYTHING READ THE LIST THE ROW BODY BUILDS?
+//
+// The grid's MIPS row loop is the database side: it runs six times with the transport ready, writes
+// 737 more words than the one-iteration control, and never enters the drawing module at 0x8009xxxx
+// once. So it assembles something and the interpreted o-code screen is supposed to draw from it.
+//
+// That makes one question decisive, and it is a question no amount of disassembly answers because
+// the consumer is o-code rather than MIPS:
+//
+//	are the words the row body writes ever READ again while the same screen draws?
+//
+// A consumer names itself -- the instructions that read those addresses after the loop finishes are
+// whatever picks the list up, and in an interpreter they will be the interpreter's own fetch and
+// load sites, which is itself the answer: the o-code ran and looked. **Nothing reading them at all
+// is the stronger result**, because then the list is built for a reader that never comes, and the
+// fault is in whatever should have told the screen there was something to draw.
+//
+// IT SEPARATES THE TWO PHASES BY THE LOOP ITSELF rather than by an instruction count: writes are
+// collected only while the loop is running, and reads are counted only after it has finished, so a
+// word the body writes and immediately re-reads inside its own iteration cannot be mistaken for a
+// consumer.
+//
+// IT ASSERTS ITS OWN SUBJECT: the loop must run its six iterations (or the transport gate is shut
+// and this measures the old behaviour), and the body must write something (or there is no list and
+// the zero below is trivially true).
+//
+// IT ONLY READS.
+func TestWhetherAnythingReadsTheListTheRowBodyBuilds(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		wantKind    = 14
+		readyFrom   = 6
+		loopHead    = 0x800A4B60
+		bodyStart   = 0x800A4BBE
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	if kind := box.RAM.Read(off, bus.Word); kind != wantKind {
+		t.Fatalf("harness: %08X holds kind %d, not %d -- the transport object has moved",
+			uint32(transportAt), kind, wantKind)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+	t.Logf("the transport is ready at state %d", state())
+
+	var (
+		watching   bool
+		inLoop     bool
+		finished   bool
+		iterations int
+		built      = map[uint32]bool{}
+		readers    = map[painterSite]int{}
+		readWords  int
+	)
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !watching {
+			return
+		}
+		if a.Fetch {
+			switch a.Virtual &^ 1 {
+			case bodyStart:
+				inLoop = true
+			case loopHead:
+				iterations++
+				// The loop head is reached once per iteration plus once to decide to stop; the
+				// body having run at least once and the head coming round again after the last
+				// body is where the list is complete.
+				if inLoop && iterations > 6 {
+					inLoop, finished = false, true
+				}
+			}
+			return
+		}
+		at := a.Virtual & 0x1fffffff
+		if a.Write {
+			if inLoop {
+				built[at] = true
+			}
+			return
+		}
+		if finished && built[at] {
+			readWords++
+			st := box.Machine.Core.State()
+			readers[painterSite{pc: st.PC &^ 1, ra: st.GPR[31] &^ 1}]++
+		}
+	}}
+
+	press := func(raw uint8, name string, budget int) uint32 {
+		t.Helper()
+		if raw == keySelect {
+			watching, inLoop, finished, iterations = true, false, false, 0
+			built, readers, readWords = map[uint32]bool{}, map[painterSite]int{}, 0
+		}
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, settled := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				settled = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		watching = false
+		t.Logf("%-32s drew %08X", name, settled)
+		return settled
+	}
+
+	grid := openAllChannels(t, press, ".artifacts/list-consumer.png", false)
+	if err := dumpScreen(t, box, "list-consumer.png"); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("the grid drew %08X, transport state %d", grid, state())
+
+	if iterations < 7 {
+		t.Fatalf("harness: the row loop head was reached %d times, so it did not run its six "+
+			"iterations and this measured the old one-iteration behaviour", iterations)
+	}
+	if len(built) == 0 {
+		t.Fatal("harness: the row body wrote nothing at all, so there is no list and the count " +
+			"below is trivially zero")
+	}
+	t.Logf("the six iterations wrote %d distinct words; after the loop finished they were read "+
+		"%d times from %d (instruction, caller) pairs", len(built), readWords, len(readers))
+
+	if readWords == 0 {
+		t.Logf("VERDICT: NOTHING READS IT. The row body writes %d words and not one of them is "+
+			"read again while the screen draws. The list is built for a reader that never comes, "+
+			"so the fault is in whatever should tell the screen there is something to draw -- not "+
+			"in the data, which is now complete, and not in the drawing, which never hears about "+
+			"it.", len(built))
+		return
+	}
+	type reader struct {
+		at painterSite
+		n  int
+	}
+	var sorted []reader
+	for site, n := range readers {
+		sorted = append(sorted, reader{at: site, n: n})
+	}
+	sort.Slice(sorted, func(a, b int) bool { return sorted[a].n > sorted[b].n })
+	t.Logf("VERDICT: the list IS read after it is built. These are its consumers, busiest first; " +
+		"an interpreter's own load sites here mean the o-code ran and looked:")
+	for i, r := range sorted {
+		if i >= 20 {
+			t.Logf("    ... and %d more", len(sorted)-20)
+			break
+		}
+		t.Logf("    read at %08X  called from %08X  %d reads", r.at.pc, r.at.ra, r.n)
+	}
+}
+
+// IS 0x800A4B60 THE GRID'S LOOP, OR EVERY SCREEN'S?
+//
+// A whole chain of findings now rests on one identification: that the bounds-checked loop at
+// 0x800A4B60 is the ALL CHANNELS grid's row loop. The evidence for it is a correlation -- open the
+// grid with the transport at 4 and the loop runs once; open it with the transport ready and it runs
+// six times against a limit of six, which is exactly the number of channels. That is a good
+// correlation and it is not an identification, and this project has already spent a week on one
+// correlation that was real and incidental.
+//
+// **The cheap control is the screen next door.** The ten-entry TV GUIDE menu draws ten rows of text
+// and is reached on the way to the grid, so it costs nothing extra to measure. If the loop runs
+// while the MENU draws too, it is a general channel enumeration that some other part of the box
+// does on any screen change, and everything built on "the grid's row loop" needs re-reading. If it
+// does not, the identification holds.
+//
+// The now-and-next banner is already a second control from an earlier run: it reached the loop head
+// ZERO times while drawing a real programme on a real channel.
+//
+// IT ASSERTS ITS OWN SUBJECT: the menu must be the pinned ten-row screen, or the count belongs to
+// something else.
+func TestWhetherTheRowLoopIsTheGridsOrEveryScreens(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+		loopHead    = 0x800A4B60
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	// The transport is made ready FIRST, so the menu is measured under exactly the conditions that
+	// let the loop run six times for the grid. Measuring the menu with the gate shut would prove
+	// nothing: the loop would be short for both screens and for the same reason.
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+	t.Logf("the transport is ready at state %d, so the loop is free to run for either screen", state())
+
+	hits, watching := 0, false
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if watching && a.Fetch && a.Virtual&^1 == loopHead {
+			hits++
+		}
+	}}
+	press := func(raw uint8, name string, budget int) (uint32, int) {
+		t.Helper()
+		hits, watching = 0, true
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, settled := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				settled = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		watching = false
+		t.Logf("%-32s drew %08X, loop head reached %d times", name, settled, hits)
+		return settled, hits
+	}
+
+	const tvGuideMenu = 0xDDBC18E9 // verified by eye: ten rows of text
+	screen, boxOfficeHits := press(keyBoxOffice, "box office (six rows)", 80_000_000)
+	menuHits := boxOfficeHits
+	for attempt := 1; attempt <= 6 && screen != tvGuideMenu; attempt++ {
+		screen, menuHits = press(keyLeft, "left to the tv guide tab (ten rows)", 80_000_000)
+	}
+	if screen != tvGuideMenu {
+		t.Fatalf("harness: never reached the ten-row tv guide menu (%08X); the count belongs to "+
+			"whatever was drawn instead", uint32(tvGuideMenu))
+	}
+	if err := dumpScreen(t, box, "row-loop-control-menu.png"); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("=== the loop head at %08X, with the transport ready throughout ===", uint32(loopHead))
+	t.Logf("  drawing the BOX OFFICE menu (six rows): %d", boxOfficeHits)
+	t.Logf("  drawing the TV GUIDE menu (ten rows):   %d", menuHits)
+	t.Logf("  drawing the now-and-next banner:        0 (measured earlier)")
+	switch {
+	case menuHits == 0 && boxOfficeHits == 0:
+		t.Logf("VERDICT: NEITHER MENU TOUCHES IT. Two screens that draw rows of text -- six and ten " +
+			"of them -- reach this loop zero times, and so does the banner. It runs for the ALL " +
+			"CHANNELS grid and for nothing else, so the identification holds and everything built " +
+			"on it stands.")
+	default:
+		t.Logf("VERDICT: A MENU REACHES IT TOO (%d box office, %d tv guide). This is not the grid's "+
+			"row loop, it is a channel enumeration some other part of the box runs on a screen "+
+			"change, and the correlation with the grid was incidental. Every finding that calls "+
+			"it the grid's row loop needs re-reading.", boxOfficeHits, menuHits)
+	}
+}

@@ -8155,3 +8155,35 @@ and leave the drawing surface untouched to the digit.
 ten-row menu write the surface MORE than the empty grid, on the grounds that ten rows of text is
 more drawing than none. It is not — the grid paints a full-screen background, a header, a date, a
 clock and a time axis, which is far more pixels than ten short lines. Volume was never the signal.
+
+### The list is consumed, and the loop really is the grid's
+
+Two results that together decide what to do next.
+
+**The list the row body builds IS read.** The six iterations write 178 distinct words, and after the
+loop finishes those words are read **1,622 times from 274 (instruction, caller) pairs**, every one
+of them inside the `0x800D*` subsystem — the same module the handle resolver walks. So the data
+flows: the database side assembles a list, and something downstream picks it up. Nothing is built
+for a reader that never comes.
+
+**And the loop is the grid's, not every screen's.** This needed checking, because the whole chain
+rested on a CORRELATION — open the grid with the transport at 4 and the loop runs once, open it
+ready and it runs six times against a limit of six, which is the channel count. That is a good
+correlation and it is not an identification, and this project has already spent a week on one
+correlation that was real and incidental.
+
+Measured with the transport ready throughout, so the loop was free to run for any screen:
+
+| screen | rows it draws | loop head reached |
+|---|---|---|
+| BOX OFFICE menu | six | **0** |
+| TV GUIDE menu | ten | **0** |
+| now-and-next banner | one channel's programme | **0** |
+| **ALL CHANNELS grid** | none | **7** |
+
+Three screens that demonstrably draw rows of text never touch it. The identification holds and
+everything built on it stands.
+
+So the position is precise: the grid's own loop runs, enumerates all six channels, builds a list,
+and that list is read — and no pixel of it reaches the screen. The gap is between the `0x800D*`
+subsystem picking the list up and the o-code screen drawing anything from it.

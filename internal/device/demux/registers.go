@@ -118,6 +118,42 @@ func (d *Demux) Write(off uint32, size bus.Size, value uint32) {
 	}
 }
 
+// ArmedFilter is one armed section channel: which of the thirty-two it is, and the PID it watches.
+type ArmedFilter struct {
+	// Filter is the section channel index, 0..31. IT IS NOT A MATCH-UNIT INDEX: there are 32
+	// channels and 16 units, Match refuses anything from 16 up, and passing a channel number to it
+	// returns "not set" for every byte -- which reads as "this filter accepts any table" and is
+	// how a run of six channels was reported as six unfiltered ones.
+	Filter uint8
+	// PID is the thirteen-bit PID that filter is watching.
+	PID uint16
+}
+
+// ArmedFilters answers which channel holds which PID, which ArmedPIDs alone cannot.
+//
+// The pairing is the whole point. A PID being open says a channel exists; only the filter index
+// says which match RULES apply to it, and those are what decide whether a section arriving on that
+// PID would reach the firmware on real hardware. Asking "is PID 0 armed" and concluding "so a
+// programme association table can reach the box" skips exactly that step -- the PID was open and
+// every rule on its filter was looking for a different table.
+func (d *Demux) ArmedFilters() []ArmedFilter {
+	var out []ArmedFilter
+	for ch := range d.pidChannels {
+		if !d.pidWritten[ch] || d.enable[2]&(1<<ch) == 0 {
+			continue
+		}
+		pid := d.pidChannels[ch] & 0x1fff
+		if pid == 0x1fff {
+			continue
+		}
+		out = append(out, ArmedFilter{
+			Filter: uint8(ch),   // #nosec G115 -- bounded by FilterCount
+			PID:    uint16(pid), // #nosec G115 -- masked to thirteen bits above
+		})
+	}
+	return out
+}
+
 // ArmedPIDs returns the PIDs in enabled, programmed channels. The channel index is a
 // section filter index; the independent 16 match units do not select a PID channel.
 func (d *Demux) ArmedPIDs() []uint16 {

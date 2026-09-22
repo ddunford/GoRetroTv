@@ -139,3 +139,19 @@ had been writing all along.**
 **Pin the screens you require by hash, and verify each pinned hash by eye once.** "Different from
 where I was" is not an identification, and an instrument that cannot say which screen it is on
 produces findings that are worse than no findings, because they read as measurements.
+
+### A uniform answer across independent things is a bug in the instrument
+
+Dumping what the box filters for, six armed channels each came back "NO RULES AT ALL — takes any
+table on its PID". Six independent filters agreeing perfectly is not a finding, it is a tell. The
+cause: there are 32 section channels and 16 match units, `Match` refuses any index from 16 up, and
+I was passing channel numbers 19–24 into it. Every call returned "not set", which the instrument
+rendered as "unfiltered".
+
+Two habits come out of it. **When every member of a set answers identically, suspect the question
+before believing the answer.** And **an accessor that returns `(value, ok)` is telling you
+something with `ok`** — dropping it on the floor turns "I could not ask" into "the answer is no".
+
+Also, from the same run: printing a `[]uint16` with `%v` gives decimal. The box "armed 82", which
+is `0x52` — a PID this project already knows well — and it read for a moment as a new discovery.
+Format identifiers the way the rest of the record writes them.

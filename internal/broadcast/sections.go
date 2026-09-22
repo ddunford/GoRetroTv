@@ -513,3 +513,46 @@ func offsetBCD(minutes int) ([]byte, error) {
 	m, _ := bcd(minutes % 60)
 	return []byte{h, m}, nil
 }
+
+// Programme is one entry of a programme association table: a programme number and
+// the PID its programme map table is carried on.
+type Programme struct {
+	// Number is the programme_number. Zero is reserved for the network PID and is
+	// refused here, because a caller that means "the NIT" should say so elsewhere.
+	Number uint16
+	// MapPID is the programme_map_PID, the PID its PMT is broadcast on.
+	MapPID uint16
+}
+
+// PAT builds a programme association table (table 0x00), the root of a transport
+// stream: it says which programmes exist and where each one's map table is found.
+//
+// THIS BOX ASKS FOR IT AND HAS NEVER BEEN ANSWERED. PID 0x0000 is armed during
+// acquisition -- transiently, which is why a single sample of the demux missed it
+// and a continuous watch across a session found it -- and a section on a PID with
+// no armed filter is dropped by the hardware before any code sees it. So the PAT
+// is not a guess about what the firmware might like; it is the one table the box
+// demonstrably opens a filter for and receives nothing on.
+//
+// The layout is ISO/IEC 13818-1, which is why this can be built rather than
+// measured: phase 7's rule is not to guess a format, and this format is specified.
+// What is NOT assumed is what the box does with it -- that is measured by watching
+// which PID it arms next.
+func PAT(transportStreamID uint16, version byte, programmes []Programme) ([]byte, error) {
+	if len(programmes) == 0 {
+		return nil, fmt.Errorf("broadcast: a PAT with no programmes announces nothing")
+	}
+	var loop []byte
+	for _, p := range programmes {
+		if p.Number == 0 {
+			return nil, fmt.Errorf("broadcast: programme number 0 is reserved for the network PID")
+		}
+		if p.MapPID > 0x1fff {
+			return nil, fmt.Errorf("broadcast: programme map PID %#x exceeds thirteen bits", p.MapPID)
+		}
+		loop = appendU16(loop, p.Number)
+		// Three reserved bits set, then the thirteen-bit PID.
+		loop = appendU16(loop, 0xe000|p.MapPID)
+	}
+	return longSection(0x00, transportStreamID, version, loop)
+}

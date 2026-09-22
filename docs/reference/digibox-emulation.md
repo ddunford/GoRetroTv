@@ -6508,6 +6508,57 @@ anything at all. That is the measured answer to "should we just broadcast everyt
 nowhere for most of it to go, and for the grid specifically the box has been asked directly and
 wants nothing more.
 
+#### THE BOX DOES NOT WANT A PAT -- and PID 0 being armed does not mean it does
+
+*2026-09-22. The transport-stream plan began "send a PAT on PID 0x0000, because the box arms it and
+nothing has ever answered". Both halves of that were tested and the plan does not survive.*
+
+**PID 0x0000 IS armed**, transiently, during acquisition -- a single sample of the demux misses it
+and a continuous watch across a session finds it, which is the same shape as `0x52`. So a
+programme association table was built to ISO/IEC 13818-1, checked field by field against the
+specification, pushed on PID 0 at the moment the channel was open, and **accepted by the model**.
+
+**The box did nothing with it.** It armed no new PID -- in particular not the programme map PID the
+table named, a number the firmware had no other reason to hold and whose appearance would have been
+proof the table was read and believed. The only PID that appeared afterwards was `0x0052`, which
+the record already has opening in response to our NIT.
+
+**And the hardware would have rejected it anyway.** At the moment PID 0 is open, six section
+channels are armed and six match units carry rules:
+
+    channel 19 -> PID 0034      unit  1  table 40/FE ext 0020     the NIT
+    channel 20 -> PID 0033      unit  2  table 42/FB ext 0020     the SDT
+    channel 21 -> PID 0000      unit  3  table 4A/FF ext 1000     the BAT
+    channel 22 -> PID 0014      unit  5  table 73/FF              the TOT
+    channel 23 -> PID 0011      unit  7  table A3/FF ...          the day's titles
+    channel 24 -> PID 0010      unit 10  table C1/FF              the A-Z listings index
+
+**Not one unit filters for table `0x00`.** So an open PID channel is not the box asking for a PAT:
+the channel exists and every rule on this box is looking for something else. The box reaches its
+services without a programme association table, which for an OpenTV Sky receiver driven by NIT, SDT
+and BAT is entirely reasonable -- and it means PAT and PMT are not the way in to video.
+
+##### A MODELLING GAP THIS EXPOSED, AND IT MATTERS BEYOND THIS EXPERIMENT
+
+**`Demux.Push` delivers a section to any armed PID channel WITHOUT applying the match-unit rules.**
+That is how the PAT reached the guest's ring at all. The model is therefore MORE PERMISSIVE than the
+hardware, and every experiment that pushes a section on an armed PID can produce a false positive --
+"the box accepted it" where a real box would have dropped it before any code ran. The record already
+carries one finding of that family withdrawn on other grounds ("the box keeps our payload" turned
+out to keep `0xA5` too). Filed rather than fixed in passing.
+
+##### TWO INSTRUMENT MISTAKES MADE WHILE ESTABLISHING THIS, BOTH SELF-INFLICTED
+
+**A channel index is not a match-unit index.** There are 32 section channels and 16 match units;
+`Match` refuses anything from 16 up. Passing channel numbers 19..24 to it returned "not set" for
+every byte, which the instrument rendered as "this filter takes any table on its PID" -- six times
+over, identically. **A uniform answer across six independent things is the tell**, and it was the
+only reason to look again.
+
+**And a `[]uint16` printed with `%v` reports decimal.** The box "armed 82", which is `0x52`, the one
+transient PID this project already knows about, and it read for a moment as a new discovery. Every
+other PID in this record is written in hex.
+
 #### THE ROW COUNT IS NOT IN DRAM -- a clean negative from two working list screens
 
 The open question is `gort-qxl.2`'s: does the row loop RUN over an empty list, or never run? Those

@@ -30,9 +30,9 @@ native-table.js reads it live and it holds the same record pointers as the flash
 flash and reporting on the running box would otherwise be exactly the two-record trap.
 
 Usage:
-    scripts/opentv-natives.py               # the whole module-1 table
-    scripts/opentv-natives.py 0x2D 0xE4     # just these
-    scripts/opentv-natives.py --shims       # shim addresses only, for a pcHits census
+    tools/opentv-natives.py               # the whole module-1 table
+    tools/opentv-natives.py 0x2D 0xE4     # just these
+    tools/opentv-natives.py --shims       # shim addresses only, for a pcHits census
 """
 import argparse
 import struct
@@ -40,8 +40,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FLASH = ROOT / "frontend/public/FLASH_U202.bin"
-RAMIMG = ROOT / "ghidra/unpacked_mine.bin"
+# The flash lives in firmware/ here. It was frontend/public/ in the predecessor and the
+# path did not move with the tool, so every invocation died in the import.
+FLASH = ROOT / "firmware/FLASH_U202.bin"
+RAMIMG = ROOT / "firmware/application-ram-image.bin"
 FLASH_K0 = 0x9FC00000
 RAM_BASE = 0x800009F4          # where the bootloader decompresses the application image
 MODULE1_ARRAY = 0x9FC29F04

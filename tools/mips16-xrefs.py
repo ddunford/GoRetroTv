@@ -12,8 +12,8 @@ the low two bits cleared -- EXCEPT in a jump delay slot, where the base is the J
 address. Both are emitted here, and a hit under either rule is reported with which rule it
 used, because the 0x39/0x3A/0x3B shims only make sense under the delay-slot rule.
 
-Usage:  scripts/mips16-xrefs.py 0x800858f5 [0x800858b1 ...]
-        scripts/mips16-xrefs.py --pool 0x80085ef4       (what loads THIS pool word)
+Usage:  tools/mips16-xrefs.py 0x800858f5 [0x800858b1 ...]
+        tools/mips16-xrefs.py --pool 0x80085ef4       (what loads THIS pool word)
 """
 import sys, struct
 

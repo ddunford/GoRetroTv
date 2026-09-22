@@ -13,7 +13,12 @@
 # MIPS16 and known to be a function entry; Ghidra's flow analysis expands from them.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# ROOT is the REPO root: this script lives in tools/ghidra/, so it is two levels up, not one. It
+# was one for a while and every path below silently resolved inside tools/ -- the scripts looked
+# for tools/ghidra/unpacked_mine.bin and tools/ghidra/scripts, neither of which has ever existed,
+# while tools/mips16-xrefs.py resolved the same image to the repo root. The two tools disagreed
+# about where the firmware lived and neither said so.
 GHIDRA="${GHIDRA_HOME:-/opt/ghidra}"
 IMAGE="$ROOT/ghidra/unpacked_mine.bin"
 
@@ -39,5 +44,5 @@ mkdir -p "$ROOT/ghidra/proj"
 "$GHIDRA/support/analyzeHeadless" "$ROOT/ghidra/proj" digibox \
   -import "$IMAGE" \
   -processor MIPS:BE:32:16e -loader BinaryLoader -loader-baseAddr 0x800009F4 \
-  -scriptPath "$ROOT/ghidra/scripts" -preScript DigiboxSetup.java "${SEEDS[@]}" \
+  -scriptPath "$ROOT/tools/ghidra/scripts" -preScript DigiboxSetup.java "$ROOT" "${SEEDS[@]}" \
   "$@"

@@ -429,6 +429,9 @@ Building and checking
   ablate         Remove each rule subject in turn and check its coverage guard
   authorise-rules <reason>  Record why staged architecture controls changed
   rule-guard-selftest    Prove the commit guard catches governed edits
+  ghidra:import  (Re)build the Ghidra project: the application image with the flash mapped beside
+                 it, MIPS16 entry points seeded (~10 min; the project is gitignored)
+  ghidra:decompile <addr> [addr ...]  Decompile those addresses to C
   lint           Hook, AGENTS.md, docs-anchor and go vet checks, then golangci-lint
   hooks          Assert the git hooks are armed and delegating to beads
   agents         Assert AGENTS.md still symlinks to CLAUDE.md (Codex and Claude read one file)
@@ -476,6 +479,8 @@ main() {
         ablate) cmd_conformance_ablate "$@" ;;
         authorise-rules) cmd_authorise_rules "$@" ;;
         rule-guard-selftest) cmd_rule_guard_selftest "$@" ;;
+        ghidra:import)    tools/ghidra/ghidra-import.sh "$@" ;;
+        ghidra:decompile) tools/ghidra/ghidra-decompile.sh "$@" ;;
         lint)    cmd_lint "$@" ;;
         hooks)   cmd_hooks "$@" ;;
         agents)  cmd_agentsdoc "$@" ;;

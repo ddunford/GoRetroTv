@@ -8377,3 +8377,51 @@ had not finished.
 > this is `tools/ocode-disasm.py`, which decodes it against an operand table measured from the
 > running machine and whose `--check` refuses a listing whose instruction boundaries the machine
 > never fetched.
+
+### The native census: exactly what the working screen asks for and the grid does not
+
+O-code cannot be decompiled — it is interpreted bytecode and no disassembler has a processor module
+for it. **The one place an o-code screen becomes legible is where it calls out.** Every native call
+is `scall (module, function)` through one of 236 fixed shims, which `tools/opentv-natives.py`
+resolves from the flash. Watching those addresses execute turns "the screen ran some bytecode" into
+"the screen asked the firmware for THESE THINGS".
+
+Both screens, each on its own box, both with the transport gate open so the grid's row loop runs all
+six channels:
+
+| | distinct natives | calls |
+|---|---|---|
+| now-and-next banner | 55 | 894 |
+| ALL CHANNELS grid | 37 | 194 |
+| in common | 35 | |
+
+**Twenty natives the banner calls and the grid never does**, and the top of the list is not scattered
+— it is a contiguous block, all implemented in `0x80082xxx`:
+
+    (1,0x5B)  impl 80082690   20 calls
+    (1,0x5F)  impl 80082790   14
+    (1,0x58)  impl 80082AFC    8
+    (1,0x5A)  impl 80082668    5
+    (1,0x63)  impl 80082A2C    4
+    (1,0x82)  impl 80082D1C    4
+    (1,0x81)  impl 8008319C    4
+    (1,0x7A)  impl 80080F60    4
+    (1,0xAB)  impl 80081200    4
+    (1,0x90)  impl 800822E8    2      (1,0xD7) 8007350C  2
+    (1,0x8C)  impl 800833B4    2      (1,0xD8) 800735EC  2
+    (1,0x26)  impl 80084050    2      (1,0x44) 80085938  2
+    (1,0xBE)  impl 80067454    1      (1,0xE8) 80085CEC  1
+    (1,0x45)  impl 8008594C    1      (1,0xBD) 8006734C  1
+    (1,0x51)  impl 80085DF4    1
+
+**`0x58`, `0x5A`, `0x5B`, `0x5F`, `0x63` are consecutive in one range and share one implementation
+neighbourhood.** That is an API, not a coincidence, and it is the listings API: the only other
+screen that presents a programme off this broadcast calls it twenty times over and the grid calls it
+never.
+
+The other direction is short and is exactly what it should be — the grid's own furniture: `(1,0x3B)`
+twelve times and `(1,0xC6)` five, and nothing else.
+
+> This is the first time the question has a list of names rather than a region of memory. The next
+> step is to decompile those implementations and find which one the grid *should* have called, and
+> what it tests before calling.

@@ -16,7 +16,7 @@
 # and is gitignored, because an analysis database is not source.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GHIDRA="${GHIDRA_HOME:-/opt/ghidra}"
 PROJ="$ROOT/ghidra/proj"
 
@@ -37,6 +37,6 @@ fi
 # decompile can never modify the database it is reading.
 "$GHIDRA/support/analyzeHeadless" "$PROJ" digibox \
   -process unpacked_mine.bin -noanalysis -readOnly \
-  -scriptPath "$ROOT/ghidra/scripts" -postScript DigiboxDump.java "$@" 2>&1 \
+  -scriptPath "$ROOT/tools/ghidra/scripts" -postScript DigiboxDump.java "$@" 2>&1 \
   | sed -n '/====/,$p' \
   | sed -e 's/^INFO  DigiboxDump\.java> //' -e 's/ (GhidraScript)  $//'

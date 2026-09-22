@@ -32,15 +32,15 @@ one you can act on.
 
 USAGE
     ./ctl.sh digibox:probe scripts/digibox-probes/bytecode-trace.js > trace.json
-    python3 scripts/ocode-disasm.py --trace trace.csv --check 0x9FC4A538 0x9FC4A60B
-    python3 scripts/ocode-disasm.py --trace trace.csv 0x9FC4A538 0x9FC4A60B
+    python3 tools/ocode-disasm.py --trace trace.csv --check 0x9FC4A538 0x9FC4A60B
+    python3 tools/ocode-disasm.py --trace trace.csv 0x9FC4A538 0x9FC4A60B
 """
 import argparse
 import collections
 import struct
 import sys
 
-FLASH_DEFAULT = 'frontend/public/FLASH_U202.bin'
+FLASH_DEFAULT = 'firmware/FLASH_U202.bin'
 FLASH_BASE = 0x9FC00000
 MAIN_FETCH_SITE = '0x80069298'      # the interpreter's opcode fetch; everything else is operands
 DISPATCH = 0x800692E0               # 209 signed halfword offsets, target = DISPATCH + offset

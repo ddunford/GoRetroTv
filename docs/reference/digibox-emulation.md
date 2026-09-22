@@ -7,11 +7,6 @@ is because the method is the evidence.
 
 ## The machine
 
-<!-- anchor: internal/board/runtime.go -->
-<!-- anchor: internal/memory/ram.go -->
-<!-- anchor: internal/memory/flash.go -->
-<!-- fingerprint: sha256:b4ffd1c42e7d9abc2a37616479551dcd80d39e69ba8d4a78d568b7031e46f038 @ 2026-09-22 -->
-
 **NEC VR4111, big-endian MIPS, mixed MIPS32 + MIPS16 reached via `JALX`.** RTOS is **Nucleus
 PLUS** — the image says `Copyright (c) 1993-1998 ATI - Nucleus PLUS - NEC4111`. MIPS16 is the
 ORIGINAL ASE, not MIPS16e: `SAVE`/`RESTORE` appears nowhere, and a VR4111 would not have it.
@@ -36,8 +31,6 @@ VR4110 core to the 2500N. Treat `0xB0xxxxxx`/`0xB2xxxxxx` as the peripherals of 
 NEC set-top SoC rather than as glue around a handheld CPU.
 
 ## The board's other chips — what is known, and the one lead worth chasing
-
-<!-- anchor: none - measured inventory of chips this port does not model; a lead, not a model -->
 
 **The CPU is settled from the image itself**: the Nucleus PLUS port string reads
 `Copyright (c) 1993-1998 ATI - Nucleus PLUS - NEC4111 GHM 1.1.G1.3`, which names the core, and the
@@ -88,11 +81,6 @@ one of them exists, the ASIC is unidentified and the tables below are the only d
 there is.
 
 ## The CPU — what an emulator must implement
-
-<!-- anchor: internal/cpu/core.go -->
-<!-- anchor: internal/cpu/mips16.go -->
-<!-- anchor: internal/cpu/mips32.go -->
-<!-- fingerprint: sha256:98ab19062f94d7b916a96a1d193864720649c543abf56d6d91a26f844669d5c3 @ 2026-09-22 -->
 
 **Reference: NEC VR4111 64/32-bit Microprocessor User's Manual, µPD30111, document
 U13137EJ2V0UM00 2nd edition, April 1998, 775pp.**
@@ -149,9 +137,6 @@ the measured MasterOut ratio.
 
 ## Two programs, and this caused a long detour
 
-<!-- anchor: internal/machine/handoff.go -->
-<!-- fingerprint: sha256:18d8f107c2f39840bdf6a9be6643f46e3177396a0630d1be9a2355a497bf6f69 @ 2026-09-22 -->
-
 **The bootloader** occupies `0x0-0x1FFFF`, is write-protected, and has its own Nucleus. It starts
 with BOOTMain, then creates SMNTask, SMTTask, SMHKTask and EVTTask when the board timer wakes its
 event loop. **The application** is a separate image at flash `0x20000` (`JB` header, length `0x17F62C`,
@@ -171,8 +156,6 @@ five exist; enter the application and there are **eleven** at the measured check
 program entirely.
 
 ## The inner codec — solved
-
-<!-- anchor: none - decompression is executed by the guest; the host models no codec -->
 
 The dense ~812 KB is **not compressed in any standard sense and no LZ test could ever have found
 it.** It is a halfword-dictionary code, unpacked by a routine at **`0xBFC206A0`**:
@@ -198,12 +181,6 @@ path. ZERO `COMP` containers exist in the image; the flash is already that forma
 
 ## Graphics — reachable, and proved by running it
 
-<!-- anchor: internal/device/osd/compose.go -->
-<!-- anchor: internal/device/osd/display.go -->
-<!-- anchor: internal/device/blitter/blitter.go -->
-<!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:9a817123022e2121100495ed804d8497bc410770dd085029f75cfe72c3b18871 @ 2026-09-22 -->
-
 The bootloader draws the UPDATING SYSTEM SOFTWARE screen with two self-contained MIPS16 calls,
 no RTOS task, no stream, no viewing card:
 
@@ -224,9 +201,6 @@ Running those two calls under emulation writes 34,350 bytes byte-identical (md5
 `45bbbc599e10f22f8059ac1cce84b3b5`) to an independent offline decode.
 
 ## The hardware to model — the firmware's own device inventory
-
-<!-- anchor: internal/bus/device.go -->
-<!-- fingerprint: sha256:1f7dbb560757532aab32daed9468bd55c735b7bcffe239a08aed885b7d7966a0 @ 2026-09-22 -->
 
 A `{base, 0, extent}` table at flash **`0x1AB68`** lists every region the machine has: six DRAM
 regions, then **30 peripheral blocks**, then the three reset memcpy entries, and then — run on in
@@ -279,10 +253,6 @@ bits, and the handler column reuses a handful of addresses.
 
 ## Feeding it a stream — the interface
 
-<!-- anchor: internal/dvb/crc.go -->
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:6c20f05300fee3af3259d2655db0e169b1f45defe7d5b941638a616501d3ff9e @ 2026-09-22 -->
-
 **Demux register block `0xB000A000`, size `0x160`**, declared in a 30-block SoC peripheral map at
 flash **`0x20FD8`** — which is the register map the NEC manual could never provide.
 
@@ -324,8 +294,6 @@ confirms its field offsets byte for byte.** That upgrades the prior art from "av
 
 ## Prior art — none for the emulator
 
-<!-- anchor: none - external survey; no subject in this repository -->
-
 No emulator of a Sky Digibox, Pace STB, OpenTV receiver or Nucleus-PLUS MIPS box exists publicly.
 MAME has no VR41xx core and **cannot decode MIPS16 at all**. QEMU implements MIPS16e but has no
 board. The emulation community's own set-top box category is a stub. No public OpenTV o-code VM,
@@ -334,9 +302,6 @@ documents the build side, and notes that **o-code binds to ROM libraries at RUNT
 the interpreter we are already emulating is where those calls land.
 
 ## The application's boot, traced to a single missing mechanism
-
-<!-- anchor: internal/machine/handoff.go -->
-<!-- fingerprint: sha256:18d8f107c2f39840bdf6a9be6643f46e3177396a0630d1be9a2355a497bf6f69 @ 2026-09-22 -->
 
 Every link below is sourced, and the chain was traced from both ends — statically from the
 decompressed image, and by measurement on a running emulator — with the two agreeing.
@@ -402,10 +367,6 @@ transient is not observing an event**, and two polls that happen to disagree wil
 mechanism that does not exist.
 
 ## The smartcard link — why the box stops
-
-<!-- anchor: internal/device/smartcard/port.go -->
-<!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:ce13ceac60d350b53c9015ad274332d1631c25c5eebb642c1bce8b7167546891 @ 2026-09-22 -->
 
 **The application boots, creates all six of its tasks, and then every one of them blocks. The
 thing it is waiting for is the viewing card.** This is the gate; nothing downstream of it — video,
@@ -515,10 +476,6 @@ validator tests only `len == buf[0]+1`, `len < 32` and `len >= 3`.
 
 ## The blitter — how the application draws, and why the first picture was a wait
 
-<!-- anchor: internal/device/blitter/blitter.go -->
-<!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:02a4d39f1e873c5630e124c1320042ab2a1bf07c90673fa617394940f2fdb8d8 @ 2026-09-22 -->
-
 Past the card, the clock, the modem and the AV probe, the box drew nothing and slept. The graphics
 client `0x8000AD15` allocates two planes from the `nocache` pool (KSEG1 DRAM at
 `0xA0575788`–`0xA079FF88`), plants a sentinel in the LAST TWO BYTES of each, asks for a fill, and
@@ -582,9 +539,6 @@ source (207360 and 103680 bytes), which is the path into the decoder's frame mem
 
 ## The second card slot — a framed link the main task blocks on
 
-<!-- anchor: internal/device/csi/peripheral.go -->
-<!-- fingerprint: sha256:ee700d255d62bfbce2126c893036b7d34b8746f38f121ca53b4142a94459c174 @ 2026-09-22 -->
-
 After the planes are up the main task writes NVRAM, then sends `60 00 01 11 04 74` on the UART at
 `0xB2002000` and blocks on semaphore **`STXD0`** with no timeout. That port was modelled as a
 16550 console and it is neither: the driver (`0x8002C600`–`0x8002D900`, strings `SMART0`,
@@ -608,11 +562,6 @@ is what the model sends, one byte per interrupt with a gap, because the LISR sto
 `STXD0` released, the main task moved on to the next subsystem.
 
 ## The I2C bus and the EEPROM — the box's memory, and why the CA task never finished
-
-<!-- anchor: internal/device/i2c/controller.go -->
-<!-- anchor: internal/device/i2c/mux.go -->
-<!-- anchor: internal/device/eeprom/store.go -->
-<!-- fingerprint: sha256:77d227fc3a149cdd846bb1f4ede1e356244c8def6ad1a5eeaf2b8ef5da560164 @ 2026-09-22 -->
 
 The I2C controller at `0xB2006000` is a byte-at-a-time master with a seven-state LISR
 (`0x80006DA1`, demux mask `0x00200000`). `+0x00` control takes four values — `0x99` idle/STOP,
@@ -645,9 +594,6 @@ final `for(;;)` — the boot sequence is complete.
 
 ## The boot aborted, and the reason was an instruction nobody had implemented
 
-<!-- anchor: internal/cpu/mips16.go -->
-<!-- fingerprint: sha256:a91a8189616adade15369cdbbf679463ac5aa940c4aff24bb1df3567a8e59b32 @ 2026-09-22 -->
-
 With every device answering, the boot "finished" into a `for(;;)` at `0x8003A929` that read as
 an idle loop and is nothing of the kind: it is the die-hook of the fatal-error routine
 `0x8001ECF9`, which first prints `!!!!! ABORT !!!!!! -> <code>` with the task handle, entry,
@@ -677,10 +623,6 @@ needed: `__breakAt([pcs])`, `__regs()`, `__step(n)`, `__resume()`, `__call(addr,
 (run a firmware routine and read `$v0`), and an EEPROM write-transaction log `__eeTx()`.
 
 ## The first screen the application put up, and the interrupt that turned out not to matter
-
-<!-- anchor: internal/device/irq/controller.go -->
-<!-- anchor: internal/device/osd/display.go -->
-<!-- fingerprint: sha256:fc39ff71a34f8c4a6318fd1544a0aeaa97e98dcf6f3c3d80041902d6ac193f78 @ 2026-09-22 -->
 
 With the abort gone the interpreter drew — four field-pair 8-bpp fills of a 720×576 surface at
 `0x80584048`, colour index `0xDC` — and then sat in the OS-abstraction wait `0x8007FED1`. The
@@ -727,9 +669,6 @@ background, and what it draws next depends on an event it has not received — a
 a signal-state change from a tuner that has no stream behind it. That is the next thing to map.
 
 ## The remote control: how a key reaches the EPG
-
-<!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-22 -->
 
 Mapped from the firmware by a subagent (listings under a session scratchpad, report
 `inputs/REPORT.md`) and then measured in the emulator.
@@ -825,9 +764,6 @@ the moment of the press, which is what makes a keyboard-range mistake visible.
 
 ## The tuner: an always-locked demodulator
 
-<!-- anchor: internal/device/demod/model.go -->
-<!-- fingerprint: sha256:537e73b355da31841fc9a99229676b1ef1ebc9e6accbc4e3e9756a83ce9f134f @ 2026-09-22 -->
-
 Mapped by a second subagent (`tuner/`). The satellite demodulator is on I²C vbus 0 at
 address `0x18`, indirect-addressed: `[0x00, lo]` `[0x01, hi]` set a 16-bit register index,
 then a port byte (2/3/4/5/7) moves data — port 5 takes the 1 KB microcode. The driver's lock
@@ -861,10 +797,6 @@ booted, and reported as a registration failure that had not happened. `__tasks()
 the cheap check that the box is actually up.
 
 ## Feeding it sections — the delivery path, proved
-
-<!-- anchor: internal/device/demux/push.go -->
-<!-- anchor: internal/device/demux/section.go -->
-<!-- fingerprint: sha256:2bc43cbcc579c6052658f322c7d1cddf36c9667c1593750204d7ed7bd4577d43 @ 2026-09-22 -->
 
 The box asks for exactly three PIDs and says so. On a booted machine `__dispState()` reports
 **filter 22 → PID `0x0014` (TDT, the clock), 23 → `0x0011` (SDT, the line-up), 24 → `0x0010`
@@ -928,9 +860,6 @@ because we choose which filter to deliver to rather than letting a match decide.
 
 ## The firmware narrates its own boot, and reading it is one printf
 
-<!-- anchor: internal/instruments/instruments.go -->
-<!-- fingerprint: sha256:feabd4a8da452772c5c9cfa4a8280ae8658918300ebec6fd898a83ff3b8d180c @ 2026-09-22 -->
-
 **This application was shipped with its diagnostics compiled in.** The format strings are
 still in flash — `"Subtable: allocated %d bytes for %d nodes."`, `"[BGLOAD] Searching for
 %s"`, `"#CONTROL[%s] app status : MAXIMIZED"` — and **373 call sites** reach them through a
@@ -987,8 +916,6 @@ and then **nothing, for ever**. A cold boot differs by one line (`blacklist: cre
 
 ## The box's whole interface is an OpenTV application, and it is already running
 
-<!-- anchor: none - firmware architecture; the host models no interpreter -->
-
 **This is the finding that redirects the work, and it retires the older open question of
 whether the o-code would draw a guide from SI alone.** The menus and the guide are not C code
 in this image waiting for data. They are an **o-code application**, and the firmware's
@@ -1033,9 +960,6 @@ task is now free rather than mirroring.
 
 ## What the SI we broadcast does, and what it does not
 
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
-
 **It is received and parsed — proved by a name that could not have come from anywhere else.**
 Broadcasting an SDT whose services are called `ZQXBBC One` and `ZQXBBC Two` puts those exact
 bytes in DRAM at the SDT filter's own context pointer (`0x8019A2E4` on that boot, the value in
@@ -1052,9 +976,6 @@ DVB SI in any way it will admit to, and the next thing to establish is what it I
 — which is now a question that can be asked of a machine that talks.
 
 ## The interpreter, instrumented — and what application 0x2 is actually waiting for
-
-<!-- anchor: internal/instruments/instruments.go -->
-<!-- fingerprint: sha256:feabd4a8da452772c5c9cfa4a8280ae8658918300ebec6fd898a83ff3b8d180c @ 2026-09-22 -->
 
 **It is waiting for messages on its own queue, it gets them, and it draws nothing.** That is
 the answer, and it is not the answer the previous section's framing expected.
@@ -1123,8 +1044,6 @@ holding an EPG partition, the reading is that **the resident application is a sh
 screens themselves are broadcast**. That is not a small fix away.
 
 ## The signature check — what it is, and why it is not what is stopping us
-
-<!-- anchor: none - firmware behaviour, eliminated as a cause and not modelled -->
 
 **Two answers, and the second matters more than the first.**
 
@@ -1203,8 +1122,6 @@ evidence points at:
 
 ## The registry load path — real, drivable, and NOT the one this box uses
 
-<!-- anchor: none - a firmware path this box does not take -->
-
 **Everything in this section is about the autoload path, app id −1, which this box never takes.
 It is worth keeping because it can be driven and it proved the loader has no cryptographic
 gate — but it is not why the guide does or does not appear.** The box's own path is app id 2,
@@ -1266,8 +1183,6 @@ register context is not the routine. Trace it where it runs instead.
 
 ## Registering an application record — the mechanism, driven and proved
 
-<!-- anchor: none - firmware mechanism driven by instruments; no host model -->
-
 **The interpreter has an explicit autoload path and it can be driven.** `0x8005141C` takes no
 register arguments: its entire input is the module handle at `[0x80106520]`, a packed
 `{appId << 16 | moduleId}`. Set that, call it, and the firmware walks its own chain —
@@ -1318,8 +1233,6 @@ synchronous call leaves the machine mid-function with no way to resume). **Befor
 conclusion from a quiet instrument, check that the instrument covers the path being measured.**
 
 ## The module table, built — and the load path driven to its last gate
-
-<!-- anchor: none - firmware mechanism driven by instruments; no host model -->
 
 **The application load path now runs end to end on demand, and the firmware's last word on it
 is `#INTPRT[RUNNING] security: failed.` rather than `no code module`.** Getting there mapped
@@ -1396,8 +1309,6 @@ prove the shape by driving it.**
 
 ## The permission gate, passed — the box will start an application we supply
 
-<!-- anchor: none - firmware mechanism driven by instruments; no host model -->
-
 **`#CONTROL[running] starting application=0xffffffff.` followed by
 `user memory allocated (Kbytes)=0x180000.`** That is the firmware starting an application we
 declared, through its own load path, having accepted our names and our permissions, with **no
@@ -1448,8 +1359,6 @@ hand, and not one of them asked for a signature. What the box does not have, and
 of structure will conjure, is an application's compiled o-code.
 
 ## The EPG is in the flash, and it is running — the correction that matters
-
-<!-- anchor: none - firmware finding; corrects an earlier reading of this file -->
 
 **The guide is resident, it is loaded, and the interpreter is executing its bytecode right
 now.** Several conclusions earlier in this document said otherwise and were wrong; this section
@@ -1516,10 +1425,6 @@ question is the one this document started with — what it is waiting for.**
 
 ## The compositing gap, chased and closed — the drawing path is healthy and unused
 
-<!-- anchor: internal/device/osd/compose.go -->
-<!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:53efa1fa9b012df0b592ef26aebc5c08ae3b32faafefb2ab820b61a919dcc9c8 @ 2026-09-22 -->
-
 **The emulator's graphics are not the problem.** The box paints its screen with the blitter,
 correctly, and `__blitLog()` carries the whole of it with parameters:
 
@@ -1555,8 +1460,6 @@ bytecode — built from the VM at `0x80069298`, which is authoritative for OpenT
 than from the 3.2 SDK's `ocodedef.h`, which is indicative at best.
 
 ## The o-code, disassembled — and the blue screen is the EPG's own work
-
-<!-- anchor: none - firmware disassembly; the subject is the flash image -->
 
 **The bytecode now reads.** `scripts/ocode-disasm.py` disassembles the runtime the EPG is
 written in, and nothing in it is guessed: the operand table is MEASURED off the running machine
@@ -1645,9 +1548,6 @@ carousel PID, so delivering one would be delivering it to no filter.
 
 ## The whole Sky interface is in the flash, and the EPG is waiting for a channel list
 
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- fingerprint: sha256:489c2650a7d3c27dd10128b22eb18e20817400f2be4bbf67b59639267fcc8d47 @ 2026-09-22 -->
-
 **Every menu the product wants is already in the box.** The EPG module's DATA chunk
 (`0x9FCA07A4`–`0x9FCBC320`) holds its entire user interface as plain text:
 
@@ -1707,10 +1607,6 @@ of the address space and reported on all of it. Neither zero looked thin.
 
 ## What actually happens to a section we broadcast — it is parsed to its header and dropped
 
-<!-- anchor: internal/device/demux/section.go -->
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:1caf21c8a6f4cf73ac8133d5f8da22dccac20687fddf4d7793833521abc9af7b @ 2026-09-22 -->
-
 **"The box parses our tables" was too generous, and this is the measurement that corrects it.**
 The delivery path is sound: the demux accepts the section, the LISR fires, the section task
 runs, and the firmware copies the section whole out of the ring into a fixed parse buffer at
@@ -1759,9 +1655,6 @@ of them". A parser reads specific offsets from several PCs; a copy reads everyth
 than the thing that discriminates.**
 
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
-
-<!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:a686e0b0adfe61a1258e466896baecce93b8b9a89f033830ef3b05c611b87eb8 @ 2026-09-22 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -1823,9 +1716,6 @@ them: it is the control that proves the profiler was armed at all.
 
 ## The box wants a config store that does not exist, and the installer never runs
 
-<!-- anchor: internal/device/eeprom/store.go -->
-<!-- fingerprint: sha256:89a9b6e395446971ced988a5a20b87069e5faa6381cb9219e46dad13dd400643 @ 2026-09-22 -->
-
 **At startup the EPG looks up 38 four-character keys under `/eeprom/.stbconfig`**, read
 straight off its own resources in the order it touches them:
 
@@ -1876,8 +1766,6 @@ error is the default arm of a switch in the CONTROL task, reached through the po
 `0x800373F8`: a message CONTROL has no case for, at the moment the application starts.
 
 ## Nothing drives first-time installation, and the o-code says so line by line
-
-<!-- anchor: none - firmware finding; the subject is the flash image -->
 
 **The EPG has two routines for its config store and only ever runs the wrong one.**
 
@@ -1934,9 +1822,6 @@ have not modelled, or whether the chain is genuinely entered from a screen we ar
 render for some earlier reason, is the open question.
 
 ## The box created its own config store, and it was not enough
-
-<!-- anchor: internal/device/eeprom/store.go -->
-<!-- fingerprint: sha256:89a9b6e395446971ced988a5a20b87069e5faa6381cb9219e46dad13dd400643 @ 2026-09-22 -->
 
 **The synthetic call fails for a reason worth knowing: the registry is PER-TASK.**
 `store_open(name, 0, create, -1)` at `0x800655EC` is how the firmware creates
@@ -2004,8 +1889,6 @@ a fresh one regardless. `./ctl.sh digibox` is unaffected — the gate runs its o
 persistent profile, which is why it still measures a genuinely cold machine.
 
 ## The gate is one word: entry[+24], and forcing it makes sections parse
-
-<!-- anchor: none - a firmware gate the host does not patch -->
 
 **`find_subtable` at `0x800AB1B0` does two things and returns the SECOND**, which is why forcing
 the first changed nothing:
@@ -2091,10 +1974,6 @@ to a subtable.**
 
 ## The registration path ran, and a section was parsed end to end
 
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- anchor: internal/device/demux/section.go -->
-<!-- fingerprint: sha256:3f0b1c8e7135a0c055b6ed793ef56edfb1e6246567caed0ec4271a2f0e141764 @ 2026-09-22 -->
-
 **Attaching a client means PROGRAMMING A SECTION FILTER.** `0x800B0C70(entry, 1)` switches on
 the subtable's type, and for type 4 it builds `{0xFE40, id}` — a mask/value pair matching
 table_id `0x40` under mask `0xFE`, i.e. NIT actual and other — and programs it, then sets
@@ -2141,9 +2020,6 @@ and the service list is unexplained any more.
 
 ## The ids in our SI are not ours to choose
 
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
-
 **A section is kept only if `find_subtable(id_from_its_header, type)` matches a REGISTERED
 subtable**, and the id it matches on is the halfword at `+30` of a subtable entry. So the
 network and bouquet ids we broadcast have to be the ones the box has asked for — and it asks
@@ -2173,8 +2049,6 @@ placed after the success read 0 and proved nothing; moved in front of it, while 
 still open, their 9 means what it says.
 
 ## Nothing calls the start path, and nothing calls anything in that layer
-
-<!-- anchor: none - firmware finding; the subject is the flash image -->
 
 **No call site in the image asks `register_subtable_on_filter` for type 4 or 6.** Eleven sites
 call it; five ask for type **7**, two for type **11**, and the rest could not be resolved from a
@@ -2221,9 +2095,6 @@ making it draw.
 
 ## The flash has the defaults, and they are real numbers
 
-<!-- anchor: internal/memory/flash.go -->
-<!-- fingerprint: sha256:f28fe04d55a7dde1375b0adf32b98cd99dab4ef756ca6f93f51d0a75aa52db38 @ 2026-09-22 -->
-
 **Nothing needs inventing and no EEPROM dump is needed.** The EPG's data chunk carries a
 defaults table at **`0x9FCBB128`** — 38 entries of `{FourCC, 32-bit big-endian value}`, one per
 config key, found by scanning the whole image for clusters of the key names and noticing that
@@ -2259,9 +2130,6 @@ shape `push key; compare; jump to that key's handler`, and the handlers live in 
 the same module as the config load at `0x9FC9A27C` and the create at `0x9FC9A3C7`.
 
 ## CORRECTION: the box is not short of an LNB or a transponder, and the config is not the gate
-
-<!-- anchor: internal/device/demod/model.go -->
-<!-- fingerprint: sha256:537e73b355da31841fc9a99229676b1ef1ebc9e6accbc4e3e9756a83ce9f134f @ 2026-09-22 -->
 
 **The previous section concluded "no LNB and no transponder, so no service acquisition". That
 is wrong.** The defaults table in the flash is not merely present — it is **loaded**, and the
@@ -2303,9 +2171,6 @@ registers and `0x00` for everything else. Every transaction now carries the PC a
 started it. A driver waiting for a bit that can never set would look exactly like this.
 
 ## The tuner was the trigger: demodulator register 11, bits 0-5
-
-<!-- anchor: internal/device/demod/model.go -->
-<!-- fingerprint: sha256:537e73b355da31841fc9a99229676b1ef1ebc9e6accbc4e3e9756a83ce9f134f @ 2026-09-22 -->
 
 **One register answer starts service acquisition.** The model answered five named demodulator
 registers and `0x00` for everything else. Register **11** now answers `0x3F`, and on a plain
@@ -2355,9 +2220,6 @@ will want to know which part is measured.
 
 ## The box states what it wants, in its own section filters
 
-<!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:a686e0b0adfe61a1258e466896baecce93b8b9a89f033830ef3b05c611b87eb8 @ 2026-09-22 -->
-
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
 the form `0xC0 | (byteIndex << 4) | filter`; the low half of the value is `{match, mask}`, byte
@@ -2397,9 +2259,6 @@ service-list module runs and grows. The screen is still 8 blits of blue.
 
 ## The service list rejects nothing — and the application is now working
 
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
-
 **The premise of this question was wrong, and finding that out relocated the search.** The SVL
 module's entire activity is a single `jalr $v1` at `0x800A6414` inside a dispatcher — when
 `[sp+4]` is 4 it calls the handler at `[sp+8]` — so the three addresses that kept showing up
@@ -2438,12 +2297,6 @@ So the chain from the tuner to the application is complete and working, and the 
 busy. What it is not doing is drawing, and that is now the whole of the remaining question.
 
 ## Why it still does not draw — NOT answered, and here is what was eliminated
-
-<!-- anchor: internal/device/osd/compose.go -->
-<!-- anchor: internal/device/osd/display.go -->
-<!-- anchor: internal/device/blitter/blitter.go -->
-<!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:9a817123022e2121100495ed804d8497bc410770dd085029f75cfe72c3b18871 @ 2026-09-22 -->
 
 **This question is open.** Recording it that way because the eliminations are worth having and
 the temptation is to dress up progress as an answer.
@@ -4291,10 +4144,6 @@ box is drawing its layout correctly and drawing it in one colour.
 
 ### `sky-eluc.33`: the menu is one colour because NOTHING DRAWS TEXT — and a blitter branch is now load-bearing and untested
 
-<!-- anchor: internal/device/blitter/blitter.go -->
-<!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:02a4d39f1e873c5630e124c1320042ab2a1bf07c90673fa617394940f2fdb8d8 @ 2026-09-22 -->
-
 *2026-09-14. Two separable findings: what the application is actually doing, and a place where our
 own model is guessing.*
 
@@ -4414,10 +4263,6 @@ with `./ctl.sh digibox` and a screenshot, not at the end of a long session.
 
 ### `sky-eluc.35`: THE INTERFACE IS ON SCREEN — bit 24 is the fill bit and the source is packed
 
-<!-- anchor: internal/device/blitter/blitter.go -->
-<!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:02a4d39f1e873c5630e124c1320042ab2a1bf07c90673fa617394940f2fdb8d8 @ 2026-09-22 -->
-
 *2026-09-14. The fix, the measurement behind it, and the picture.*
 
 #### The change
@@ -4535,9 +4380,6 @@ yet. Not established.
 
 ### `sky-02me.2`: the handset map, and two gaps it found
 
-<!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-22 -->
-
 *2026-09-15. Every button on the page's handset, pressed on a settled box.
 `scripts/digibox-probes/keymap.js`. The button set is read out of the DOM rather than typed in, so
 it cannot silently stop covering one.*
@@ -4642,9 +4484,6 @@ to a known state between presses is what turns this into a per-button meaning.
 
 ### `sky-02me.3`: the tuner mock works, the box acquires, and the guide finishes searching
 
-<!-- anchor: internal/device/demod/model.go -->
-<!-- fingerprint: sha256:537e73b355da31841fc9a99229676b1ef1ebc9e6accbc4e3e9756a83ce9f134f @ 2026-09-22 -->
-
 *2026-09-15. What a broadcast actually gets this box, and what is left.*
 
 #### The box acquires and accepts everything it is sent
@@ -4693,11 +4532,6 @@ and the same one that produced two wrong findings earlier today when it was skip
 
 
 ### Reading what PID `0x52` wants: the hardware filters it at all, and two instrument gaps fixed
-
-<!-- anchor: internal/device/demux/push.go -->
-<!-- anchor: internal/device/demux/section.go -->
-<!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:600a69e4855affb7f4db425f41c67fe38aab9086bff90abeac7a161b6f942eec @ 2026-09-22 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -4775,12 +4609,6 @@ fall out of that, and neither needs to be guessed.
 
 
 ### Feeding PID `0x52`: the delivery works, the guide does not fill, and the reason is measured
-
-<!-- anchor: internal/device/demux/push.go -->
-<!-- anchor: internal/device/demux/section.go -->
-<!-- anchor: internal/device/demux/registers.go -->
-<!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:c2686791408f1c7d64d00714f269e823b71417e3bd093e79f9d0d0c669bc582b @ 2026-09-22 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
@@ -4896,9 +4724,6 @@ two functions further down.
 
 
 ### `sky-eluc.12`: the acquisition ladder, and the channel-list descriptor is `0xB1` behind specifier 2
-
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- fingerprint: sha256:489c2650a7d3c27dd10128b22eb18e20817400f2be4bbf67b59639267fcc8d47 @ 2026-09-22 -->
 
 Four probe stages, each with its control, and every number below is from a run whose control held
 in the same run. Probes: `scripts/digibox-probes/si-what-is-armed.js`, `which-descriptors.js`,
@@ -5023,9 +4848,6 @@ entries are nine bytes each.
 
 ### `sky-eluc.38`: the nine bytes of a `0xB1` entry, and the gate that decides whether any are read
 
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- fingerprint: sha256:489c2650a7d3c27dd10128b22eb18e20817400f2be4bbf67b59639267fcc8d47 @ 2026-09-22 -->
-
 `scripts/digibox-probes/b1-entry-layout.js`. Four passes in one run, three of them controls, and
 both controls held. Every byte of the probe identifies itself -- entry *i* byte *j* is
 `0xC0 + i*16 + j`, so `0xC0..0xC8`, `0xD0..0xD8`, `0xE0..0xE8`, unique across the loop and never
@@ -5113,9 +4935,6 @@ the stores above are the measurement.
 
 
 ### `gort-qbn.2`: two corrections to the gate and the specifier, from the Go port
-
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- fingerprint: sha256:489c2650a7d3c27dd10128b22eb18e20817400f2be4bbf67b59639267fcc8d47 @ 2026-09-22 -->
 
 `internal/broadcast/lineup_firmware_test.go`, 2026-09-20. Building the BAT in Go put both of
 `sky-eluc.38`'s conclusions under a sweep rather than a single control, and **both were wider than
@@ -5227,9 +5046,6 @@ still ahead, and the next rung is what `0xA1` carries.
 
 
 ### Table `0xA1` on PID `0x33`: the listings path, and the signature that gates it
-
-<!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:f2d86d48db94d7abe4978a64943564ed93ccecdd348c338efe9fb757aeca2fe3 @ 2026-09-22 -->
 
 `scripts/digibox-probes/what-is-on-0xa1.js`. Three controls, all of which went silent.
 
@@ -6120,8 +5936,6 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
 
 ## What is not established
 
-<!-- anchor: none - the open-questions list; by definition nothing here is settled enough to bind -->
-
 - **The stream interface is BUILT, the box parses what it is given, and standard DVB SI is not
   what it is waiting for.** That last part is now measured rather than assumed — see *What the
   SI we broadcast does, and what it does not* — and it retires the older form of this entry,
@@ -6215,10 +6029,6 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
 ---
 
 ## `sky-02me.21`, 16 Sep 2026: the box STORES our programmes, and the guide draws none of them
-
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:d1f443f7143e0b22c463d24819cd1144dc9217f7edd100e870c9fb963582c295 @ 2026-09-22 -->
 
 *Seven probe runs. Every number below is from `scripts/digibox-probes/`, and the four claims that
 retired earlier readings each retired them by measurement rather than by argument.*
@@ -6885,9 +6695,6 @@ it waiting for state that was already there, is what made this screen expensive 
 ---
 
 ## The clock table is the TOT, and the listings PID is a day-of-eight rotation
-
-<!-- anchor: internal/broadcast/carousel.go -->
-<!-- fingerprint: sha256:4bc87a9db273da5e898e449862bd29cfc7e88f98bc1c7e6c15f01fb11a18c956 @ 2026-09-22 -->
 
 *Measured on the Go port, 20 Sep 2026, against the post-acquisition snapshot fixture (a warm box,
 1.1 billion instructions retired). Three findings, two of which correct entries above, and one
@@ -7711,10 +7518,6 @@ provable. The census now accepts the whole OpenTV title family.
 
 ## A day of listings is FOUR SIX-HOUR BLOCKS, and the table id's low two bits say which
 
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:d1f443f7143e0b22c463d24819cd1144dc9217f7edd100e870c9fb963582c295 @ 2026-09-22 -->
-
 *20 Sep 2026, in the Go port, against the real firmware. This is the answer to TASK-6.13, and the
 task's own title is wrong: nothing about it is a day-of-eight problem.*
 
@@ -7804,9 +7607,6 @@ active one. Two things cost time and are worth carrying:
 
 ## Addressing the listings: two masks, and two facts that came off the screen
 
-<!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:f2d86d48db94d7abe4978a64943564ed93ccecdd348c338efe9fb757aeca2fe3 @ 2026-09-22 -->
-
 *Measured 2026-09-20 while wiring the modelled multiplex into the running server. Everything here
 was found by being wrong first, and each wrong reading presented as **"the box is not asking"** —
 which is the same symptom as a box that has not acquired, a box on the wrong day, and a box whose
@@ -7874,9 +7674,6 @@ re-taken with a census that assumes neither. **It survived unchanged**, and is n
 
 ## The handset map, swept exhaustively
 
-<!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-22 -->
-
 *Measured 2026-09-20. Every raw code 0x00-0xFF pressed on its own restored box, nine million
 instructions to settle, framebuffer hashed. This replaces every partial key-map note above: it is
 the complete set of codes this firmware reacts to from the idle picture.*
@@ -7924,9 +7721,6 @@ menu: `0x60`, `0x61`, `0x62` and `0x81` move the highlight or open a sub-screen,
 ---
 
 ## The Huffman dictionary is a DECODER'S table, and two readings of it were wrong
-
-<!-- anchor: internal/broadcast/huffman.go -->
-<!-- fingerprint: sha256:67ecc5798cc8a1f686c6808ac3d0e2b2989e25c0f2844778417b55e1632e8c92 @ 2026-09-22 -->
 
 *Measured 2026-09-20, against the box's screen. Both defects had been in every title section this
 project ever broadcast, and both survived a byte-for-byte reference-vector test — because the
@@ -7980,9 +7774,6 @@ as long as there have been titles to draw.
 
 ## Reading the screen as an instrument
 
-<!-- anchor: internal/instruments/instruments.go -->
-<!-- fingerprint: sha256:feabd4a8da452772c5c9cfa4a8280ae8658918300ebec6fd898a83ff3b8d180c @ 2026-09-22 -->
-
 *Built 2026-09-20 for the encoder cross-check. Two mistakes were made getting it right, and both
 are the same mistake in different clothes: hashing a frame at a chosen instruction.*
 
@@ -8012,9 +7803,6 @@ codec's output is eventually DRAWN, the drawing is the check.
 ---
 
 ## The ALL CHANNELS grid, re-measured WITH listings on air
-
-<!-- anchor: internal/broadcast/titles.go -->
-<!-- fingerprint: sha256:489c2650a7d3c27dd10128b22eb18e20817400f2be4bbf67b59639267fcc8d47 @ 2026-09-22 -->
 
 *2026-09-20. `sky-02me.5` ruled the empty grid "not a listings fault" on 16 Sep, and that ruling was
 sound reasoning on the evidence available — but it was made before this project could deliver a
@@ -8280,3 +8068,51 @@ That is a clean negative and it narrows the search sharply: six iterations of fo
 instructions each are doing something, and none of it reaches the screen. The next measurement is
 what the body's work is FOR — whether it issues any draw at all, which is a question for the OSD and
 blitter writes during the draw, with a screen that does draw rows as the control.
+
+### The six rows are computed and never drawn, measured to the digit
+
+Finding where a pixel comes from took three attempts and the first two were assumptions:
+
+- the **blitter's MMIO window** at `0xB0006000` is written **zero** times during a draw that
+  visibly puts a header, a date, a clock and half-hour columns on screen;
+- the **bitmap the display-list descriptor names** — 720x576 at 8bpp, physical `0x00584048` — is
+  written **zero** times as well.
+
+The CPU paints through neither, and each zero would have read as a finding about the firmware. Both
+were caught by the same subject assertion: *a screen that demonstrably draws cannot have drawn
+through a surface nothing wrote to.*
+
+So the surface was found by asking the box. Histogramming every DRAM write by page while the
+**ten-entry TV GUIDE menu** draws — ten rows of text, visible in its own artefact — gives one
+unmistakable answer:
+
+    page 801D6000  74412 writes     <- row-building scratch
+    page 8055C000  36152 writes     <- |
+    page 8055D000  23860 writes     <- | THE DRAWING SURFACE, four contiguous pages
+    page 8055E000  13227 writes     <- |
+    page 8055F000  11664 writes     <- |
+
+The box paints off-screen into `0x8055C000`..`0x8055FFFF` and the descriptor's bitmap is presented
+some other way. Nothing else in the box is written remotely like that.
+
+**And now the ALL CHANNELS grid, same screen, same route, the only difference being the transport
+state already known to turn one loop iteration into six:**
+
+| drawing surface page | transport ready (six rows) | transport at 4 (one) |
+|---|---|---|
+| `8055C000` | 42062 | 42062 |
+| `8055D000` | 38914 | 38914 |
+| `8055E000` | 26893 | 26893 |
+| `8055F000` | 20192 | 20192 |
+
+**Identical to the digit.** Six iterations of four thousand instructions each write **not one extra
+pixel**.
+
+So the rows are not drawn off-screen, not clipped, and not painted in the background colour — they
+are **never drawn at all**. They are not discarded either: the ready run writes 737 more words than
+the control, +1563 of them on the row scratch at `0x801D6000`, +96 on `0x802B2000` (the transport
+object's own page) and +12 on `0x802CE000` (the structure its `+16` points at). The body computes a
+row, records it, and stops short of the screen.
+
+> The second refusal is between computing a row and drawing it. Looking at bitmaps, colours or
+> geometry is looking in the wrong place.

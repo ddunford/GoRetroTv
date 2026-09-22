@@ -6508,6 +6508,55 @@ anything at all. That is the measured answer to "should we just broadcast everyt
 nowhere for most of it to go, and for the grid specifically the box has been asked directly and
 wants nothing more.
 
+#### THE ROW COUNT IS NOT IN DRAM -- a clean negative from two working list screens
+
+The open question is `gort-qxl.2`'s: does the row loop RUN over an empty list, or never run? Those
+want opposite fixes and produce the same blank screen, and no amount of watching the grid alone
+separates them. **But this box draws two OTHER list screens of different lengths** -- the BOX OFFICE
+menu has six entries and the TV GUIDE menu has ten -- so the row count is not something to guess at:
+it must read six while one draws and ten while the other does.
+
+**No address does.** Strictly (six on one, ten on the other, and neither number on the opposite
+screen) there are none at all; loosening it to "saw six here and ten there" leaves eight, and all
+eight are stack or accumulator noise on a task's own page. The only things that genuinely track a
+count are two widget counters on the grid's own page, and on the grid they run `0..7` while the
+menus run `4..10` and `10..17` -- so **the grid does build widgets, it just builds no rows.**
+
+The likeliest reading is the dull one and it is stated rather than worked around: a count held in a
+REGISTER for the life of a loop is invisible to a read watch. This instrument cannot answer
+`gort-qxl.2`, and saying so is the result.
+
+#### AND THE BOX IS TELLING US WHY, IN ITS OWN WORDS
+
+`No satellite signal is being received` is not a special case in the firmware. It is one entry in a
+message table in flash at `0xAC93F`, and its neighbours name the family it belongs to:
+
+    ...space left on your viewing card | Enter your PIN to confirm | FOR YOUR INFORMATION
+    No satellite signal is being received | There is a technical fault with this channel | Please try later
+
+**Those are CHANNEL-level errors** -- what the box says when it cannot present the service it is
+tuned to. And this port gives it no way to present one:
+
+- **`Locked()` on the demodulator model is dead code.** Nothing in the tree calls it, so the fixed
+  "the front end stays locked" is never communicated to the guest at all.
+- **The demux exposes no sync or lock status** -- only filter-completion bits and enables. There is
+  no register on which "a stream is arriving" could be read.
+- **The demodulator answers ZERO to every register the box actually reads.** The model has specific
+  measured values at 11, 34, 74, 75, 78 and 92, but the cold boot reads 0, 1, 2, 3, 4, 5, 14 and
+  1025, every one of which falls to the default of zero.
+- **And there is no transport stream at all.** Sections are pushed straight into the demux at the
+  section layer; the 188-byte packet path (`Demux.PushTransport`) exists and nothing in the product
+  uses it. No PAT, no PMT, no PES, no video.
+
+So the box has tuned to a service, has never seen a transport stream carrying it, and says so. **On
+its own terms it is right**, and that is the opposite of a bug to be suppressed.
+
+**WHAT THIS DOES NOT ESTABLISH**, and the temptation to write it down as though it did should be
+resisted: that the missing signal is why the grid draws no rows. The now-and-next banner shows real
+programmes on the same box at the same time with the same message on screen, so "no signal" plainly
+does not stop listings being drawn everywhere. It is a coherent theory with the evidence pointing at
+it, not a measurement, and the way to settle it is to send a transport stream and look.
+
 **What is NOT established**, and is the open question: where the grid gets its channel list, and why
 it is empty. The count is not the gate -- the oracle's grid knew twelve channels and drew none
 either, so a list of the right length would not have helped.

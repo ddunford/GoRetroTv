@@ -8525,3 +8525,57 @@ project's own rule warns about: *where both are wrong in the same way they agree
 SDT vector is kept and `TestTheSDTDivergesByExactlyTheSpecifier` splices the six bytes into it,
 widens both length fields and recomputes the CRC, and requires the result to be byte-for-byte what
 this port transmits. Anything else that ever drifts from the oracle fails that test.
+
+### The second condition: a mask the channel records cannot satisfy
+
+With the specifier transmitted the filter callback accepts every row, and the decompiled enumeration
+shows acceptance is only half of what a channel needs:
+
+    LAB_800a4d4a:
+        if ((local_60 == 0) &&                                the filter accepted it
+           ((*(uint *)(record + 0xc) & local_38) != 0))       AND this mask test passes
+        {
+          *local_68 = param_2;      report this channel
+          iVar2 = in_zero;          status 0
+          goto LAB_800a4dde;        and stop searching
+        }
+
+**Measured, both halves:**
+
+    the mask the grid passes: 00000010          (bit 4)
+    Sky One   101  record 802A7BEC  word 00000000  & 00000010 = 0
+    Sky Soap  121  record 802A7C04  word 00000000  & 00000010 = 0
+    Sky Travel 251 record 802A7C1C  word 00000000  & 00000010 = 0
+    Sky Movies 301 record 802A7C34  word 00000000  & 00000010 = 0
+    Sky Sports 401 record 802A7C4C  word 00000000  & 00000010 = 0
+    Sky News  501  record 802A7C64  word 00000000  & 00000010 = 0
+
+**Not one channel can ever be reported.** The filter now accepts them all and then every one fails
+this. This is the ALL CHANNELS grid's remaining blocker, stated as one bit.
+
+**Note this is the TWENTY-FOUR byte record, not the eighteen-byte line-up record**, so the `0xB1`
+entry's documented mapping (`Kind` → `record[12]`, `Flags` → `record[13..16]`) does NOT carry across
+and assuming it would be exactly the plausible reasoning that has been wrong here before.
+
+Watching the box build the records during acquisition gives the field map and the writer of each:
+
+    +0x04  by 800A5866   values 03330002, 000000AA
+    +0x08  by 800A34BC   values 00000064 00000069 00000068 00000067   the service ids
+    +0x0C  by 800A34A2   values FFFFFFFF, 00000000                    THE MASKED WORD
+    +0x10  by 800A34AE   values 00000065 00000079 000000FB            the channel numbers
+    +0x14  by 800A3598   values 00000000, 00000006                    the reference
+
+So one instruction fills it, `0x800A34A2`, inside the record builder `FUN_800a332c`, whose
+decompilation says plainly `*(undefined4 *)(records + param_3 + 0xc) = *param_2`.
+
+**AND HERE THE READING AND THE MEASUREMENT DISAGREE, WHICH IS RECORDED RATHER THAN RESOLVED BY
+PREFERENCE.** Dumping `a1` at the builder's entry shows `param_2[0] = 0x03330002` — but the measured
+writes put `0x03330002` at `+0x04` and **zero** at `+0x0C`. All six calls also show byte-identical
+structs from one reused buffer at `0x80175F14`, carrying service id 100 every time, which cannot
+describe six different channels. So either the decompiler's indexing of that struct is not the
+machine's, or the dump is taken at the wrong moment.
+
+> **What fills `record+0x0C` is therefore NOT established.** The mask is `0x10`, the word is zero,
+> the writer is `0x800A34A2` — and the source of its value is the next thing to measure, not to
+> infer. Watching the write itself and capturing the register it comes from is the measurement that
+> settles it.

@@ -1,5 +1,7 @@
 # The oracle's boot gate — what it measured, and what a replacement must do
 
+<!-- anchor: none - title section; each part below declares its own subject -->
+
 `tools/check-digibox-boot.mjs` was the predecessor's boot gate: a Playwright harness that drove
 `digibox-boot.html` in a browser and asserted the real firmware still booted, took a key and
 accepted a section. **It was retired in this repository rather than re-pointed** (gort-6ar.23); the
@@ -13,6 +15,8 @@ a Go test in `internal/oracle`, runs in CI on every push, and is described under
 ---
 
 ## Why it existed
+
+<!-- anchor: none - history of a retired gate -->
 
 A hardware model does not fail with a stack trace. It fails by running for ever doing something
 plausible. Twice in one session a change that looked inert stopped the boot, and was found only by
@@ -32,6 +36,9 @@ does not.*
 
 ## What it asserted
 
+<!-- anchor: internal/oracle/page.go -->
+<!-- fingerprint: sha256:7dfbe35e54b09849da78f1229d42d18c8dbd756359be1d7fe786ec8d8e264063 @ 2026-09-22 -->
+
 Each is a different layer that has actually broken.
 
 1. The boot completes — 42 Nucleus tasks, the full application.
@@ -46,6 +53,9 @@ Plus two structural checks: no uncaught page errors, and every `window.__x()` th
 defined by it.
 
 ## The measured constants
+
+<!-- anchor: internal/machine/handoff.go -->
+<!-- fingerprint: sha256:18d8f107c2f39840bdf6a9be6643f46e3177396a0630d1be9a2355a497bf6f69 @ 2026-09-22 -->
 
 These were measured, not chosen. A replacement that picks different numbers is measuring a different
 machine.
@@ -70,6 +80,8 @@ figure to three significant figures. **A single ceiling would either miss a regr
 or cry wolf on every fresh profile**, so the gate had to know which boot it was watching.
 
 ## The traps it fell into, and how each was fixed
+
+<!-- anchor: none - history of a retired gate -->
 
 These are the expensive part of the record. Every one produced a confident wrong answer first.
 
@@ -103,11 +115,16 @@ These are the expensive part of the record. Every one produced a confident wrong
 
 ## Proving it had teeth
 
+<!-- anchor: none - history of a retired gate -->
+
 `--self-test` aimed a section push at a filter the firmware had **not** armed, which must be refused,
 and required assertion 5 to go red. The run was correct when the check *failed*. A gate nobody has
 watched fail is decoration, and this one said so in its own header.
 
 ## What survived
+
+<!-- anchor: internal/oracle/page.go -->
+<!-- fingerprint: sha256:7dfbe35e54b09849da78f1229d42d18c8dbd756359be1d7fe786ec8d8e264063 @ 2026-09-22 -->
 
 The structural symbol check needed no browser, so it was ported rather than retired. It lives in
 `internal/oracle` and runs under `go test` in CI.
@@ -126,6 +143,8 @@ Two properties carried over deliberately:
   it reports one with no faults.
 
 ## Why it was retired here rather than re-pointed
+
+<!-- anchor: none - history of a retired gate -->
 
 Three things were broken, and fixing them honestly meant building other tasks' deliverables:
 
@@ -148,6 +167,8 @@ which is its own evidence of how long it had been unmaintained.
 
 ## Three assets this repository does not have
 
+<!-- anchor: none - states what is absent; nothing to bind -->
+
 `reference/digibox-boot.html` references `digibox/sky-huffman.js`, `digibox/listings.json` and
 `digibox/skyuk.dict`. **None of them is present here.** They are harmless to the boot and fatal to a
 gate: anything that keys on console errors — as the retired gate's "no uncaught page errors" check
@@ -161,6 +182,8 @@ mostly about `sky-huffman.js`.
 
 ## The recipe that is known to work
 
+<!-- anchor: none - history of a retired gate -->
+
 Proved while adding the checkpoint emitter (TASK-1.9), so it does not need rediscovering: serve
 `reference/` **together with the two `.bin` images** on a private loopback port and drive it with the
 plugin Playwright MCP, with `?si=0` on the URL. The Node `playwright` package is not resolvable in
@@ -173,6 +196,9 @@ assert on, and it is **not** established with the broadcast on. Do not build a g
 a broadcasting box.
 
 ## What a replacement must do
+
+<!-- anchor: internal/platform/statehash/statehash.go -->
+<!-- fingerprint: sha256:56a1a14c8814d6538da3d7e421ec5397f8ecd6544e2432b842fc694302c8ef39 @ 2026-09-22 -->
 
 For whoever builds the oracle harness (TASK-1.9's checkpoint emitter needs driving, and TASK-1.11
 needs a boot gate):

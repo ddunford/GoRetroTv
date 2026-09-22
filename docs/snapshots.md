@@ -1,5 +1,9 @@
 # Local machine snapshots
 
+<!-- anchor: internal/machine/snapshot.go -->
+<!-- anchor: internal/platform/snapcodec/snapcodec.go -->
+<!-- fingerprint: sha256:41dc34af7d8ec724a2726cbfea62ad92558dee4301c0a5e965b5668e69c5bb0a @ 2026-09-22 -->
+
 Snapshots contain the full 32 MB RAM and both firmware flash images. They stay in
 `snapshots/`, which is gitignored, and the control script makes the directory private (`0700`)
 and each image private (`0600`). Do not copy an image into a repository or a public artifact.
@@ -26,6 +30,9 @@ before constructing the bus. A mismatched or incomplete snapshot is refused rath
 partially.
 
 ## Post-acquisition checkpoint
+
+<!-- anchor: internal/machine/snapshot.go -->
+<!-- fingerprint: sha256:66e62c1ac9d2f1569dee92835ed1bb10413cda9b5e05853c1b865a1c2b258e8e @ 2026-09-22 -->
 
 The private `post-acquisition` image is a **warm**, pressable machine at instruction
 1,100,000,000. Its EEPROM came from a real 470M cold boot (SHA-256
@@ -62,6 +69,9 @@ those child devices; the old `post-tdt` and `si-registered` files were removed f
 the named library and retained only in private `.artifacts/` for diagnosis.
 
 ## Record and replay inputs
+
+<!-- anchor: internal/platform/statehash/statehash.go -->
+<!-- fingerprint: sha256:56a1a14c8814d6538da3d7e421ec5397f8ecd6544e2432b842fc694302c8ef39 @ 2026-09-22 -->
 
 `firmwaretrace` can record host inputs at absolute retired-instruction counts and
 replay them from the same initial snapshot. A recording contains a SHA-256 digest

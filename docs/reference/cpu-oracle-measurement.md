@@ -1,5 +1,9 @@
 # Phase 2 CPU oracle measurement
 
+<!-- anchor: internal/cpu/core.go -->
+<!-- anchor: internal/platform/statehash/statehash.go -->
+<!-- fingerprint: sha256:99d9e6433d279311e101fe0036bd8165827cbae357175b3157861678b1759fb2 @ 2026-09-22 -->
+
 The Go runner `go run ./cmd/firmwaretrace` loads the three images through the verified firmware
 loader, starts at `0xBFC00000`, and emits the shared `statehash` format. Its `-interval` and
 `-steps` flags select the checkpoint window. The browser oracle was served unchanged from

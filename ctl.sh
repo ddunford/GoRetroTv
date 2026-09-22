@@ -291,11 +291,76 @@ have drifted apart -- and a generator that rewrote it would have said nothing.
     ok "AGENTS.md -> CLAUDE.md: Codex and Claude read the same instructions"
 }
 
+cmd_docs_serve() {
+    # A viewer for the docs tree, so they can be read in a browser with working search and
+    # navigation rather than as raw markdown. It rebuilds the page when the docs have moved, so
+    # editing a file and refreshing is the whole loop -- no watcher, no restart.
+    #
+    # LOOPBACK IS THE DEFAULT AND --lan IS A DELIBERATE EXCEPTION TO ARCH-DEV-1. The recorded
+    # invariant is "developer surfaces bind only to loopback" (plan/module-decisions.md ->
+    # Deployment and access), and --lan publishes this one to the local network so it can be read
+    # from another machine. That is a decision, not a convenience: it is opt-in, it is never
+    # implied by anything else, and what it exposes is this repository's documentation -- which is
+    # not secret, but does describe the box in detail.
+    #
+    # It binds the machine's own LAN address, not 0.0.0.0. A wildcard bind would also publish the
+    # viewer on every container bridge and VPN interface this host happens to have, which on a
+    # docker host is dozens of networks nobody meant to serve it on.
+    local port=8098 lan=""
+    while (( $# )); do
+        case "$1" in
+            --lan) lan="--lan" ;;
+            *)  [[ "$1" =~ ^[0-9]+$ ]] || die "unexpected argument '$1'  (usage: ./ctl.sh docs-serve [port] [--lan])"
+                port="$1" ;;
+        esac
+        shift
+    done
+    command -v python3 >/dev/null 2>&1 \
+        || die "python3 not found, and the docs viewer needs it (scripts/docs-site.py)"
+    # shellcheck disable=SC2086
+    exec python3 scripts/docs-site.py serve --docs docs --title "GoRetroTV" --port "$port" $lan
+}
+
+cmd_docs() {
+    # Every documentation section names the code it describes, and carries a fingerprint taken the
+    # day somebody verified it against that code. This is the check that turns those notes into
+    # something that can FAIL. Without it the failure is silent and one-sided: the code moves, the
+    # section goes on describing what used to be there, and nothing anywhere disagrees. That has
+    # become a correctness problem rather than a tidy-desk one -- most of what reads these files now
+    # is an agent, which reproduces a stale claim as code with full confidence and flags nothing.
+    #
+    # --strict also fails on a section that makes a claim about code and names none. That is the
+    # vacuity guard, and it is the half that matters over time: without it a doc tree drifts back to
+    # unanchored one new section at a time while the gate keeps reporting green.
+    command -v python3 >/dev/null 2>&1 \
+        || die "python3 not found, and the docs gate needs it (scripts/docs-anchors.py)"
+
+    python3 scripts/docs-anchors.py --repo . --docs docs check --strict || die "the docs and the code they describe have diverged.
+  Re-read each section listed above against its anchor, correct whatever is no longer true, then:
+    python3 scripts/docs-anchors.py --repo . --docs docs stamp --section '<heading>'
+  A section that makes no claim about code says so instead, with a reason:
+    <!-- anchor: none - measured firmware evidence, not a claim about this repo's code -->
+  Stamping without re-reading is the one move that breaks this: a fingerprint nobody earned reads
+  as verified for ever, and takes the section out of the queue permanently."
+
+    # site.html is generated and gitignored, so a clone legitimately has none. Check it only when it
+    # is there -- and then insist it matches, because a docs site built from older docs is exactly
+    # the confident-looking wrong answer this whole mechanism exists to prevent.
+    if [[ -f docs/site.html ]]; then
+        python3 scripts/docs-site.py check --docs docs >/dev/null \
+            || die "docs/site.html was generated from different docs than the tree now holds.
+  fix: python3 scripts/docs-site.py build --docs docs --title 'GoRetroTV'"
+    fi
+
+    ok "docs anchored to the code they describe, and every section accounted for"
+}
+
 cmd_lint() {
     # Folded in so the hook assertion runs wherever checks run, rather than depending on somebody
     # remembering a verb that only matters when it fails.
     cmd_hooks
     cmd_agentsdoc
+    cmd_docs
     make vet
     # `go install` puts it in GOPATH/bin, which is not on PATH in a plain non-login shell. Looking
     # there before giving up is the difference between running the linters and reporting a pass
@@ -364,9 +429,12 @@ Building and checking
   ablate         Remove each rule subject in turn and check its coverage guard
   authorise-rules <reason>  Record why staged architecture controls changed
   rule-guard-selftest    Prove the commit guard catches governed edits
-  lint           Hook check, go vet and golangci-lint (fails if the linter is absent)
+  lint           Hook, AGENTS.md, docs-anchor and go vet checks, then golangci-lint
   hooks          Assert the git hooks are armed and delegating to beads
   agents         Assert AGENTS.md still symlinks to CLAUDE.md (Codex and Claude read one file)
+  docs           Assert every doc section is anchored to the code it describes, and current
+  docs-serve [port] [--lan]  Read the docs in a browser (default 8098, loopback; --lan also
+                 serves this machine's LAN address so other machines can reach it)
   fmt            Format the tree
   vuln           Check against the Go vulnerability database
   clean          Remove bin/ and stop the stack (asks first)
@@ -411,6 +479,8 @@ main() {
         lint)    cmd_lint "$@" ;;
         hooks)   cmd_hooks "$@" ;;
         agents)  cmd_agentsdoc "$@" ;;
+        docs)    cmd_docs "$@" ;;
+        docs-serve) cmd_docs_serve "$@" ;;
         fmt)     cmd_fmt "$@" ;;
         vuln)    cmd_vuln "$@" ;;
         clean)   cmd_clean "$@" ;;

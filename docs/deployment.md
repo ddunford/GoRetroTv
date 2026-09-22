@@ -1,5 +1,9 @@
 # Public demo deployment
 
+<!-- anchor: docker-compose.traefik.yml -->
+<!-- anchor: Dockerfile -->
+<!-- fingerprint: sha256:e3a537279acd1c3ee5e6c48e03462668f8efcb341dd3997be4c1abb74f5c352f @ 2026-09-22 -->
+
 The public route is hosted on the `*.demosrv.uk` origin described in the machine's private
 `~/.claude/local/traefik.md`. The base compose file remains a local loopback stack. The
 `docker-compose.traefik.yml` overlay joins the shared Traefik network, routes
@@ -8,6 +12,9 @@ binary are built into the image. The firmware and post-acquisition snapshot stay
 read-only mounts; neither is in the build context or published image.
 
 ## Start and verify
+
+<!-- anchor: ctl.sh -->
+<!-- fingerprint: sha256:2354998bdaf4f513fd9a6d494b1035e8336e6b66ef746f2d70b176f7a2b82d8e @ 2026-09-22 -->
 
 From the repository owner account, with the private firmware files and
 `snapshots/post-acquisition.snapshot` present:
@@ -35,6 +42,9 @@ briefly restarts the public container from the private snapshot first, so the Sk
 starts from a known screen; run it when a short interruption is acceptable.
 
 ## Check the public developer boundary
+
+<!-- anchor: internal/httpx/handlers/pprof.go -->
+<!-- fingerprint: sha256:79f8f30f869a16d87462217306c1a6a4ae939317eae1e8b73131d0df9c9e75ff @ 2026-09-22 -->
 
 Run these checks while the public stack is up. The live `/health` request is the positive control;
 each developer route must answer 404. `config-public` prints the merged configuration, including
@@ -75,6 +85,9 @@ The public overlay publishes no host port, and the runtime image contains only `
 `oraclecmp`, not the separate `firmwaretrace` executable that can start a GDB stub.
 
 ## Stop or roll back
+
+<!-- anchor: ctl.sh -->
+<!-- fingerprint: sha256:2354998bdaf4f513fd9a6d494b1035e8336e6b66ef746f2d70b176f7a2b82d8e @ 2026-09-22 -->
 
 `./ctl.sh down-public` removes the route and container while preserving the private files. To
 restore a previous release, check out that release and run `./ctl.sh up-public`; the firmware and

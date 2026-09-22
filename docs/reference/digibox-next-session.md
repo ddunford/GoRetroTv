@@ -1,5 +1,7 @@
 # Digibox emulator — continuation prompt
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 *Current as of 2026-09-16. Read this first, then `docs/reference/digibox-emulation.md`, where every
 claim here has its evidence.*
 
@@ -22,6 +24,8 @@ What follows replaces the whole "a line-up and a working interface cannot coexis
 was wrong.
 
 ## `sky-02me.18` ANSWERED: the box was busy, not refusing, and it recovers by itself
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 **Demonstrated end to end in a browser:** feed a NIT, wait, feed a BAT, watch the box say
 *"Rebuilding the channel list"* for 74-140 s, watch it return to *Ready* on its own, then press
@@ -49,6 +53,8 @@ implemented, measured and reverted) and every one of the eight earlier native-le
 
 ## `sky-02me.17` ANSWERED: the `0xA1` loop consumes exactly one tag, `0xB5`
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 All 256 tags swept with every pass reaching its last descriptor and both controls silent. The
 consumer at `0x800C6B42` compares against `0xB5` literally and extracts two big-endian u16 from
 `desc[2..3]` and `desc[4..5]`, then returns 1 -- which **ends the walk**, which is why the pass
@@ -61,6 +67,8 @@ computing `desc[1] / 9` -- **nine-byte entries**, the shape the BAT's `0xB1` use
 per-service records. That is what a programme list looks like. **`sky-02me.20`.**
 
 ## `sky-02me.21` IS DONE — the guide draws listings
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 *16 Sep 2026. Evidence: `digibox-emulation.md`, last three sections.*
 
@@ -117,6 +125,8 @@ slot layout at `0x80165048`. `sky-02me.17`, `.18`, `.20` and `.21` are closed.
 
 ## Instrument changes made this session
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 - **`__readWatch(lo, hi, {max})`** -- the cap is now the caller's to raise. **Default unchanged at
   4,000**, so no earlier probe's baseline moved. A `sky` press is 34,067 bytecode instructions and a
   `tv guide` press 40-50k, so the default keeps a tenth of one and a diff of two truncated openings
@@ -133,6 +143,8 @@ slot layout at `0x80165048`. `sky-02me.17`, `.18`, `.20` and `.21` are closed.
 
 ## Where it stands in one paragraph
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 **The box shows the Sky interface.** Load `https://retrotv.demosrv.uk/digibox-boot.html`, let it
 boot, press the handset button marked **sky** (raw `0x7D`), and the real Box Office menu appears --
 the TV GUIDE / BOX OFFICE / SERVICES / INTERACTIVE tab bar with icons, and six menu rows with
@@ -143,6 +155,8 @@ and look. Getting there took finding two application gates that made the box cle
 fiction that answers the gates after the RTOS is up (`sky-eluc.37`).
 
 ## The page is a Digibox now (`sky-02me.14`, done)
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 The framebuffer is the page: centred, at the raster's own aspect, with a Sky-shaped handset beside
 it and **every** instrument moved — not deleted — into an `Instruments` modal that opens in one
@@ -173,6 +187,8 @@ does; which way to resolve it is the owner's call) and **`.16`** (before the app
 the OSD the panel reads video RAM at a guessed bit depth and paints stripes).
 
 ## The acquisition ladder — table `0xA1` on PID `0x33`, and what the two header bytes are not
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 Feeding a real line-up makes the box ask for its own listings, and the chain is measured end to end
 (`docs/reference/digibox-emulation.md`; probes in `scripts/digibox-probes/`):
@@ -216,6 +232,8 @@ impression, not because a broadcast breaks anything.
 
 ## The older framing: what is missing is DATA, not UI
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 Every screen reached says *"Searching for listings"* or *"Further schedule information is not
 available"*. With the carousel running the box acquires cleanly — 79 sections, **0 refused**, NIT,
 SDT and BAT all accepted — and the guide **concludes** its search rather than waiting for ever.
@@ -229,6 +247,8 @@ neighbourhoods too, inside a region taking 42.8M), so that note does not describ
 open question is *which code consumes schedule events*; the method that worked transfers.
 
 ## What must not be re-derived, and what must not be moved
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 - **`skyGatesTick()` is a DECLARED FICTION, not a fix**, answering the two screen gates once the task
   list reaches 42. `__skyGates(false)` disables it. The races behind it are real and open:
@@ -251,6 +271,8 @@ open question is *which code consumes schedule events*; the method that worked t
   it: that fires before BGLOAD starts. See `sky-02me.14` in the emulation doc.
 
 ## Background: the ring, and what is supposed to enqueue
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 The window record is 100 bytes, array at `*0x80105E9C`, count at `*0x80106F24`, gate at
 `*0x80106F20`:
@@ -304,6 +326,8 @@ different lever.
 
 ## Retired — do not rebuild anything on these
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 - **The two families are not disjoint**, though the older reading was close. `(1,0x2F) (1,0x33)
   (1,0x37) (1,0x52) (1,0x56) (1,0x57) (1,0x75) (1,0xBB) (1,0xBC) (1,0xD5)` appear in both windows.
   The *pre-blit-only* set is real and its load-bearing member is `(1,0xD2)`.
@@ -321,6 +345,8 @@ different lever.
 - **Post-boot pokes cannot test boot-time state.**
 
 ## Tools and levers that exist
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 - `scripts/opentv-natives.py` — resolve any module-1 native to its firmware function, argument
   count and the natives it shares an implementation with. `--shims` emits the address list a
@@ -351,6 +377,8 @@ different lever.
   useful instrument built this session.
 
 ## Instrument warnings earned the hard way
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 - **WHEN A VARIANT OF A WORKING PROBE GOES QUIET, RE-RUN THE ORIGINAL BEFORE ADDING HYPOTHESES.**
   A hand-rolled variant of the `0xA1` probe reported *"copied and NOT parsed"* for its own
@@ -415,6 +443,8 @@ different lever.
 
 ## The channel line-up (`sky-eluc.12`): the descriptor is `0xB1`, behind specifier 2
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 Still not the blocker for the interface appearing — but the chain is now measured end to end, in
 four probe stages each carrying its own control. Evidence and the full listings:
 `docs/reference/digibox-emulation.md`; probes in `scripts/digibox-probes/`.
@@ -459,6 +489,8 @@ The regional keying still stands: `0x1001` England/Wales SD (the 1998 line-up), 
 
 ## Open issues
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
     sky-02me.21  P1   START HERE -- the box PARSES our title records; the guide will not draw
                       them. The 0xA1 path is a time LOOKUP writing to a stack local, so the rows
                       come from elsewhere. O-code trace a guide press; do not guess a fifth format
@@ -480,6 +512,8 @@ close reason. `sky-02me.18` is answered in `digibox-emulation.md` and retitled.
 
 ## House rules for this file's subject
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 - **EVERY FINDING LANDS IN THE DEMO PAGE.** From the owner, 15 Sep 2026: *"We should ALWAYS be
   updating the demo page!"* A finding is not finished when a probe proves it and this file records
   it — if it changes what the box can DO, it goes into `digibox-boot.html` in the same piece of
@@ -494,6 +528,8 @@ close reason. `sky-02me.18` is answered in `digibox-emulation.md` and retitled.
 
 ## Useful external references
 
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
+
 - Sky bouquet/region ids: <https://github.com/iptv-org/epg/issues/1133>
 - BAT structure worked example: <https://dvbsnoop.sourceforge.net/examples/example-bat.html>
 - A recreation of the classic Sky EPG, useful as a visual reference if we ever build the UI
@@ -504,6 +540,8 @@ close reason. `sky-02me.18` is answered in `digibox-emulation.md` and retitled.
 ---
 
 # PROJECT MOVED — this file is the predecessor's handoff
+
+<!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
 *16 September 2026.* The emulator is now its own project in Go, at
 `github.com/ddunford/GoRetroTv` (`/opt/workspaces/development/goretrotv.demosrv.uk`). The browser

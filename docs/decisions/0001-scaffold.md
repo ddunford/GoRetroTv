@@ -5,6 +5,8 @@
 
 ## Context
 
+<!-- anchor: none - the decision's rationale; the record is plan/module-decisions.md -->
+
 `plan/phase-1-foundation.md` TASK-1.1 calls for the module layout, `ctl.sh`, Dockerfile,
 docker-compose and Makefile. Two constraints from outside the plan shaped the result.
 
@@ -34,6 +36,10 @@ been sufficient.
 
 ## Decision
 
+<!-- anchor: go.mod -->
+<!-- anchor: ctl.sh -->
+<!-- fingerprint: sha256:3c32887eea1f4472d96b89ee894a64102528f6cff65a4227d6c77f4576dd1df1 @ 2026-09-22 -->
+
 **One module at the repository root** (`github.com/ddunford/goretrotv`, lowercased from the git
 remote), with binaries under `cmd/` sharing `internal/`. The `cmd/` shape rather than the root shape
 because the phase already names a second binary: `oraclecmp` (TASK-1.10) shares the checkpoint
@@ -55,6 +61,8 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 ## Consequences
 
+<!-- anchor: none - consequences of a decision, not a claim about a file -->
+
 - The foundation built with nothing but a Go toolchain. The phase 5 transport decision below adds
   one dependency; the emulator core still imports only the standard library.
 - `govulncheck` remains required for the standard library and the approved transport module.
@@ -66,6 +74,10 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
   choice on its own merits rather than a toolchain constraint.
 
 ## Phase 5 transport decision (2026-09-17)
+
+<!-- anchor: internal/wire/wire.go -->
+<!-- anchor: internal/web/transport.go -->
+<!-- fingerprint: sha256:18124d1bf4d96aeb2c9aa367f1f55df119f8b05836495dc2d360eeaab427d04c @ 2026-09-22 -->
 
 The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
 Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt
@@ -80,6 +92,8 @@ WebSocket code enters the emulator core.
 updated conformance rule. Last web-verified: 2026-09.
 
 ## Alternatives rejected
+
+<!-- anchor: none - rejected options; nothing in the tree to bind -->
 
 - **Walk every dependency back to a Go 1.22-compatible version.** Rejected: it buys router sugar and
   assertion helpers this project's own conventions say it does not want, and the walk-back has to be

@@ -5,11 +5,15 @@ description: Working on the Pace 2500N Digibox emulator in frontend/public/digib
 
 # The Digibox emulator
 
+<!-- anchor: none - title section; each part below declares its own subject -->
+
 `frontend/public/digibox-boot.html` runs a Pace 2500N's real flash image in the browser.
 **The established facts live in `docs/reference/digibox-emulation.md`** and that file is the
 record; this is the working knowledge that keeps getting re-derived.
 
 ## The standing instruction: EVERY FINDING LANDS IN THE DEMO PAGE
+
+<!-- anchor: none - working practice for this domain, not a claim about code -->
 
 **From the owner, 15 Sep 2026: "We should ALWAYS be updating the demo page!"** -- and it was said
 after the probes had spent a day learning how to give this box a channel line-up while the page a
@@ -33,6 +37,8 @@ And then `./ctl.sh digibox`, and then LOOK at it.
 
 ## The first rule, because it is the whole genre
 
+<!-- anchor: none - working practice for this domain, not a claim about code -->
+
 **A hardware model does not fail with a stack trace. It fails by running for ever doing
 something plausible.** A wrong register model is a boot that stops at 20 tasks; a wrong
 constant is a link that silently runs at sixty baud; a stale read is a confident finding
@@ -45,6 +51,11 @@ digibox:self-test` proves it can still go red. A cold boot takes ~96s, a warm on
 ---
 
 ## Part 1 — The CPU
+
+<!-- anchor: internal/cpu/core.go -->
+<!-- anchor: internal/cpu/mips16.go -->
+<!-- anchor: internal/cpu/mips32.go -->
+<!-- fingerprint: sha256:98ab19062f94d7b916a96a1d193864720649c543abf56d6d91a26f844669d5c3 @ 2026-09-22 -->
 
 **NEC VR4111, big-endian, mixed MIPS32 and MIPS16 reached through `JALX`.** Reference: NEC
 VR4111 User's Manual, µPD30111, U13137EJ2V0UM00 2nd ed., April 1998, 775pp —
@@ -123,6 +134,9 @@ by `bteqz` is "branch if v0 == 0".
 
 ## Part 2 — This firmware's conventions
 
+<!-- anchor: internal/bus/device.go -->
+<!-- fingerprint: sha256:1f7dbb560757532aab32daed9468bd55c735b7bcffe239a08aed885b7d7966a0 @ 2026-09-22 -->
+
 **Two programs.** The bootloader is `0x0-0x1FFFF` with its own Nucleus and ONE task; the
 application is a separate image at flash `0x20000` with entry `0xBFC2048C`. `FETask`,
 `SMHKTask`, `SMNTask`, `SMTTask`, `SCTask`, `EVTTask` are the APPLICATION's. Boot the
@@ -151,6 +165,9 @@ the call chain. It is how the key deadlock was found in one step after a day of 
 
 ## Part 3 — The page's debug API
 
+<!-- anchor: internal/oracle/page.go -->
+<!-- fingerprint: sha256:7dfbe35e54b09849da78f1229d42d18c8dbd756359be1d7fe786ec8d8e264063 @ 2026-09-22 -->
+
 Always `__profile(true)` before anything that reads PC hits or breaks.
 
 | Call | What it gives |
@@ -175,6 +192,8 @@ Always `__profile(true)` before anything that reads PC hits or breaks.
 ---
 
 ## Part 3b — Reading the firmware: Ghidra
+
+<!-- anchor: none - external tooling procedure -->
 
 `./ctl.sh decompile 0x8005141C` gives the disassembly and the decompiled C of any address;
 `./ctl.sh ghidra:import` rebuilds the project when it is missing or a new MIPS16 seed is added.
@@ -204,6 +223,9 @@ The project lives in gitignored `ghidra/` — **not** `.ghidra/`, because Ghidra
 component starting with a dot, which costs one confusing error before you notice.
 
 ## Part 4 — The measurement discipline
+
+<!-- anchor: internal/platform/instrument/instrument.go -->
+<!-- fingerprint: sha256:af00007f115e309f9e87b5febf843a476a726e1d7ea2894325e16fd6230cdc03 @ 2026-09-22 -->
 
 Every one of these cost real time here. They are ordered by how often they recur.
 
@@ -263,6 +285,10 @@ answer more than once.
 ---
 
 ## Part 5 — Feeding it a stream
+
+<!-- anchor: internal/broadcast/sections.go -->
+<!-- anchor: internal/dvb/crc.go -->
+<!-- fingerprint: sha256:2af19c6bbed995048ca10fc536f46c5a16fb9b89d6ec5d6e0e67d28ee81840d8 @ 2026-09-22 -->
 
 The box asks for exactly three PIDs and says so: `__dispState().pids` on a booted machine
 gives **filter 22 → PID 0x0014 (TDT, the clock), 23 → 0x0011 (SDT, the line-up), 24 → 0x0010

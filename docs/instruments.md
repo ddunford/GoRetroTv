@@ -1,5 +1,9 @@
 # Firmware instruments
 
+<!-- anchor: internal/instruments/instruments.go -->
+<!-- anchor: internal/platform/instrument/instrument.go -->
+<!-- fingerprint: sha256:2cfe9906589cbedf60ef3cdef1dcd8d5cfa795f311965b441bf988590dc52279 @ 2026-09-22 -->
+
 `bin/firmwaretrace` can inspect a restored machine without changing guest state. Build it with `./ctl.sh build`. The `-steps` value is an **absolute instruction count**: for `snapshots/post-acquisition.snapshot` at 1,100,000,000 instructions, `-steps 1120000000` observes the next 20 million.
 
 The following command exercises each collector during a real Sky-key run. Instrument output goes to stderr; checkpoint output goes to stdout. The `-instrument-max` cap limits detailed records while totals keep counting.

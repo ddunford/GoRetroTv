@@ -1,6 +1,8 @@
 
 ### Never `git reset --hard` to undo a test commit
 
+<!-- anchor: none - a working-practice lesson; its subject is how we work, not a file -->
+
 Undoing a throwaway commit with `git reset --hard HEAD~1` discards every *uncommitted* tracked
 modification in the tree as well as the commit. I used it to clean up a two-line control commit and
 destroyed forty minutes of unstaged work across seven files — registry rows, two harness checks, the
@@ -15,6 +17,8 @@ something, stage the files and run the hook directly (`.githooks/pre-commit`) an
 
 ### Never background a compound command that contains a git commit
 
+<!-- anchor: none - a working-practice lesson; its subject is how we work, not a file -->
+
 A `git checkout -b … && mutate && commit && push` chain hit the 120s tool timeout at beads'
 post-checkout hook and was moved to the background. I assumed it had stalled at the checkout, redid
 the work by hand, returned to master — and then the background job woke up and ran its remaining
@@ -28,6 +32,8 @@ the work again by hand — a half-finished chain is not a stalled one.
 
 ### Verify with an instrument before reporting, and never pipe its detail away
 
+<!-- anchor: none - a working-practice lesson; its subject is how we work, not a file -->
+
 I ran every conformance instrument over the whole estate for the first time, piped the stop-gate
 through `tail -2` to keep the output short, got `STOP-GATE FAILED`, and had already written the
 summary calling the estate green. The detail I had discarded was the only thing that said which rule
@@ -39,6 +45,8 @@ instruments exist, run them TOGETHER before believing any of them: the failure t
 two instruments disagreeing with each other, which neither could show alone.
 
 ### On a demo, a revert that buries an unexplained bug is worse than the bug
+
+<!-- anchor: none - a working-practice lesson; its subject is how we work, not a file -->
 
 I broke the live demo, guessed at the cause from a harness symptom ("the box never settled"),
 invented a scaling story to fit it, and started reverting to the last known-good build. The owner
@@ -55,6 +63,8 @@ ready, not to make a symptom go away. And before proposing a revert at all, read
 machine recorded — not the one the harness reported.
 
 ### Verify against the URL the person is looking at, not the one your tooling defaults to
+
+<!-- anchor: none - a working-practice lesson; its subject is how we work, not a file -->
 
 Three times in a session I reported "verified end to end" from `localhost:5173` while the owner had
 the demo host open. Every claim was true of the dev server and false of the thing with a URL.

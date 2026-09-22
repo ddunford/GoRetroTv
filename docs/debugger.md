@@ -1,5 +1,8 @@
 # Firmware debugger
 
+<!-- anchor: internal/gdbstub/server.go -->
+<!-- fingerprint: sha256:521a61054802db240d86ffb8bf1ab58fa0ae68823c3a412dceb77b7a47a9d6ab @ 2026-09-22 -->
+
 The diagnostic runner exposes one all-stop GDB Remote Serial Protocol session.
 It drives the same single-threaded instruction advance as a normal firmware run.
 The listener accepts only literal loopback addresses; it refuses `0.0.0.0` and

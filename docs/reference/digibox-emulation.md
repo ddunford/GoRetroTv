@@ -6362,6 +6362,79 @@ nothing from a count it has.
 places a row loop would start. Disassemble outward from those and find the loop whose body never
 runs, the way the drawing gate at `0x9FC4DB3F` was found.
 
+#### THE GRID, RE-TAKEN ON THIS PORT -- and TASK-7.1's premise does not survive it
+
+*2026-09-22. Everything above about the grid was measured on the BROWSER ORACLE, whose instruments
+report o-code execution in the oracle's own address space. None of it had been checked against this
+port. Four things now have been, all by reading, nothing written into the guest.*
+
+**THE BOX HOLDS SIX SERVICES, NOT TWELVE.** Located by content rather than by address -- the
+18-byte record has its service id at `+4` and its channel number at `+10`, and both are values the
+fixture chose:
+
+    guest 802B5340  service 100  channel 101  Sky One
+    guest 802B5352  service 101  channel 501  Sky News
+    guest 802B5364  service 102  channel 401  Sky Sports 1
+    guest 802B5376  service 103  channel 301  Sky Movies
+    guest 802B5388  service 104  channel 251  Sky Travel
+    guest 802B539A  service 105  channel 121  Sky Soap
+
+Six records at an 18-byte stride, one per announced service, the stride taken from the commonest
+gap rather than assumed. **So "the grid counts TWELVE channels" is the oracle's number in the
+oracle's address space and says nothing about this port** -- and the hypothesis it suggested, that a
+grid iterating twelve entries against a store of six would draw a header and no rows, is dead. The
+line-up agrees with the broadcast exactly.
+
+**THE GRID NEVER READS THAT LINE-UP.** A read watch over the records during the draw: **zero reads
+in 488,551**. Independently confirmed by a page histogram in which the records' own page does not
+appear at all. The oracle found the same thing, so this is inherited behaviour rather than a
+difference: the array is the acquisition-time structure and the grid asks something else.
+
+**AND IT NEVER HANDLES OUR CHANNELS AT ALL.** Watching for any read anywhere in DRAM whose VALUE is
+one of the numbers the fixture chose, `501`, `401` and `301` are read **zero** times during the
+draw. So the grid is not filtering our channels out; it never has them.
+
+*The first version of that probe watched every identifier including the service ids 100..105, and
+came back with 195 "hits" whose top four were 2,532 reads of the number 101 from one instruction.
+Those are ordinary small integers a firmware holds for a hundred unrelated reasons -- a loop
+counter, not a channel. **A value carries information only where the firmware has no other reason to
+hold it**, and the probe is now restricted to identifiers above 250 for that reason.*
+
+**AND TASK-7.1'S FOUR ADDRESSES ARE NEITHER EXECUTED NOR READ.** A PC census already showed that
+none of `0x9FC75F2F`, `0x9FC75F7B`, `0x9FC762FD` or `0x9FC77D41` executes -- 6,488,065 instructions
+during the draw, every one in RAM. The obvious reconciliation was that the grid is interpreted
+o-code and **an interpreter fetches its bytecode as DATA**, so an address the oracle calls executed
+would appear here as a flash read. It was checked on that side too, and the answer is no: the draw
+reads flash 40,980 times across 50 pages and **not one of those four addresses is among them**.
+They belong to the oracle's instrumentation, not to anything this port does.
+
+#### WHERE THE GRID'S DATA ACTUALLY IS
+
+The unbiased version of the question -- a histogram of all 488,551 reads by 4 KB page, with the
+number of DISTINCT addresses touched in each, because a table being walked and a hot loop variable
+are indistinguishable in a read count and want opposite follow-ups:
+
+    guest 801D6000   131,995 reads over  478 addresses   a task stack
+    guest 80147000    89,929 reads over    3 addresses   a loop variable, not data
+    guest 80069000    31,027 reads over  120 addresses
+    guest 80107000    27,584 reads over   27 addresses   Nucleus scheduler data
+    guest 80494000    17,025 reads over  325 addresses   TABLE-SHAPED
+    guest 8045D000    10,752 reads over  512 addresses   TABLE-SHAPED -- a whole page walked
+    guest 9FC5D000     6,188 reads over  381 addresses   flash: the o-code being fetched
+
+**`0x8045D000` and `0x80494000` are where to look**, and `0x9FC5D000` is where the grid's o-code
+lives. That is the replacement for TASK-7.1's starting point, arrived at by measurement rather than
+inherited.
+
+**What is NOT established**, and is the open question: where the grid gets its channel list, and why
+it is empty. The count is not the gate -- the oracle's grid knew twelve channels and drew none
+either, so a list of the right length would not have helped.
+
+The instruments are `internal/multiplex/firmwaretests/lineupcount_firmware_test.go` and
+`gridreads_firmware_test.go`. Both assert their own subject: the first fails unless it finds every
+announced service, the second unless it proves it reached the grid rather than the menu and saw
+data reads at all.
+
 **And build a warm-boot path for the probes first.** Every run here pays a ~135 s cold boot plus a
 ~200 s channel-list rebuild before it can press anything, and the NVRAM persists in localStorage —
 a box that has already absorbed the line-up skips the rebuild entirely. Six minutes a run, most of

@@ -14,7 +14,17 @@ rule for this phase: **do not guess a format** — let the box name what it want
 
 ## Tasks (mirror — bd epic `gort-qxl` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-7.1` Find the grid's row loop: disassemble outward from the executed reads of `DS+0x02E20C` at `0x9FC75F7B` and `0x9FC762FD` — **not** the one at `0x9FC77D41`, which feeds `add -12; switch` and is a view selector rather than a channel count → `/go-engineer` [TC-7.1]
+- [ ] `TASK-7.1` **Premise corrected 2026-09-22 — the four flash addresses this task was written
+  around do not exist in this port's execution OR its data flow.** `0x9FC75F2F`, `0x9FC75F7B`,
+  `0x9FC762FD` and `0x9FC77D41` never execute (6,488,065 instructions during the draw, every one in
+  RAM) and are never read either — the grid is interpreted OpenTV o-code, so the reconciliation that
+  an interpreter fetches bytecode as DATA was tested too, and the draw's 40,980 flash reads across
+  50 pages include none of them. They are the browser oracle's instrumentation. **Find instead where
+  the grid gets its channel list**, starting from what it demonstrably walks: the table-shaped
+  regions `0x8045D000` (10,752 reads over 512 distinct addresses — a whole page) and `0x80494000`
+  (17,025 over 325), and the o-code itself at `0x9FC5D000` (6,188 over 381). Ruled out by
+  measurement and not to be re-run: the box holds six service records matching the broadcast, the
+  grid reads none of them, and it never handles our channel numbers at all → `/go-engineer` [TC-7.1]
 - [ ] `TASK-7.2` Determine whether the loop runs and draws nothing, or never runs. Different faults, same blank screen; the widget count per iteration separates them → `/go-engineer` [TC-7.1]
 - [ ] `TASK-7.3` **Premise corrected 2026-09-21 — do not "feed PID `0x52`".** The record already
   settles it: `0x52` is transient, opens in response to our own NIT and closes again, and is the
@@ -33,11 +43,11 @@ rule for this phase: **do not guess a format** — let the box name what it want
 - [ ] `TASK-7.6` Establish whether the firmware drives audio at all — a measurement, not an implementation task → `/go-engineer` [TC-7.5]
 - [ ] `TASK-7.7` Implement whatever 7.1–7.6 prove is needed; the shape cannot honestly be planned before they run → `/go-engineer` [TC-7.1, TC-7.2, TC-7.3]
 - [ ] `TASK-7.8` ⫘ Playwright: navigate sky → TV GUIDE → ALL CHANNELS and assert channels with programmes → `/qa-test-engineer` [TC-7.6]
-- [ ] `TASK-7.10` Establish how many services the grid is actually iterating, LIVE and in RAM. The record
-  has the box counting **twelve** channels and holding "all twelve services", while the demo schedule
-  names **six** — so the restored line-up and the broadcast line-up may disagree, which is a plausible
-  way to draw a header and no rows. Cheap, decisive, and it runs before any disassembly →
-  `/go-engineer` [TC-7.7]
+- [x] `TASK-7.10` **Answered 2026-09-22: SIX, matching the broadcast exactly.** The box's own
+  18-byte service records, found by content, are one per announced service — so the restored line-up
+  and the broadcast line-up do NOT disagree and the twelve-against-six hypothesis is dead. "Twelve"
+  is the oracle's number in the oracle's address space. The grid does not iterate them in any case:
+  zero reads of those records in 488,551 during the draw → `/go-engineer` [TC-7.7]
 - [ ] `TASK-7.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Closing gates

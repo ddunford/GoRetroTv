@@ -6791,6 +6791,37 @@ of every sample and false of the box. The depth is a transient, and this file's 
 finding says it in the same words: **polling a transient is not observing an event.** The count is
 now taken from the writes to it, which is every change it ever has.
 
+##### AND THE WEDGE IS OURS: THE MODELLED CARD'S SILENCE IS WHAT FILLS IT
+
+The handset and the viewing card share one wire here, and the pipe that wedges is drained by
+`SMTTask`, the smartcard module's transmit task. This port's card answers exactly two command codes,
+`0x52` and `0x18`, because those are the two that were measured; the box also sends `0x11`, `0x53`,
+`0x54`, `0x41`, `0x43`, `0x42` and `0x17`, and advances past them on SMTTask's fifty-tick timeout.
+**If each drained event costs SMTTask a timeout, twenty outstanding events is a handful of
+presses.** Both arms acquire identically and differ only in what the peripheral answers afterwards:
+
+    card answers 0x52 and 0x18 only:   EVQP0002 full after 8 presses      (deepest 20 of 20)
+    card answers everything:           never full in 60 presses           (deepest  4 of 20)
+
+**Eight presses against sixty and counting.** The wedge is this port's, not the firmware's: the
+modelled card's silence is what costs `SMTTask` the time it cannot spare, and the box is not
+mishandling its own event queue -- it is being starved by a peripheral that does not answer.
+
+**THIS IS A DIAGNOSTIC AND NOT A FIX**, and the distinction is the whole of its honesty. The
+answering arm replies to every code with a stock frame, which is not what a viewing card does -- a
+real one answers some and refuses others. So this says WHERE the cause is, not what the card should
+say; that is a separate question and needs its own evidence, of the kind the opening-sequence
+capture above provided for `0x52`. The pipe still reaches four messages deep with everything
+answered, so the pressure is real and merely absorbed.
+
+It is also an INPUT-SIDE experiment rather than a poke: what changes is what the modelled peripheral
+answers, the same class of thing as the link's baud rate, which this file already calls ours rather
+than the firmware's and load-bearing. Nothing is written into the guest.
+
+The arms are `internal/multiplex/firmwaretests/cardsilence_firmware_test.go`, and the control arm
+asserts that it reproduces the wedge -- an experiment whose control does not show the effect has
+nothing for its other arm to be compared against.
+
 ##### THE TASK STATUS NUMBERS, MEASURED OFF THIS BOX
 
 This file previously established one value -- status 7 is an event wait -- and printed the rest raw,

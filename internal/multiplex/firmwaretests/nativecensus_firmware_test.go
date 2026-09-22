@@ -187,11 +187,25 @@ func nativeCensusFor(t *testing.T, wantBanner bool) map[uint32]int {
 			t.Fatal("harness: the banner drew nothing, so its native census is of nothing")
 		}
 	} else {
-		grid := openAllChannels(t, press, ".artifacts/native-census-grid.png", false)
+		// PAST THE SETTLE, still counting. The rows arrive after the settle says the screen has
+		// stopped, and so does everything they ask the firmware for -- a census that stops at the
+		// settle counts the empty screen's natives and calls them the grid's.
+		openAllChannelsUnpinned(t, press, ".artifacts/native-census-grid.png")
+		watching = true
+		for i := 0; i < 50_000_000; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+		}
+		watching = false
 		if err := dumpScreen(t, box, "native-census-grid.png"); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("the grid drew %08X with the transport at state %d", grid, state())
+		t.Logf("the grid finished on %08X with the transport at state %d",
+			screenNow(t, box), state())
 	}
 	total := 0
 	for _, n := range calls {

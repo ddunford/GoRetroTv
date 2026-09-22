@@ -1,6 +1,7 @@
 package firmwaretests_test
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"testing"
@@ -431,4 +432,466 @@ func TestTheAllChannelsGridDrawsItsChannels(t *testing.T) {
 	}
 	t.Logf("the grid settled on %08X and FINISHED on %08X, which is not the empty screen. "+
 		"Artefact: .artifacts/all-channels-grid.png", settled, final)
+}
+
+// NOW THAT THE ROWS DRAW, DOES THE GRID ASK FOR THEIR LISTINGS?
+//
+// Every row reads "..no listings available" while the box holds twenty-one programmes for five of
+// those six channels in the displayed window -- the now-and-next banner draws one of them seconds
+// earlier on the same run. So the data is in the box and the grid is not showing it.
+//
+// **The old answer to this is void.** "The grid never reads the listings store, in 568,990 data
+// reads" was measured when the grid drew no rows at all, before the private data specifier and the
+// line-up flags; a screen that gave up before enumerating was never going to ask for a programme.
+// The question has to be re-put now the rows exist.
+//
+// The store's pages are the six the signal map found the banner reading and the grid ignoring:
+// 0x80199000 (where the per-event register files each programme), 0x80187000, 0x80186000,
+// 0x802FB000, 0x8010A000 and 0x801A5000.
+//
+// **IT WATCHES PAST THE SETTLE**, because the rows arrive after it and so, presumably, does
+// anything they ask for. Reading this screen at a settle is what hid the rows for months.
+//
+// IT ASSERTS ITS OWN SUBJECT: the grid must finish on something other than the empty screen, or it
+// is not the screen this question is about.
+//
+// IT ONLY READS.
+func TestWhetherTheDrawnGridAsksForListings(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+		emptyGrid   = 0x42DBD889
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+	listingsPages := map[uint32]bool{
+		0x00199: true, 0x00187: true, 0x00186: true,
+		0x002FB: true, 0x0010A: true, 0x001A5: true,
+	}
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+	t.Logf("%d programmes registered and the transport is ready", registered)
+
+	reads, watching := map[uint32]int{}, false
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !watching || a.Write || a.Fetch {
+			return
+		}
+		if listingsPages[(a.Virtual&0x1fffffff)>>12] {
+			reads[box.Machine.Core.State().PC&^1]++
+		}
+	}}
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		if raw == keySelect {
+			reads, watching = map[uint32]int{}, true
+		}
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+
+	openAllChannelsUnpinned(t, press, ".artifacts/grid-asks-listings.png")
+	// PAST THE SETTLE, still watching: the rows arrive here and so does anything they ask for.
+	final := uint32(0)
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+		if i%1_000_000 == 0 {
+			final = screenNow(t, box)
+		}
+	}
+	watching = false
+	if err := dumpScreen(t, box, "grid-asks-listings.png"); err != nil {
+		t.Fatal(err)
+	}
+	if final == emptyGrid {
+		t.Fatalf("harness: the grid finished on the EMPTY screen %08X, so the rows this question is "+
+			"about are not there", final)
+	}
+	total := 0
+	for _, n := range reads {
+		total += n
+	}
+	t.Logf("the grid finished on %08X and read the listings store %d times from %d instructions",
+		final, total, len(reads))
+	pcs := make([]uint32, 0, len(reads))
+	for pc := range reads {
+		pcs = append(pcs, pc)
+	}
+	sort.Slice(pcs, func(a, b int) bool { return reads[pcs[a]] > reads[pcs[b]] })
+	for i, pc := range pcs {
+		if i >= 12 {
+			break
+		}
+		t.Logf("    %08X  %d reads", pc, reads[pc])
+	}
+	if total == 0 {
+		t.Logf("VERDICT: even with its rows drawn the grid NEVER reads the listings store. It is " +
+			"not asking for programmes at all, so 'no listings available' is what it says before " +
+			"looking, and the next question is what would make it look.")
+		return
+	}
+	t.Logf("VERDICT: the grid DOES read the listings store now -- %d reads. It is asking and not "+
+		"finding, so the question is what it asks FOR: the day, the block, or the channel's "+
+		"listings id.", total)
+}
+
+// WHO CHOOSES "..no listings available".
+//
+// The string is in the flash message table at guest 0x9FCAB2C8, beside "+24 Hours", "-24 Hours",
+// "Today", "Channel", "Searching for listings" and "EVENTS ARE UNAVAILABLE" -- the grid's own
+// vocabulary, and the two Hours strings are visible in its footer.
+//
+// The grid reads the listings store 2,292 times now that its rows draw, so it is asking and not
+// finding. The instruction that reaches for this string is where "not finding" becomes "say so",
+// and its caller is the code that made the decision.
+//
+// IT ASSERTS ITS OWN SUBJECT: the string must be read while the screen that displays it draws, or
+// the address is wrong.
+//
+// IT ONLY READS.
+func TestWhoChoosesNoListingsAvailable(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+		// "..no listings available" -- both copies in the table, with a little either side so a
+		// read of the length byte or the terminator counts.
+		//
+		// THE STRING IS NOT READ FROM FLASH AT ALL. Two versions of this probe watched the flash --
+		// first one window, then every window on both chips, since U202 and U203 both carry the
+		// table -- and neither saw a single read while the screen that displays the string drew. So
+		// the message table is copied into DRAM at boot, like the application image itself, and the
+		// address to watch is one this run finds rather than one computed from a file offset.
+		window = 32
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+
+	// FIND IT IN DRAM. The string is searched for as text, so the region watched is where THIS box
+	// put it on THIS run.
+	needle := []byte("..no listings available")
+	size := box.RAM.Size()
+	ram := make([]byte, size)
+	for i := uint32(0); i < size; i++ {
+		ram[i] = byte(box.RAM.Read(i, bus.Byte)) // #nosec G115 -- byte read
+	}
+	var found []uint32
+	for at := 0; ; {
+		i := bytes.Index(ram[at:], needle)
+		if i < 0 {
+			break
+		}
+		found = append(found, uint32(at+i)) // #nosec G115 -- bounded by RAM size
+		at += i + 1
+	}
+	if len(found) == 0 {
+		t.Skipf("the box does not hold %q as text anywhere in DRAM, so the message table is kept "+
+			"in some coded form and a watch on a guessed address would report a confident zero",
+			needle)
+	}
+	for _, at := range found {
+		t.Logf("the string is in DRAM at %08X", 0x80000000|at)
+	}
+
+	hits := map[painterSite]int{}
+	watching := false
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !watching || a.Write || a.Fetch {
+			return
+		}
+		at := a.Virtual & 0x1fffffff
+		hit := false
+		for _, s := range found {
+			if at >= s-4 && at < s+window {
+				hit = true
+				break
+			}
+		}
+		if !hit {
+			return
+		}
+		st := box.Machine.Core.State()
+		hits[painterSite{pc: st.PC &^ 1, ra: st.GPR[31] &^ 1}]++
+	}}
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		if raw == keySelect {
+			hits, watching = map[painterSite]int{}, true
+		}
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+
+	openAllChannelsUnpinned(t, press, ".artifacts/no-listings-chooser.png")
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	watching = false
+	if err := dumpScreen(t, box, "no-listings-chooser.png"); err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) == 0 {
+		t.Fatalf("harness: the string was found in DRAM at %08X but never READ while the screen "+
+			"that displays it drew, so the text on screen came from somewhere else",
+			0x80000000|found[0])
+	}
+	keys := make([]painterSite, 0, len(hits))
+	for k := range hits {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(a, b int) bool { return hits[keys[a]] > hits[keys[b]] })
+	t.Logf("=== who reaches for \"..no listings available\" ===")
+	for i, k := range keys {
+		if i >= 15 {
+			break
+		}
+		t.Logf("    read at %08X  caller %08X  %d times", k.pc, k.ra, hits[k])
+	}
+	t.Logf("decompile the caller:  ./ctl.sh ghidra:decompile %#08x", keys[0].ra)
+}
+
+// WHAT LISTINGS DOES THE BOX ACTUALLY ASK FOR, AND IS EVERY CHANNEL COVERED?
+//
+// The grid draws all six channels and every row reads "..no listings available", while the box
+// holds twenty-one programmes and the banner puts one on screen. So the question is no longer
+// structural -- it is which listings the box asked for and which it was sent.
+//
+// The transmitter answers only the filters the box programmed, and one filter is usually about
+// SEVERAL channels at once: the box ORs the listings ids it wants and clears the differing bits in
+// the mask, so a request is a SET. A channel outside every set is a channel whose programmes were
+// never transmitted, and a row for it can only ever say there are none.
+//
+// So this collects every TitleRequest the box makes, through the transmitter's own OnAir hook,
+// across acquisition AND the grid draw -- the grid may ask for more when it opens -- and then asks
+// the one question that matters per channel: does ANY request want it?
+//
+// It reports the MJD each request names beside the day the fixture is transmitting, because a
+// request for the right channel on the wrong day is the same empty row and a different bug.
+//
+// IT ASSERTS ITS OWN SUBJECT: the box must make at least one request, or its silence is the
+// instrument.
+//
+// IT ONLY READS.
+func TestWhichListingsTheBoxAsksFor(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	seen := map[string]multiplex.TitleRequest{}
+	transmitter.OnAir(func(_ multiplex.Counters, requests []multiplex.TitleRequest) {
+		for _, r := range requests {
+			seen[fmt.Sprintf("%02x/%02x %04x/%04x mjd%d pid%02x",
+				r.TableID, r.TableMask, r.Extension, r.ExtensionMask, r.MJD(), r.PID)] = r
+		}
+	})
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+	afterAcquisition := len(seen)
+
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.Step(); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+	openAllChannelsUnpinned(t, press, ".artifacts/listings-requests.png")
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := dumpScreen(t, box, "listings-requests.png"); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) == 0 {
+		t.Fatal("harness: the box made no listings request at all, which cannot be true of a box " +
+			"that registered programmes")
+	}
+	t.Logf("the box made %d distinct listings requests (%d of them before the grid opened); "+
+		"the fixture is transmitting MJD %d", len(seen), afterAcquisition, multiplex.MJDOf(day))
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		t.Logf("    %s", k)
+	}
+
+	listings := guide.On(day)
+	uncovered := 0
+	t.Logf("=== is every announced channel inside some request? ===")
+	for i := range listings.Services {
+		svc := &listings.Services[i]
+		var wanted []string
+		for _, k := range keys {
+			if seen[k].Wants(svc.ListingsID) {
+				wanted = append(wanted, k)
+			}
+		}
+		if len(wanted) == 0 {
+			uncovered++
+			t.Logf("    %-14s listingsID %4d  NOT WANTED BY ANY REQUEST -- its programmes are never "+
+				"transmitted", svc.Name, svc.ListingsID)
+			continue
+		}
+		t.Logf("    %-14s listingsID %4d  wanted by %d request(s)", svc.Name, svc.ListingsID, len(wanted))
+	}
+	if uncovered > 0 {
+		t.Logf("VERDICT: %d of %d channels are outside every request the box made, so nothing this "+
+			"transmitter does can put programmes on their rows -- the box is not asking for them.",
+			uncovered, len(listings.Services))
+		return
+	}
+	t.Logf("VERDICT: every channel is inside some request, so their programmes ARE transmitted and " +
+		"the empty rows are not a coverage problem. The day and the block each request names are " +
+		"the next thing to check against what the grid is displaying.")
 }

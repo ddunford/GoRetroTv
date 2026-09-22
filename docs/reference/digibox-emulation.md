@@ -8689,3 +8689,38 @@ the ones that established "the grid draws no rows at all".
 Every row says **`..no listings available`**, so the channels are found and their programmes are
 not. That is now an ordinary listings question rather than a structural one, and the box holds
 twenty-one programmes for five of these six channels in the displayed window.
+
+### The empty cells are not a coverage problem
+
+Every row of the working grid reads `..no listings available`, so the next question is which listings
+the box asked for and which it was sent. Three earlier answers had to be re-taken first, because
+they were measured on a screen that drew no rows and a screen that gave up before enumerating was
+never going to ask for a programme:
+
+**The grid DOES read the listings store now** — 2,292 reads from 569 instructions during the draw,
+where the same measurement on the empty screen found **zero**. It is asking and not finding.
+
+**And it calls the listings natives now.** The census that once showed twenty natives the banner
+called and the grid never did is down to eight; `(1,0x58)`, `(1,0x5F)`, `(1,0x63)`, `(1,0x81)`,
+`(1,0x82)`, `(1,0x7A)`, `(1,0xAB)`, `(1,0x90)`, `(1,0x26)`, `(1,0x44)`, `(1,0x45)` and `(1,0x51)`
+are all reached. The grid went from 37 distinct natives to 53, with 47 in common with the banner.
+**`(1,0x5B)` is the conspicuous hold-out**: the banner calls it twenty times and the grid still never
+does.
+
+**The request itself is right in every respect that can be checked.** Collected through the
+transmitter's own `OnAir` hook, across acquisition and the grid draw:
+
+    the box made 1 distinct listings request
+        a3/ff  01ff/fe01  mjd51171  pid33
+
+- table `0xA3` is the 18:00–23:59 block, and the grid is displaying 7.00pm to 8.30pm — inside it;
+- MJD 51171 is the day the fixture transmits;
+- PID `0x33` is where it is sent;
+- and **all six announced channels fall inside that request's set** (`id & 0xFE01 == 0x0001` is true
+  of 101, 121, 251, 301, 401 and 501), so every one of their programmes is transmitted.
+
+**The grid opening adds no request at all**, so it is working entirely from what acquisition stored.
+
+> So the empty cells are not a coverage problem, not a wrong day and not a wrong block. Twenty-one
+> programmes are transmitted, parsed and registered, and the banner draws one of them — and the grid
+> asks the store 2,292 times and shows none. What the grid asks the store FOR is the open question.

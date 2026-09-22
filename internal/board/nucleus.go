@@ -48,6 +48,10 @@ const (
 	// honest: a field that is not a list head points at nothing that points back.
 	objectFields = 0x100
 
+	// How far along a suspension list to walk before deciding it is not one. Nucleus queues are
+	// short; a list this long is memory that happens to link up.
+	queueDepth = 64
+
 	// The census must find at least this many named objects before it will believe its own scan.
 	// A guest with tasks running has dozens.
 	censusFloor = 4
@@ -247,10 +251,14 @@ func (r *Runtime) NucleusObjects() ([]NucleusObject, error) {
 // So the linkage is closed on both sides. The object must POINT AT the block, and the block must
 // name BOTH the object and the task. A stale stack word satisfies neither half.
 //
-// A QUEUE IS READ AT ITS HEAD. Nucleus chains further waiters off the first block and only the
-// first is reachable directly from the object, so three tasks queued on one semaphore report the
-// one at the front. The question being asked is what the box is waiting for, and the head answers
-// it by name.
+// THE WHOLE QUEUE IS READ, NOT JUST ITS HEAD. Only the first block is reachable directly from the
+// object; the rest hang off it on the same list node the created lists use. An earlier version
+// stopped at the head, and the cost was not a rounding error -- the event task was queued SECOND
+// on a pipe and came back as "status 5, nothing names it", which reads as a task waiting on
+// something unknown rather than as the second half of a pair on one object.
+//
+// The chain walk is bounded and stops at the first node that does not name a task, because a list
+// that has been walked into the wrong memory does not announce itself.
 func (r *Runtime) TaskWaits() ([]TaskWait, error) {
 	tasks, err := r.Tasks()
 	if err != nil {
@@ -276,6 +284,21 @@ func (r *Runtime) TaskWaits() ([]TaskWait, error) {
 		return r.RAM.Read(addr-memory.DRAMBase, bus.Word), true
 	}
 
+	// namedIn is the index of the task a suspend block names, or -1 for a block that names none --
+	// which is what stops a chain walk the moment it leaves the list.
+	namedIn := func(block uint32) int {
+		for b := uint32(0); b <= suspendBlock; b += 4 {
+			v, ok := word(block + b)
+			if !ok {
+				return -1
+			}
+			if i, isTask := waiterAt[v]; isTask {
+				return i
+			}
+		}
+		return -1
+	}
+
 	on := make([][]Suspension, len(tasks))
 	seen := make([]map[uint32]bool, len(tasks))
 	for i := range seen {
@@ -292,24 +315,29 @@ func (r *Runtime) TaskWaits() ([]TaskWait, error) {
 			if !ok {
 				continue
 			}
-			waiter, back := -1, false
-			for b := uint32(0); b <= suspendBlock; b += 4 {
+			// The head has to close the loop: it names the object AND a task.
+			waiter, back := namedIn(head), false
+			for b := uint32(0); b <= suspendBlock && !back; b += 4 {
 				v, ok := word(head + b)
-				if !ok {
-					break
-				}
-				if v == o.Address {
-					back = true
-				}
-				if i, isTask := waiterAt[v]; isTask {
-					waiter = i
-				}
+				back = ok && v == o.Address
 			}
-			if !back || waiter < 0 || seen[waiter][o.Address] {
+			if !back || waiter < 0 {
 				continue
 			}
-			seen[waiter][o.Address] = true
-			on[waiter] = append(on[waiter], Suspension{Object: o, Block: head})
+			// Then the rest of the queue, which inherits the object from the head it hangs off.
+			walked := map[uint32]bool{}
+			for node := head; waiter >= 0 && !walked[node] && len(walked) < queueDepth; {
+				walked[node] = true
+				if !seen[waiter][o.Address] {
+					seen[waiter][o.Address] = true
+					on[waiter] = append(on[waiter], Suspension{Object: o, Block: node})
+				}
+				next, ok := word(node + cbNext)
+				if !ok || next == head {
+					break
+				}
+				node, waiter = next, namedIn(next)
+			}
 		}
 	}
 

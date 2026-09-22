@@ -6693,15 +6693,13 @@ themselves. At the wall, across forty-two tasks:
 |---|---|---|---|
 | 2 | nothing names it | 1 | `UTIL`, which sleeps on a timer -- not a suspension list |
 | 4 | `QUEU` | 10 | **one type only** |
-| 5 | `PIPE` | 1 + 2 unnamed | a pipe wait; the two unnamed are the scan's gap, not a second type |
+| 5 | `PIPE` | 3 | **one type only** |
 | 6 | `SEMA` | 7 | **one type only** |
 | 7 | `EVNT` | 21 | **one type only**, and it agrees with what was already established |
 
-Four of the five are single-typed, which is what makes them readings rather than impressions. Status
-5 is the weak one: one task is visibly on `PIPE EVQP0002` and two more are in status 5 with nothing
-naming them, because the suspension-list field of some objects sits outside the window the scan
-walks. **That gap is stated rather than rounded off** -- "status 5 is a pipe wait" is a reading with
-one confirmed instance, not the four-square result the others are.
+Every suspended status has exactly one object type against it, which is what makes these readings
+rather than impressions -- and status 5 only got there after the chain walk above, because two of
+its three tasks were queued behind another and read as blocked on nothing.
 
 ##### HOW THE OBJECTS GET NAMED, AND THE ARTEFACT THAT HAD TO BE RULED OUT
 

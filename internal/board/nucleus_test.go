@@ -15,6 +15,10 @@ import (
 // scan over 32 MB of a running box will find something to say about every task; what says whether
 // it is reading the machine is a task that waits on nothing and reports nothing, and a
 // created-list link that is not mistaken for a suspension.
+// csNext is the forward link inside a Nucleus list node, which suspend blocks share with control
+// blocks -- it is what chains a queue's second waiter behind its first.
+const csNext = 0x04
+
 func nucleusGuest(t *testing.T) *board.Runtime {
 	t.Helper()
 	ram, err := memory.NewRAM("dram", memory.DRAMSize)
@@ -66,11 +70,19 @@ func nucleusGuest(t *testing.T) *board.Runtime {
 	suspend(0x5000, 0x4000, 0x2000) // TASK20 on Periph
 	suspend(0x7000, 0x6000, 0x1000) // SMTTask on SMNEvts
 
+	// A SECOND WAITER, CHAINED BEHIND THE FIRST. Only the head is reachable from the object, so a
+	// reader that stops there reports the task at the front and leaves the one behind it as
+	// "blocked on nothing" -- which is how the event task's pipe went unnamed on the real box.
+	ram.Write(0x5000+csNext, bus.Word, memory.DRAMBase+0xb000)
+	ram.Write(0xb000+0x0c, bus.Word, memory.DRAMBase+0x8000) // IDLE, queued behind TASK20
+
 	// THE STALE STACK. A task that has obtained and released a semaphore a thousand times leaves
 	// the pointers lying in its stack frame, so a region naming both an object and a task is the
-	// commonest thing in DRAM and means nothing at all. Nothing points at this one.
+	// commonest thing in DRAM and means nothing at all. Nothing points at this one, and the
+	// created list it names is SMTTask's -- which is already accounted for, so if the walk ever
+	// counted it the count for SMTTask would go up rather than a new name appearing.
 	ram.Write(0xa008, bus.Word, memory.DRAMBase+0x4000)
-	ram.Write(0xa00c, bus.Word, memory.DRAMBase+0x8000)
+	ram.Write(0xa00c, bus.Word, memory.DRAMBase+0x1000)
 	return &board.Runtime{RAM: ram}
 }
 
@@ -166,13 +178,9 @@ func TestTaskWaitsNamesTheObjectEachBlockedTaskIsQueuedOn(t *testing.T) {
 			t.Errorf("%s is waiting on %v, want exactly [%s]", task, on[task], want)
 		}
 	}
-	// THE CONTROL, and it is the whole reason this walks from the object. IDLE waits on nothing,
-	// but its control block is linked into the created list and a stale stack frame elsewhere in
-	// DRAM names it beside a semaphore. A reader that scans for pointers to a task finds both and
-	// reports a suspension that never happened -- which on the real box put TASK0 on six
-	// semaphores at once through a single stack address, and read perfectly plausibly.
-	if len(on["IDLE"]) != 0 {
-		t.Errorf("IDLE waits on nothing and the census says %v, so stale pointers are being read "+
-			"as suspensions", on["IDLE"])
+	// IDLE is queued BEHIND TASK20 on the same semaphore, reachable only along the chain.
+	if len(on["IDLE"]) != 1 || on["IDLE"][0] != "SEMA Periph" {
+		t.Errorf("IDLE is second in Periph's queue and the census says %v, so the walk stops at the "+
+			"head and every waiter behind one reads as blocked on nothing", on["IDLE"])
 	}
 }

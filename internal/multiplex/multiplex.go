@@ -26,7 +26,15 @@ const (
 	transportSymbolRate   = 27500
 	transportFEC          = 2
 
-	sectionPIDSI    = 0x11 // NIT, SDT and BAT
+	// THE NIT HAS ITS OWN PID AND IT IS NOT THE SDT'S. EN 300 468 puts the
+	// network information table on 0x10 and the service description and bouquet
+	// association tables on 0x11, and this transmitter sent all three on 0x11.
+	// The box had ARMED 0x10 the whole time and nothing ever answered it --
+	// measured by dumping all sixteen demux match units after acquisition, where
+	// 0x10 sits beside 0x11, 0x14 and the day's title PID as a filter the guest
+	// programmed and the broadcast never filled.
+	sectionPIDNIT   = 0x10 // NIT
+	sectionPIDSI    = 0x11 // SDT and BAT
 	sectionPIDClock = 0x14 // TDT and TOT
 )
 
@@ -269,11 +277,19 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 		return nil, err
 	}
 	m.sent.Lineup++
-	return []broadcast.Emission{
-		{PID: sectionPIDSI, Section: nit},
-		{PID: sectionPIDSI, Section: sdt},
-		{PID: sectionPIDSI, Section: bat},
-	}, nil
+	wave := make([]broadcast.Emission, 0, 3)
+	// The NIT goes where the standard puts it and where the box is listening --
+	// but only once the box IS listening. A section on an unarmed PID is dropped
+	// by the hardware before any code sees it, so sending it early would not be
+	// harmless, it would be invisible; the next wave carries it instead.
+	if sub.NITArmed {
+		wave = append(wave, broadcast.Emission{PID: sectionPIDNIT, Section: nit})
+	}
+	wave = append(wave,
+		broadcast.Emission{PID: sectionPIDSI, Section: sdt},
+		broadcast.Emission{PID: sectionPIDSI, Section: bat},
+	)
+	return wave, nil
 }
 
 // transport turns the schedule's channels into the one transport stream this

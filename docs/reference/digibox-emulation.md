@@ -6426,6 +6426,40 @@ are indistinguishable in a read count and want opposite follow-ups:
 lives. That is the replacement for TASK-7.1's starting point, arrived at by measurement rather than
 inherited.
 
+#### A CORRECTION FIRST: THREE INSTRUMENTS WERE MEASURING THE WRONG SCREEN
+
+*2026-09-22, and it is the fourth time this shape has cost this project a measurement. The first
+three are already in this file; this one reached a COMMITTED instrument and the notes derived from
+it.*
+
+The route to the grid is `box office` then LEFT to the TV GUIDE tab then select. **One LEFT from
+box office draws `0xFE8D1CCC`, which is still the BOX OFFICE MENU** -- the wedge guard names it as a
+constant for exactly this reason. A route that asks only "did the screen change" accepts it as the
+tv guide tab, selects box office's first entry, and measures **MOVIES BY START TIME** for the rest
+of the run. `grid_firmware_test.go` did that, and so did both instruments written today.
+
+**And a second trap behind it**: after select, a hash cannot tell ALL CHANNELS from the same menu
+with its highlight moved. Both differ from the screen before, so "it changed" passes for either.
+
+Nothing caught this. Not a PC census, not a twelve-iteration analysis, not three sets of notes --
+because every one of them was internally consistent about the wrong screen. **What caught it was
+looking at the picture**, which each instrument had been writing all along.
+
+Both screens are now pinned by hash and both were verified by eye:
+
+    0xDDBC18E9   the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
+    0x42DBD889   "7.00pm Thu 24 / ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm"
+
+**Re-measured on the real screen, the two findings below SURVIVE**: 568,990 data reads during the
+draw and not one of them touches the line-up, and opening it changes nothing about what the box is
+filtering for. They are reported here as re-established rather than as inherited.
+
+**And every instrument that presses after acquiring now lets the box go quiet first.** The record
+already said a key sent the instant the box finishes something does nothing; three of these pressed
+immediately and survived only while the box happened to be idle by then. Moving the NIT onto its own
+PID shifted the timing by a hair and they began failing on their FIRST press -- which read as a
+transmitter regression and was a fragility in the harness.
+
 #### ASK THE BOX WHAT IT WANTS -- and for this screen the answer is "nothing new"
 
 *The read watch had gone as far as it can, and the reason is worth keeping: **an empty list
@@ -6447,9 +6481,10 @@ Whatever it needs, it expects to have already.
 
 #### WHAT THE BOX IS ASKING FOR, AND WHAT ANSWERS IT
 
-    PID 0010  armed, NEVER FED          PID 0011  armed and fed -- NIT, SDT and BAT
-    PID 0034  armed, NEVER FED          PID 0014  armed and fed -- TDT and TOT
-    PID 0052  armed, NEVER FED          PID 0033  armed and fed -- titles for MJD 51171
+    PID 0034  armed, NEVER FED          PID 0010  armed and fed -- the NIT, since 2026-09-22
+    PID 0052  armed, NEVER FED          PID 0011  armed and fed -- SDT and BAT
+                                        PID 0014  armed and fed -- TDT and TOT
+                                        PID 0033  armed and fed -- titles for MJD 51171
 
     unit  1  table 40/FE  ext 0020      the NIT, actual and other
     unit  2  table 42/FB  ext 0020      the SDT
@@ -6458,12 +6493,14 @@ Whatever it needs, it expects to have already.
     unit  7  table A3/FF  ...C7 E3      the day's titles, block 3
     unit 10  table C1/FF  01/FE         the A-Z listings index
 
-**Three PIDs are armed and nothing has ever answered them**, and that list is the honest form of
+**Three PIDs were armed and nothing had ever answered them**, and that list is the honest form of
 "emulate the whole satellite signal": not inventing tables and hoping one sticks, but filling the
-filters the box has ALREADY PROGRAMMED. `0x0010` is the standard DVB PID for the NIT and this
-transmitter sends its NIT on `0x11`; `0x0034` is `0x30 | 4`, the NEXT day's titles, which is the
-open issue about a broadcast that carries only today; `0x0052` is the one the record has carried for
-a while.
+filters the box has ALREADY PROGRAMMED. One is now filled. `0x0010` is where EN 300 468 puts the
+network information table and this transmitter had been sending its NIT on `0x11` with the SDT and
+BAT; it now goes where the standard puts it and where the box was listening, and the box still
+acquires, still holds its six services and still navigates. **It did not change the grid**, which
+is what the measurement below had already predicted. `0x0034` is `0x30 | 4`, the NEXT day's titles,
+still open; `0x0052` is the one the record has carried for a while.
 
 **And the list is a boundary as much as an opportunity.** A section on a PID with no armed filter is
 dropped by the hardware before any code sees it, so transmitting beyond these PIDs cannot reach

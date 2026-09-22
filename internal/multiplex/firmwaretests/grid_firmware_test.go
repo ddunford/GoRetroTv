@@ -88,10 +88,35 @@ func TestTheGridsRowLoopEitherRunsOrItDoesNot(t *testing.T) {
 		t.Logf("%-22s drew %08X", name, hash)
 		return hash
 	}
+	// LET IT GO QUIET BEFORE THE FIRST PRESS. The record is explicit that a key
+	// sent the instant the box finishes something does nothing at all, and this
+	// instrument pressed straight after acquisition -- surviving only while the
+	// box happened to be idle by then. Moving the NIT onto its own PID shifted
+	// the timing by a hair and this test started failing on its FIRST press,
+	// which read as a transmitter regression and was this.
+	runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })
+
+	// THE ROUTE MUST PROVE WHICH SCREEN IT IS ON, AND "THE HASH CHANGED" DOES
+	// NOT. One LEFT from box office draws 0xFE8D1CCC, which is STILL THE BOX
+	// OFFICE MENU -- the wedge guard names it as a constant for exactly this
+	// reason -- so a check that only asks whether the screen moved accepts it as
+	// the tv guide tab, selects box office's first entry and measures MOVIES BY
+	// START TIME for the rest of the run. This instrument did precisely that,
+	// and its own artefact said so; nothing else caught it, through a PC census,
+	// a twelve-iteration analysis and three sets of notes.
+	//
+	// Both hashes below were verified against the dumped pictures by eye.
+	const tvGuideMenu = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
+	const allChannels = 0x42DBD889 // "7.00pm Thu 24 / ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm"
 	menu := press(keyBoxOffice, "box office")
-	tab := press(keyLeft, "left to tv guide tab")
-	if tab == menu {
-		t.Fatalf("harness: the tv guide tab drew the same screen as the menu (%08X), so the route never moved", menu)
+	tab := menu
+	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
+		tab = press(keyLeft, "left to tv guide tab")
+	}
+	if tab != tvGuideMenu {
+		t.Fatalf("harness: never reached the TV GUIDE menu (%08X); the screen settled on %08X, and "+
+			"a screen that merely differs from box office is what has been measured by mistake "+
+			"before", uint32(tvGuideMenu), tab)
 	}
 
 	// SELECT IS LOST IF IT ARRIVES WHILE THE MENU IS STILL PAINTING -- the record
@@ -137,7 +162,10 @@ func TestTheGridsRowLoopEitherRunsOrItDoesNot(t *testing.T) {
 			return false
 		})
 		t.Logf("select attempt %d: screen %08X -> %08X", attempt, before, settled)
-		if settled != 0 && settled != tab && settled != menu {
+		// NOT "different from the menu" -- ALL CHANNELS by its own hash. A select that merely
+		// moves the highlight also produces a screen different from the menu, and that is
+		// indistinguishable here from the grid opening.
+		if settled == allChannels {
 			grid = settled
 		}
 	}

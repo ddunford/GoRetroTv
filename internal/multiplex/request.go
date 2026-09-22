@@ -29,6 +29,10 @@ type Subscription struct {
 	// SIArmed is whether PID 0x11 is armed, i.e. whether a BAT pushed there
 	// would reach the guest at all.
 	SIArmed bool
+	// NITArmed is the same question for PID 0x10, which is where EN 300 468 puts
+	// the network information table. It is asked separately because the box arms
+	// the two independently and a NIT pushed at an unarmed PID reaches nothing.
+	NITArmed bool
 	// ListingsPIDs are the title PIDs the box has armed, in ascending order.
 	//
 	// THERE IS USUALLY MORE THAN ONE, AND TAKING WHICHEVER CAME LAST IS A COIN
@@ -232,6 +236,9 @@ func Read(d *demux.Demux) (Subscription, error) {
 	sub.NetworkID = uint16(networkHigh.Value)<<8 | uint16(networkLow.Value)
 
 	for _, pid := range d.ArmedPIDs() {
+		if pid == 0x10 {
+			sub.NITArmed = true
+		}
 		if pid == 0x11 {
 			sub.SIArmed = true
 		}

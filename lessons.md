@@ -122,3 +122,20 @@ because it does not start with FAIL.
 widen the pattern to cover how the thing fails, or send the raw output to a file and filter what you
 read rather than what you capture — and always read the exit status, which was sitting there saying
 127 the whole time.
+
+### A hash proves the screen changed, not which screen it is
+
+Three instruments — one of them committed and carrying three sets of findings — measured the wrong
+screen for weeks. The route is `box office` → LEFT to the TV GUIDE tab → select. One LEFT from box
+office still draws the BOX OFFICE menu, so a check of "did the hash change" accepts it as the tab,
+selects box office's first entry, and measures MOVIES BY START TIME. Behind that sits a second
+trap: after select, a hash cannot tell the grid from the same menu with its highlight moved,
+because both differ from the screen before.
+
+Nothing caught it. Not a PC census, not a twelve-iteration analysis, not the notes — each was
+internally consistent about the wrong screen. **What caught it was opening the PNG the instrument
+had been writing all along.**
+
+**Pin the screens you require by hash, and verify each pinned hash by eye once.** "Different from
+where I was" is not an identification, and an instrument that cannot say which screen it is on
+produces findings that are worse than no findings, because they read as measurements.

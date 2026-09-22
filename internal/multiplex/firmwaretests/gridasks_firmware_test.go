@@ -67,6 +67,12 @@ func TestWhatTheBoxAsksTheBroadcastForWhenTheGridOpens(t *testing.T) {
 		return out
 	}
 
+	// LET IT GO QUIET FIRST. The record is explicit that a key sent the instant the box finishes
+	// something does nothing at all, and this instrument pressed immediately after acquisition --
+	// which was survivable only because the box happened to be idle by then. It is the wedge
+	// guard's discipline, and it belongs here too.
+	runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })
+
 	before := asked()
 	if len(before) == 0 {
 		t.Fatal("harness: the box has armed nothing at all after acquiring, so either the demux is " +
@@ -96,7 +102,7 @@ func TestWhatTheBoxAsksTheBroadcastForWhenTheGridOpens(t *testing.T) {
 	// more, it is the ONLY place sending more could ever reach.
 	mjd := multiplex.MJDOf(day)
 	sending := map[uint16]string{
-		0x11: "NIT, SDT and BAT", 0x14: "TDT and TOT",
+		0x10: "NIT", 0x11: "SDT and BAT", 0x14: "TDT and TOT",
 		multiplex.TitlePID(mjd): fmt.Sprintf("titles for MJD %d", mjd),
 	}
 	var unfed []string
@@ -148,19 +154,36 @@ func TestWhatTheBoxAsksTheBroadcastForWhenTheGridOpens(t *testing.T) {
 	}
 
 	menu := press(keyBoxOffice, "box office", 80_000_000)
+	// PROVE WHICH TAB, DO NOT ASSUME IT MOVED. one LEFT from box office draws 0xFE8D1CCC, which is STILL
+	// THE BOX OFFICE MENU -- the wedge guard names it as a constant for this reason -- and a route that only checks "the screen changed"
+	// accepts it as the tv guide tab and then measures box office for the rest of the run. That is
+	// the FOURTH time this shape has cost this project a measurement, and the first three are in
+	// the record. The screenshot is what caught it: the artefact said MOVIES BY START TIME.
+	// Both verified by eye against the dumped pictures. A hash cannot tell ALL CHANNELS from the
+	// same menu with its highlight moved, and an earlier version of this route accepted the BOX
+	// OFFICE menu as the tv guide tab and measured MOVIES BY START TIME throughout.
+	const tvGuideMenu = 0xDDBC18E9
+	const allChannels = 0x42DBD889
 	tab := menu
-	for attempt := 1; attempt <= 4 && (tab == menu || tab == 0); attempt++ {
+	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
 	}
-	if tab == menu || tab == 0 {
-		t.Fatalf("harness: never left the box office menu (%08X)", menu)
+	if tab != tvGuideMenu {
+		t.Fatalf("harness: never reached the TV GUIDE menu (%08X); settled on %08X",
+			uint32(tvGuideMenu), tab)
 	}
 	grid := uint32(0)
-	for attempt := 1; attempt <= 6 && (grid == 0 || grid == tab || grid == menu); attempt++ {
-		grid = press(keySelect, "select ALL CHANNELS", 60_000_000)
+	for attempt := 1; attempt <= 6 && grid != allChannels; attempt++ {
+		runUntil(t, box, transmitter, 8_000_000, func(int) bool { return false })
+		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
 	}
-	if grid == 0 || grid == tab || grid == menu {
-		t.Fatalf("harness: select never left the tv guide tab (%08X), so this measured the menu", tab)
+	if grid != allChannels {
+		t.Fatalf("harness: select never reached ALL CHANNELS (%08X); settled on %08X, and a screen "+
+			"that merely differs from the menu is what has been measured by mistake before",
+			uint32(allChannels), grid)
+	}
+	if err := dumpScreen(t, box, "grid-asks-all-channels.png"); err != nil {
+		t.Fatal(err)
 	}
 	// Let it sit: a request the screen makes on entry may take a moment to reach the hardware.
 	runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })

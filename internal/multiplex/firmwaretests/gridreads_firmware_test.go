@@ -1,6 +1,7 @@
 package firmwaretests_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -179,20 +180,44 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 		return settled
 	}
 
+	// LET IT GO QUIET FIRST. The record is explicit that a key sent the instant the box finishes
+	// something does nothing at all. This instrument pressed straight after acquisition and got
+	// away with it only while the box happened to be idle by then; moving the NIT onto its own PID
+	// shifted the timing by a hair and the first press stopped landing, which read as a regression
+	// in the transmitter and was a fragility in the harness.
+	runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })
+
 	menu := press(keyBoxOffice, "box office", 80_000_000)
+	// PROVE WHICH TAB, DO NOT ASSUME IT MOVED. one LEFT from box office draws 0xFE8D1CCC, which is STILL
+	// THE BOX OFFICE MENU -- the wedge guard names it as a constant for this reason -- and a route that only checks "the screen changed"
+	// accepts it as the tv guide tab and then measures box office for the rest of the run. That is
+	// the FOURTH time this shape has cost this project a measurement, and the first three are in
+	// the record. The screenshot is what caught it: the artefact said MOVIES BY START TIME.
+	// THE TWO SCREENS THIS ROUTE MUST LAND ON, PINNED, AND BOTH VERIFIED BY EYE against the
+	// artefacts rather than inferred from "the hash changed". A hash cannot tell ALL CHANNELS from
+	// the same menu with its highlight moved, and that is not a hypothetical: two instruments, one
+	// of them committed, reported "ALL CHANNELS" for a screen whose own screenshot says MOVIES BY
+	// START TIME -- the box office menu's first entry, reached because the route accepted the box
+	// office menu as the tv guide tab.
+	const tvGuideMenu = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
+	const allChannels = 0x42DBD889 // "7.00pm Thu 24 / ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm"
 	tab := menu
-	for attempt := 1; attempt <= 4 && (tab == menu || tab == 0); attempt++ {
+	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
 	}
-	if tab == menu || tab == 0 {
+	if tab != tvGuideMenu {
 		t.Fatalf("harness: never left the box office menu (%08X), so the route did not reach the "+
 			"tv guide tab", menu)
 	}
 
-	// SELECT IS LOST IF IT ARRIVES WHILE THE MENU IS PAINTING, which has produced a clean census of
-	// the wrong screen twice in this project. Retry, and prove which screen it landed on.
+	// SELECT IS LOST IF IT ARRIVES WHILE THE MENU IS PAINTING, and a hash alone cannot tell the
+	// grid from the same menu with its highlight moved -- both differ from the screen before. So
+	// every attempt is DUMPED and the picture is the proof, which is the only thing that has
+	// caught this: two instruments, one of them committed, reported "ALL CHANNELS" for a screen
+	// whose artefact says MOVIES BY START TIME.
 	grid := uint32(0)
-	for attempt := 1; attempt <= 6 && (grid == 0 || grid == tab || grid == menu); attempt++ {
+	for attempt := 1; attempt <= 6; attempt++ {
+		runUntil(t, box, transmitter, 8_000_000, func(int) bool { return false })
 		anyRead, watching = 0, true
 		for k := range inArray {
 			delete(inArray, k)
@@ -215,13 +240,19 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 		for k := range namedReads {
 			delete(namedReads, k)
 		}
-		grid = press(keySelect, "select ALL CHANNELS", 60_000_000)
+		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
 		watching = false
+		if grid != allChannels {
+			continue
+		}
+		break
 	}
-	if grid == 0 || grid == tab || grid == menu {
-		t.Fatalf("harness: select never left the tv guide tab (%08X), so this measured the menu and "+
-			"not the grid", tab)
+	if grid != allChannels {
+		t.Fatalf("harness: select never reached ALL CHANNELS (%08X); the screen settled on %08X, "+
+			"and a screen that is merely DIFFERENT from the menu is exactly what has been measured "+
+			"by mistake before", uint32(allChannels), grid)
 	}
+
 	if err := dumpScreen(t, box, "grid-reads-all-channels.png"); err != nil {
 		t.Fatal(err)
 	}

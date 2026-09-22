@@ -37,7 +37,32 @@ SEEDS=(
   0x8008E7C8 0x8008CDA4 0x8007D06C 0x800992A0 0x80099244 0x8008DC2C 0x8008DB28 0x800511D0
   0x8008C290 0x80051B2C 0x8005041C 0x800E46F0 0x800DCD58 0x800DCD90 0x800E40EC 0x800E8ED0
   0x80050770 0x8008E5EC 0x800B1AF8 0x80081B40
+
+  # THE ALL CHANNELS GRID's own path, every address measured on the running machine.
+  #
+  # The four PRESENTATION CALLBACKS registered in the six-entry table at 0x80164978: each
+  # descriptor is 44 bytes with a mode at +0x28 and a function pointer at +0x24, and the grid
+  # selects entry 1. Entries 4 and 5 hold the "not registered" sentinel and a null pointer.
+  0x8009FE6C   # [0] mode 1
+  0x800CB7B8   # [1] mode 1 -- THE GRID'S ROW CALLBACK
+  0x800CBB60   # [2] mode 0
+  0x800CBB80   # [3] mode 2
+  # The enumeration and the chain its exit runs through.
+  0x800A4A90   # the enumeration containing the row loop at 0x800A4B60
+  0x800A45C4   # "fill in this channel's details, by index"
+  0x800ADD08   # the handle resolver: pool index (id-1)>>12, element (id-1)&0xFFF
+  0x800AC534   # the state -> code jump table (4,5 -> 2; 6 -> 3; 7 -> 4)
+  0x800AA8F8   # writes the transport state the grid gates on
+  # The listings module the banner enters and the grid never does.
+  0x800A8520 0x800A86DC 0x800A9046 0x800AA968
 )
+
+# EXTRA SEEDS WITHOUT EDITING THIS FILE. A full re-import is about twenty-five minutes, and the
+# reason to run one is nearly always a single new MIPS16 address that the analyser's flow never
+# reached -- which DigiboxDump reports as "no function here". Passing it here beats a code edit:
+#   GHIDRA_SEEDS="0x800CB7B8 0x8009FE6C" ./ctl.sh ghidra:import
+read -r -a EXTRA_SEEDS <<< "${GHIDRA_SEEDS:-}"
+SEEDS+=("${EXTRA_SEEDS[@]}")
 
 rm -rf "$ROOT/ghidra/proj"
 mkdir -p "$ROOT/ghidra/proj"

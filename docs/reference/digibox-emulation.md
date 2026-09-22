@@ -8812,3 +8812,50 @@ recording because they close another explanation:
 So **the empty rows are not a date mismatch**: the grid is asking about our day, three times, and
 still shows nothing. The second day is ninety-four later and is not yet explained; it is recorded
 rather than reasoned about.
+
+### `0x800A852C` is the SECTION DISPATCHER, and that weakens the differential it came from
+
+Seeding the real entry and decompiling gives a function with proper arguments, and it is not what
+the differential suggested:
+
+    FUN_800a852c(byte *section, uint *pidContext)
+      tableID = *section;
+      if (tableID == 0x40 && pidContext[3] == 0x10) ...   NIT on PID 0x10
+      if (tableID == 0x42 && pidContext[3] == 0x11) ...   SDT on PID 0x11
+      if (tableID != 0x70 || pidContext[3] != 0x14) ...   TDT on PID 0x14
+      ...
+      for (node = head; node; node = node->next)
+        if ((*node >> 8 & (*node & 0xff ^ tableID)) == 0)        table id, under a MASK
+          if (node->flags & 4) deliver(node, section, pidContext)
+          else descend on section[3], then section[8], then section[10]
+
+So the multi-level tree is a **subscriber registry**, keyed by table id under a mask and then by
+three halfwords of the section — for a title section, the listings id at `[3..4]` and the MJD filter
+at `[8..9]`. `DAT_800a8798` is the delivery callback. A section reaches a consumer only if a
+matching subscription exists in that tree.
+
+**And that undermines the reading that produced it.** The thirty-eight instructions that "read the
+listings store only on the banner" include this dispatcher, which runs whenever a section arrives —
+so some of that difference is the transmitter delivering sections during the banner's window rather
+than the banner querying anything. The differential is still useful, but "the path that finds a
+programme" was too strong a label for it and is withdrawn.
+
+### And a bug in this project's own Ghidra seeding, which reported success
+
+The import that produced the clean decompilation also did this:
+
+    ERROR SCRIPT ERROR: ghidra.program.model.listing.ContextChangeException:
+        Context register change conflicts with one or more instructions
+            at DigiboxSetup.seedMips16(DigiboxSetup.java:81)
+    ...
+    INFO  REPORT: Import succeeded
+
+Ghidra refuses an ISA_MODE change at an address it has already decoded as something else. One
+unguarded throw **aborted the whole seeding loop**, so every seed after the failing one was silently
+skipped — and the import still printed *Import succeeded*. A later `no function here` would then
+read as a fact about the firmware rather than a fact about the seeding, which is precisely the
+plausible-wrong-answer failure this project keeps paying for.
+
+`DigiboxSetup.java` now isolates each seed, clears and retries an address Ghidra has already decoded,
+NAMES every address it still could not seed, and reports `seeded N of M` — with a separate loud line
+when N is zero.

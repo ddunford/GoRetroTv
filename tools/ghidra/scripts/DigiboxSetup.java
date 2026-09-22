@@ -68,6 +68,17 @@ public class DigiboxSetup extends GhidraScript {
 	// ISA_MODE is the context register the MIPS:BE:32:16e language switches decoding on. Setting it
 	// at an address and disassembling from there is what tells Ghidra "this one is MIPS16"; the
 	// analyser then follows the flow out of it.
+	//
+	// **EACH SEED IS ISOLATED, AND THE COUNT IS REPORTED BOTH WAYS.** Ghidra refuses a context
+	// change at an address it has already decoded as something else --
+	// `ContextChangeException: Context register change conflicts with one or more instructions` --
+	// and one unguarded throw here aborted the whole loop, so every seed after the failing one was
+	// silently skipped. The import then printed **"Import succeeded"**, which is the worst possible
+	// combination: a partial analysis that reports success, and a later "no function here" that
+	// looks like a fact about the firmware rather than a fact about the seeding.
+	//
+	// So a seed that fails is cleared and retried, a seed that still fails is NAMED, and the
+	// summary says how many of each. A run where nothing seeded says so loudly.
 	private void seedMips16(String[] args) throws Exception {
 		Register isaMode = currentProgram.getRegister("ISA_MODE");
 		if (isaMode == null) {
@@ -76,15 +87,58 @@ public class DigiboxSetup extends GhidraScript {
 			return;
 		}
 		int seeded = 0;
+		StringBuilder failed = new StringBuilder();
 		for (int i = 1; i < args.length; i++) {
-			Address at = toAddr(Long.decode(args[i]).longValue() & ~1L);
+			Address at;
+			try {
+				at = toAddr(Long.decode(args[i]).longValue() & ~1L);
+			} catch (NumberFormatException bad) {
+				failed.append(' ').append(args[i]).append("(not an address)");
+				continue;
+			}
+			if (seedOne(isaMode, at)) {
+				seeded++;
+				continue;
+			}
+			// Already decoded as something else: clear those bytes and try once more. Clearing is
+			// safe here because the address is a PROVED MIPS16 entry -- whatever Ghidra decoded
+			// there was wrong.
+			try {
+				clearListing(at, at.add(3));
+			} catch (Exception ignored) {
+				// nothing to clear is not a problem; the retry below will say if it still fails.
+			}
+			if (seedOne(isaMode, at)) {
+				seeded++;
+				continue;
+			}
+			failed.append(' ').append(at);
+		}
+		if (failed.length() > 0) {
+			println("DigiboxSetup: COULD NOT SEED" + failed
+				+ " -- those addresses will report 'no function here' when decompiled, which is a "
+				+ "fact about this seeding and not about the firmware");
+		}
+		println("DigiboxSetup: seeded " + seeded + " of " + (args.length - 1)
+			+ " MIPS16 entry points");
+		if (seeded == 0) {
+			println("DigiboxSetup: NOT ONE seed was applied -- the analysis below is of an "
+				+ "unseeded image and every MIPS16 function in it is decoded as MIPS32");
+		}
+	}
+
+	// seedOne applies the context and disassembles, reporting failure rather than throwing so that
+	// one bad address cannot take the rest of the list with it.
+	private boolean seedOne(Register isaMode, Address at) {
+		try {
 			currentProgram.getProgramContext().setValue(isaMode, at, at, BigInteger.ONE);
 			disassemble(at);
 			if (getFunctionAt(at) == null) {
 				createFunction(at, null);
 			}
-			seeded++;
+			return true;
+		} catch (Exception failure) {
+			return false;
 		}
-		println("DigiboxSetup: seeded " + seeded + " MIPS16 entry points");
 	}
 }

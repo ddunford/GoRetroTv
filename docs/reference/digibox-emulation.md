@@ -8274,3 +8274,63 @@ cause.** The data is in the box, the banner draws a real programme out of it sec
 same run, and the grid does not ask. A missing table, a wrong field, an unfed PID — none of them can
 explain a screen that never queries. The gate is upstream of any query, it is common to both
 listings screens, and it is the one thing left to find.
+
+## The map from the signal to the screen
+
+*2026-09-22. Every earlier measurement asked one question and got a negative. This asks where our
+broadcast ENDS UP and what the screen LOOKS AT, and puts the two side by side.*
+
+**The landing sites are measured against a silent control.** Acquiring writes a great deal of
+memory and most of it is the box being a box — tasks, timers, heap, display. So a second box runs
+the same 140 million instructions with the transmitter **silent, no sections ever**, and its pages
+are subtracted:
+
+    landing sites = pages written while acquiring - pages written while silent
+
+Fifty pages survive that. They are memory that exists *because of the broadcast*.
+
+### What each screen reads of them
+
+| landing site | writes | banner reads | grid reads |
+|---|---|---|---|
+| `801D5000` | 211,727 | 0 | **16,310** |
+| `80175000` | 47,745 | 0 | 0 |
+| **`80199000`** | 8,511 | **895** | **0** |
+| **`80187000`** | 3,961 | **1,876** | **0** |
+| **`80186000`** | 2,069 | **576** | **0** |
+| **`802FB000`** | 1,305 | **205** | **0** |
+| **`8010A000`** | 788 | **138** | **0** |
+| **`801A5000`** | 203 | **78** | **0** |
+| `802D7000` | 553 | 218 | 135 |
+| `802A7000` | 478 | 66 | 110 |
+| `80120000` | 194 | 24 | 636 |
+
+Across all fifty: the banner reads them 5,216 times, the grid 22,066.
+
+### And that is the finding, in one line
+
+**The grid reads plenty of broadcast-derived memory — just never the pages that hold the listings.**
+
+There is a clean cluster of six landing sites that the working screen reads and the grid touches
+**zero** times: `80199000`, `80187000`, `80186000`, `802FB000`, `8010A000`, `801A5000`. The first of
+those is the listings store, already identified by watching the per-event register fill it. The
+grid's own heaviest broadcast read is `801D5000`, which the banner never touches at all — the
+section and row scratch area, not listings.
+
+So the two screens do not differ by *how much* of our signal they consume. They differ by **which
+part**: the banner enters the listings data path and the grid never does.
+
+### What the grid reads instead
+
+| page | reads | origin |
+|---|---|---|
+| `801D6000` | 138,050 | shared machinery |
+| `80147000` | 78,163 | the box's own memory, never written by the broadcast |
+| `80107000` | 28,282 | shared machinery |
+| `80069000` | 25,325 | the o-code interpreter |
+| `801D5000` | 16,310 | **a landing site** |
+| `80494000` | 15,054 | the interpreter's working memory |
+| `9FC4D000`, `9FC8C000` | 4,994, 3,844 | **flash — the grid's o-code is resident, and it runs** |
+
+The grid's o-code is present in flash and executing; it draws a header, a date, a clock and a time
+axis. It simply never enters the path the banner uses.

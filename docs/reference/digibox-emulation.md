@@ -8187,3 +8187,47 @@ everything built on it stands.
 So the position is precise: the grid's own loop runs, enumerates all six channels, builds a list,
 and that list is read — and no pixel of it reaches the screen. The gap is between the `0x800D*`
 subsystem picking the list up and the o-code screen drawing anything from it.
+
+### The enumeration returns 4, and leaving a module is not returning from it
+
+**A near-miss worth recording before the finding, because it was one instruction from being
+filed.** A probe traced outward from the end of the row loop until control left the enumeration's
+module, took `0x800A3A10` as the caller and `v0` as the return value, and was about to report that
+the enumeration *"hands the o-code a list with none of our channels in it"*. Every part of that was
+wrong:
+
+    800a4dfc  lw   v1,0x800a501c
+    800a4dfe  jalr v1               <- a CALL, not a return
+
+`0x800A3A10` is a thunk, and `v0` was a live register holding a pointer into the o-code
+interpreter's own frame — the dump was full of `0xFFFFFFFD` markers and a flash address `0x9FC77400`,
+which is o-code, not channels.
+
+> **Leaving a module is not returning from it.** A return is where control leaves *with the frame
+> popped*: MIPS stacks grow down, a call from inside pushes `sp` lower, and only a return restores
+> it above the value it held inside the function. That is the test, and it is cheap.
+
+With that test, the real return is unambiguous. The enumeration runs its six iterations, calls out
+through `0x800A3A10` into the `0x800D*` subsystem and back, and then **returns from `0x800A4E0C` to
+`0x800A2D4C` with `v0 = 4`**. `0x800A2D4C` is the tail of a thin wrapper — `lw a0,36(sp)` /
+`jr a0` — so the 4 passes straight up unchanged.
+
+Four is not a row count. It is the code `0x800AC534` produces for internal state **7**, which is the
+state the transport is in by then, and the same code the resolver answered six times. The
+enumeration reports the transport's health, not how many channels it found.
+
+### And the deduction that reframes the screen
+
+The grid draws **`42DBD889`, byte for byte**, whether this enumeration runs once or six times. Its
+drawing surface takes an identical number of writes in both cases, to the digit. So:
+
+> **What the o-code draws does not depend on the enumeration's result.** The enumeration is
+> something the grid triggers, not something it consumes.
+
+That is why every attempt to follow the row loop further has produced more mechanism and no rows:
+the loop was never the thing that fills the screen. It is a channel-database refresh the grid kicks
+off — which is exactly why only the grid reaches it, while three screens that genuinely draw rows
+reach it zero times.
+
+The rows the grid draws must therefore come from a question the o-code asks separately, and that
+question is the thing to find.

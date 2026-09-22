@@ -6597,6 +6597,44 @@ must be `0x00`" was an artefact of which values were sampled -- `0x0001` and `0x
 the letters never were. The rule is the letter range; `0x0000` and `0x0100` also run a long path
 (492 and 553 PCs) and are something else again, not yet identified.
 
+#### THE TABLE IS RETAINED AND LINKED -- measured at the index itself
+
+*2026-09-22. The first `0xC1` data this box has kept.*
+
+The head table's address falls straight out of `0x800C4F94`: `lw s0,0x800C51A0` loads the WORD at
+that pool slot, which is **`0x80120E0C`**, and the offset is `(letter + 0x3FFFFFC0) << 2` -- which
+truncates in 32 bits to `(letter - 0x40) * 4`, so `'A'` is `+4` and `'Z'` is `+104`. The `'A'` head
+is therefore guest **`0x80120E10`**.
+
+Read from a running box, with the negative control beside it:
+
+    sent under 'A'      head[0x80120E10] = 80544240   our header = 80544240   LINKED
+    sent under 0x0100   head[0x80120E10] = 00000000   our header = 80544240   freed, head still null
+
+So a section addressed to a letter is **retained as the head of that letter's list**, and one
+outside the range is discarded -- which is the whole of the earlier "nothing reads it" result
+explained, and the letter dispatch confirmed from the data structure rather than from an
+instruction count.
+
+#### The TV GUIDE menu will not move past entry 6
+
+*Found while trying to OPEN A-Z LISTINGS, and it is why the screen half of this is still unanswered.*
+
+The TV GUIDE tab lists ten entries -- ALL CHANNELS, ENTERTAINMENT, MOVIES, SPORTS,
+NEWS & DOCUMENTARIES, KIDS, MUSIC & RADIO, SPECIALIST, **A-Z LISTINGS**, PERSONAL PLANNER. The
+highlight moves down to entry 6 and stops: **forty DOWN presses moved it five times and then nothing
+at all**, with the screen hash identical across the last thirty-five. That is not the swallow
+behaviour -- thirty-five consecutive presses do not all get absorbed -- it is the menu refusing to
+go further.
+
+So entries 7..10 are unreachable, A-Z LISTINGS among them, and the screen cannot be opened to see
+whether it draws what was linked. The same shape as the ALL CHANNELS grid: the screen exists, the
+box declines to enter it.
+
+**The number keys do not work here either.** Pressing `0x09` left the highlight on entry 1.
+`lessons.md` records that only four handset codes were ever proved against a screen and the digits
+are not among them, so `0x09` meaning "9" is an assumption this menu does not support.
+
 #### NOTHING READS THE ARRAY — on any screen this port can reach
 
 *The bridge question, and the answer is a negative worth as much as a positive: the box parses a

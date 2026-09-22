@@ -8724,3 +8724,55 @@ transmitter's own `OnAir` hook, across acquisition and the grid draw:
 > So the empty cells are not a coverage problem, not a wrong day and not a wrong block. Twenty-one
 > programmes are transmitted, parsed and registered, and the banner draws one of them — and the grid
 > asks the store 2,292 times and shows none. What the grid asks the store FOR is the open question.
+
+### The store walk that finds a programme, and the one that does not
+
+Two theories died cleanly first, which is worth recording because both were plausible enough to
+build on.
+
+**The row key is not the service id.** The twenty-four byte channel record carries the service id at
+`+0x08` and the channel number at `+0x10` and no listings id at all, while a title section is
+addressed BY the listings id — so a grid keying rows off the id it has to hand would find nothing
+for every channel while the banner, which resolves the tuned service through the line-up where both
+ids sit together, worked perfectly. That is exactly the shape of what is on screen. Setting every
+service id equal to its own listings id and re-running drew the grid **byte for byte identical**.
+The theory is wrong.
+
+**And the per-event register does not carry the channel.** Dumping the whole register file at
+`0x800C587C` on each of the twenty-one filings finds none of the announced listings ids, so that
+instrument cannot say which channel a programme is filed under and its silence is not evidence.
+
+### What the differential says
+
+Both screens read the listings store now, so the useful comparison is not how much but WHICH CODE:
+
+| | instructions reading the store | result |
+|---|---|---|
+| now-and-next banner | 270 | a programme on screen |
+| ALL CHANNELS grid | 569 | `..no listings available` |
+| **shared** | **232** | |
+
+So the grid looks harder and finds less. **Thirty-eight instructions read the store only on the
+banner**, and they are not scattered — they sit almost entirely inside the listings module at
+`0x800A8000`..`0x800AB000`:
+
+    800A8690  19 reads      800A86C4   5      800A8A8E   4
+    800A868C  14            800A86CC   5      800A900E   4
+    800AC2B4   6            800A84C8   5      800A9144   4
+    800A8698   5            800A86DA   5      800A9128   4
+
+Decompiling around the busiest of them shows what the store is: a **multi-level linked-list tree**.
+Each node carries a key halfword at `+0`, a flag word whose bit 2 is tested at `+2`, a next pointer
+at `+8` and a child pointer at `+12`, and the walk descends level by level matching a different
+halfword of the caller's key at each one. That is an index, and the banner walks it to a programme.
+
+> **The grid never runs any of it.** It reads the store 2,292 times from 569 instructions, none of
+> them these, and answers `..no listings available`. So it is not failing to find a programme in
+> the index — it is not consulting the index at all.
+
+*The decompilation is not clean and is not treated as if it were.* Ghidra resolved the busiest
+address into `FUN_800a86dc`, which is a seeded address in the MIDDLE of the real function, so its
+arguments come out as unresolved `unaff_` registers and the key halfwords read as offsets from a
+register Ghidra could not attribute. The shape — a keyed tree walk — is legible and the field
+offsets are not yet trustworthy. Finding the function's true entry and seeding THAT is the next
+step, not reading further into this output.

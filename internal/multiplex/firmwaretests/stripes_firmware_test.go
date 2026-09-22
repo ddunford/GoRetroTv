@@ -895,3 +895,402 @@ func TestWhichListingsTheBoxAsksFor(t *testing.T) {
 		"the empty rows are not a coverage problem. The day and the block each request names are " +
 		"the next thing to check against what the grid is displaying.")
 }
+
+// WHICH CHANNEL IS EACH PROGRAMME FILED UNDER?
+//
+// Twenty-one programmes are transmitted, parsed and registered; the banner draws one; and every row
+// of the grid says there are none. Coverage, day and block are all ruled out, so the question moves
+// to the store itself: **are those twenty-one events filed against all six channels, or against
+// one?** A store that holds every programme under a single channel looks exactly like this from the
+// outside -- one screen that works because it only ever asks about the tuned service, and one that
+// asks about six and finds five of them empty.
+//
+// 0x800C587C is the per-event register, executed once per programme the box takes off the air and
+// already used by this package to count them. This dumps the whole register file each time it runs
+// and reports which of the fixture's identifiers are in it -- the listings ids, which are what a
+// title section is addressed by, and the channel numbers beside them.
+//
+// **ONLY THE DISTINCTIVE ONES COUNT.** A value carries information here only where the firmware has
+// no other reason to hold it: watching every identifier once returned 2,532 reads of "101" from a
+// single instruction, which is a loop counter and not a channel. 251, 301, 401 and 501 are above
+// the threshold where a small integer stops being ordinary; 101 and 121 are not, and are reported
+// separately so they cannot quietly carry the argument.
+//
+// IT ASSERTS ITS OWN SUBJECT: the register must run the expected number of times, or the sample is
+// not the programmes.
+//
+// IT ONLY READS.
+func TestWhichChannelEachProgrammeIsFiledUnder(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	listings := guide.On(day)
+	const distinctive = 250
+	byListings := map[uint32]string{}
+	lowNumbered := map[uint32]string{}
+	for i := range listings.Services {
+		svc := &listings.Services[i]
+		into := byListings
+		if svc.ListingsID < distinctive {
+			into = lowNumbered
+		}
+		into[uint32(svc.ListingsID)] = svc.Name
+	}
+
+	events := 0
+	perChannel := map[uint32]int{}
+	perChannelLow := map[uint32]int{}
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !a.Fetch || a.Virtual&^1 != pcPerEventRegister {
+			return
+		}
+		events++
+		st := box.Machine.Core.State()
+		seenHere := map[uint32]bool{}
+		for _, v := range st.GPR {
+			id := v & 0xffff
+			if name, ok := byListings[id]; ok && !seenHere[id] {
+				seenHere[id] = true
+				perChannel[id]++
+				_ = name
+			}
+			if _, ok := lowNumbered[id]; ok && !seenHere[id] {
+				seenHere[id] = true
+				perChannelLow[id]++
+			}
+		}
+	}}
+
+	want := programmesInTheBlock(t, guide, day)
+	for i := 0; i < 160_000_000 && events < want; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if events < want {
+		t.Fatalf("harness: the per-event register ran %d times, not the %d programmes the block "+
+			"carries, so this sample is not the programmes", events, want)
+	}
+	t.Logf("the per-event register ran %d times for %d programmes in the block", events, want)
+
+	t.Logf("=== programmes filed against each DISTINCTIVE listings id ===")
+	covered := 0
+	for id, name := range byListings {
+		n := perChannel[id]
+		note := ""
+		if n == 0 {
+			note = "   <- NOT ONE"
+		} else {
+			covered++
+		}
+		t.Logf("    %-14s listingsID %4d  %3d events%s", name, id, n, note)
+	}
+	t.Logf("=== and the two whose ids are too ordinary to trust ===")
+	for id, name := range lowNumbered {
+		t.Logf("    %-14s listingsID %4d  %3d events (a small integer; treat as indicative only)",
+			name, id, perChannelLow[id])
+	}
+	switch {
+	case covered == 0:
+		t.Logf("VERDICT: not one distinctive listings id appears in the register file while a "+
+			"programme is filed, so the identifier is not carried in a register there and this "+
+			"says nothing about the store. %d events were sampled.", events)
+	case covered < len(byListings):
+		t.Logf("VERDICT: only %d of %d distinctive channels ever appear when a programme is filed. "+
+			"The others' programmes are transmitted and parsed and end up SOMEWHERE ELSE, which is "+
+			"exactly what a grid with five empty rows looks like.", covered, len(byListings))
+	default:
+		t.Logf("VERDICT: every distinctive channel appears when programmes are filed, so the store " +
+			"is not short of channels and the empty rows are in how the grid QUERIES it.")
+	}
+}
+
+// DOES THE GRID KEY ITS ROWS BY SERVICE ID RATHER THAN LISTINGS ID?
+//
+// A title section is addressed by the LISTINGS id -- it is the section's extension, and the box's
+// one request names it -- so the store is filled under listings ids. But the twenty-four byte
+// channel record the grid walks carries the SERVICE id at +0x08 and the channel number at +0x10,
+// and no listings id is visible in it at all.
+//
+// This fixture makes the two DIFFERENT: service ids 100..105 against listings ids 101, 121, 251,
+// 301, 401 and 501. If the grid looks a row's programmes up by the service id it has to hand, it
+// would find nothing for every channel while the banner -- which resolves the tuned service through
+// the line-up, where both ids sit side by side -- works perfectly. That is exactly the shape of
+// what is on screen.
+//
+// **It is a theory, and the cheapest way to test a theory about an identifier is to make the two
+// identifiers equal and look.** Setting each service id to its own listings id changes nothing
+// about how the titles are addressed -- they are still sent under the listings id, still matched by
+// the same request -- so if the rows fill, the difference between the two ids was the whole story.
+//
+// IT IS AN EXPERIMENT, NOT A FIX. Nothing here changes the product; the schedule is edited in
+// memory for this run only, and a pass means the next step is to find which id the grid really
+// wants, not to make every schedule set them equal.
+//
+// IT ONLY READS the box.
+func TestWhetherTheGridWantsServiceIDsToMatchListingsIDs(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	listings := guide.On(day)
+	for i := range listings.Services {
+		listings.Services[i].ServiceID = listings.Services[i].ListingsID
+	}
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+		emptyGrid   = 0x42DBD889
+		drawnGrid   = 0x584EEA36 // the six channels with "..no listings available"
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered with the ids equal, so the "+
+			"experiment changed acquisition and its screen would not be comparable", registered, want)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+	t.Logf("%d programmes registered with service ids set equal to listings ids", registered)
+
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.Step(); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+	openAllChannelsUnpinned(t, press, ".artifacts/grid-ids-equal.png")
+	final := uint32(0)
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+		if i%1_000_000 == 0 {
+			final = screenNow(t, box)
+		}
+	}
+	if err := dumpScreen(t, box, "grid-ids-equal.png"); err != nil {
+		t.Fatal(err)
+	}
+	switch final {
+	case emptyGrid:
+		t.Logf("VERDICT: with the ids equal the grid is EMPTY, so this experiment broke something "+
+			"else and says nothing about listings. (%08X)", final)
+	case drawnGrid:
+		t.Logf("VERDICT: the grid is byte for byte the screen it draws with the ids DIFFERENT "+
+			"(%08X), so making them equal changed nothing at all and the row key is not the "+
+			"service id.", final)
+	default:
+		t.Logf("*** VERDICT: the grid drew %08X, which is NEITHER the empty screen nor the "+
+			"no-listings screen. Something about the rows CHANGED. Read "+
+			".artifacts/grid-ids-equal.png ***", final)
+	}
+}
+
+// THE STORE-READING PATH THAT WORKS, AND THE ONE THAT DOES NOT.
+//
+// Both screens now read the listings store: the banner 214 times from 133 instructions and comes
+// back with a programme, the grid 2,292 times from 569 and comes back with nothing. So the grid is
+// not failing to look -- it is looking harder and finding less, which means the interesting thing
+// is not how much either reads but WHICH CODE does the reading.
+//
+// Instructions the banner reads the store from and the grid never does are the path that succeeds.
+// Instructions only the grid uses are where it looks and fails. Both lists are reported, because a
+// difference shown in one direction is a difference that can be read to mean anything.
+//
+// **THE GRID IS MEASURED PAST ITS SETTLE**, since its rows and everything they ask for arrive after
+// the settle claims the screen has stopped.
+//
+// IT ASSERTS ITS OWN SUBJECT: both screens must read the store, or a one-sided list is not a
+// difference.
+//
+// IT ONLY READS.
+func TestTheStoreReadingPathThatWorks(t *testing.T) {
+	banner := storeReaders(t, true)
+	grid := storeReaders(t, false)
+	if len(banner) == 0 || len(grid) == 0 {
+		t.Fatalf("harness: one screen read the store from no instruction at all (banner %d, grid "+
+			"%d), so the lists below are not a comparison", len(banner), len(grid))
+	}
+	t.Logf("the banner reads the store from %d instructions, the grid from %d", len(banner), len(grid))
+
+	onlyBanner := map[uint32]int{}
+	for pc, n := range banner {
+		if grid[pc] == 0 {
+			onlyBanner[pc] = n
+		}
+	}
+	onlyGrid := map[uint32]int{}
+	for pc, n := range grid {
+		if banner[pc] == 0 {
+			onlyGrid[pc] = n
+		}
+	}
+	show := func(title string, m map[uint32]int, limit int) {
+		keys := make([]uint32, 0, len(m))
+		for pc := range m {
+			keys = append(keys, pc)
+		}
+		sort.Slice(keys, func(a, b int) bool { return m[keys[a]] > m[keys[b]] })
+		t.Logf("=== %s (%d instructions) ===", title, len(keys))
+		for i, pc := range keys {
+			if i >= limit {
+				t.Logf("    ... and %d more", len(keys)-limit)
+				break
+			}
+			t.Logf("    %08X  %d reads", pc, m[pc])
+		}
+	}
+	show("READS THE STORE ONLY ON THE BANNER -- the path that finds a programme", onlyBanner, 20)
+	show("READS THE STORE ONLY ON THE GRID -- where it looks and fails", onlyGrid, 20)
+	shared := 0
+	for pc := range banner {
+		if grid[pc] > 0 {
+			shared++
+		}
+	}
+	t.Logf("%d instructions read the store on BOTH screens", shared)
+	t.Logf("decompile the busiest banner-only reader:  ./ctl.sh ghidra:decompile <address above>")
+}
+
+func storeReaders(t *testing.T, wantBanner bool) map[uint32]int {
+	t.Helper()
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+	listingsPages := map[uint32]bool{
+		0x00199: true, 0x00187: true, 0x00186: true,
+		0x002FB: true, 0x0010A: true, 0x001A5: true,
+	}
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+
+	reads, watching := map[uint32]int{}, false
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !watching || a.Write || a.Fetch {
+			return
+		}
+		if listingsPages[(a.Virtual&0x1fffffff)>>12] {
+			reads[box.Machine.Core.State().PC&^1]++
+		}
+	}}
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		if raw == keySelect || raw == keyTVGuide {
+			reads, watching = map[uint32]int{}, true
+		}
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+	if wantBanner {
+		if drew := press(keyTVGuide, "tv guide (banner)", 60_000_000); drew == 0 {
+			t.Fatal("harness: the banner drew nothing")
+		}
+		watching = false
+		return reads
+	}
+	openAllChannelsUnpinned(t, press, ".artifacts/store-path-grid.png")
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	watching = false
+	return reads
+}

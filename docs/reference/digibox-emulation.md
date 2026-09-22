@@ -8231,3 +8231,46 @@ reach it zero times.
 
 The rows the grid draws must therefore come from a question the o-code asks separately, and that
 question is the thing to find.
+
+### The grid never reads the listings store, and neither does A-Z LISTINGS
+
+**The grid was never a special case.** Opened under its own letter with a `0xC1` array assembled in
+its heap — sent as `'A'`, `0x0041`, which is what the `0x800C4F94` dispatch requires — A-Z LISTINGS
+draws its header, the in-world date, the clock, and an empty body. That is the grid's shape exactly.
+And it does not read the array, in 5.4 million data reads.
+
+Set against the screens that work, the pattern is the finding:
+
+| screen | what it presents | result |
+|---|---|---|
+| BOX OFFICE menu | a static menu, six rows | works |
+| TV GUIDE menu | a static menu, ten rows | works |
+| now-and-next banner | **one** channel's listing | works |
+| ALL CHANNELS grid | the listings database, many channels | nothing |
+| A-Z LISTINGS | the listings database, many programmes | nothing |
+
+The two that fail are the two that present the listings database across many entries. So the
+question stopped being "what is wrong with the grid".
+
+**The store was found by watching the box fill it**, which took two corrections worth keeping. The
+titles are not held as text — a sweep of all of DRAM for every title the broadcast carried finds
+none of them, so the box keeps its listings coded. And the per-event register at `0x800C587C`
+performs no load or store of its own: watching only its own accesses captured nothing, which is
+exactly what "an instruction that files a programme touches no memory" was trying to say. It is a
+marker. Recording the WRITES in the window after it gives the store: `0x8019926C`, so the page
+`0x80199000`.
+
+**With a control that proves the watch is on the right memory:**
+
+| screen | reads of the listings store while it draws |
+|---|---|
+| now-and-next banner | **214, from 133 instructions** |
+| ALL CHANNELS grid | **0** |
+
+> **The grid never reads the listings store at all.** It refuses before it looks.
+
+And that settles the question the signal work has been circling: **nothing we broadcast can be the
+cause.** The data is in the box, the banner draws a real programme out of it seconds earlier on the
+same run, and the grid does not ask. A missing table, a wrong field, an unfed PID — none of them can
+explain a screen that never queries. The gate is upstream of any query, it is common to both
+listings screens, and it is the one thing left to find.

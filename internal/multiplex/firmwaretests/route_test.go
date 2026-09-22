@@ -46,6 +46,12 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 		// Both verified by eye against their artefacts rather than inferred from a change.
 		tvGuideMenuScreen = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 		allChannelsEmpty  = 0x42DBD889 // "ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm", no rows
+		// THE MENU'S SECOND HASH. A select that does not land leaves the ten-entry menu on screen
+		// and it settles on this instead of on tvGuideMenuScreen. Verified by eye TWICE, from two
+		// different probes' artefacts, both of which had reported it as the grid. It is listed
+		// here because "not the tab" is the check that let it through, and a screen known not to
+		// be arrival should be named rather than re-derived by whoever opens the next PNG.
+		tvGuideMenuRedrawn = 0x43779DC8
 	)
 	menu := press(keyBoxOffice, "box office", 80_000_000)
 	tab := menu
@@ -53,6 +59,9 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 	for attempt := 1; attempt <= 6 && tab != tvGuideMenuScreen; attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
 		seen = append(seen, tab)
+	}
+	if tab == tvGuideMenuRedrawn {
+		tab = tvGuideMenuScreen
 	}
 	if tab != tvGuideMenuScreen {
 		t.Fatalf("harness: never reached the tv guide tab (%08X). Screens seen: %08X. The box "+
@@ -67,7 +76,8 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 		if grid == allChannelsEmpty {
 			return grid
 		}
-		if wantChange && grid != 0 && grid != tvGuideMenuScreen && grid != menu {
+		if wantChange && grid != 0 && grid != tvGuideMenuScreen &&
+			grid != tvGuideMenuRedrawn && grid != menu {
 			t.Logf("the grid settled on %08X, which is not the screen this project has measured "+
 				"every time before (%08X) -- READ %s AND SEE WHAT IT DRAWS",
 				grid, uint32(allChannelsEmpty), artefact)

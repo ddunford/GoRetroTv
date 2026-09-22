@@ -7996,3 +7996,47 @@ is not per-channel — every one of the six channel records carries the same `en
 six resolve the same handle to the same object. This is one shared thing, in one state, and the grid
 asks it once and leaves. The next measurement is what writes that state, and whether anything the
 box can be told over the air moves it past 5.
+
+### The state is a transport's, it moves, and opening the grid too early is what saw 4
+
+The object at `0x802B2A54` reads in full, and it is not anonymous:
+
+    +0  0000000E   kind 14
+    +4  0000000B   the tag the resolver copies to the caller
+    +8  00000300   the handle's pool
+    +12 00000004   the state
+    +16 802CEE14   a pointer whose +20/+22 halfwords the resolver copies out
+    +24 00200020   network 32 and transport 32
+
+**Those are the box's own ids for our broadcast** — the same `0x0020` the NIT match unit (`40/FE
+00/FF 20/FF`) and the SDT unit (`42/FB 00/FF 20/FF`) are programmed with. This is the transport
+record, and the grid gates on its state.
+
+Watching every write to that word across 160 million instructions of acquisition shows it **moving**:
+
+    800AC876 wrote 4      something early sets it to 4
+    800AA8F8 wrote 6      and something later sets it to 6
+    800ADE4A wrote 7      and the RESOLVER ITSELF promotes 6 to 7 the next time it is asked
+                          (800ade42 cmpi s0,6 / lw v0,12(sp) / li s0,7 / sw s0,12(v0))
+
+It reaches 6 **about 56 million instructions after the last programme registers**. Every measurement
+of this screen on this project, going back to the first, pressed select after a fixed settle and
+caught the transport at 4. **The screen was not refusing a field we never sent — it was being opened
+before the box had finished.**
+
+Waiting for the box rather than for a number — run until the transport says 6 or more, then walk to
+the grid — changes the loop completely:
+
+| | pressing after a fixed settle | with the transport ready |
+|---|---|---|
+| row-loop iterations | 1: index 0, then it leaves | **7: indices 0,1,2,3,4,5 and the terminating 6** |
+| the resolver's answer | code 2 | **code 4, six times, one per channel** |
+| channel-detail calls | 0 | 0 |
+
+**The grid now walks all six channels.** That gate is open and it is open for the right reason.
+
+**And the screen is still byte for byte `42DBD889`.** So the transport state was necessary and is not
+sufficient: a second refusal sits downstream of the row loop, and it is a much cheaper thing to find
+now that the loop runs — the body executes six times and can simply be traced, exactly as the exit
+was. Note also that the loop still never calls `0x800A45C4`, so whatever the grid uses to fill a row
+it does not get from the channel-detail function the banner uses.

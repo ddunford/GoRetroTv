@@ -8893,3 +8893,36 @@ subscription's PID.
 > So the tree is real, its contents are legible, and which PID each branch belongs to is still
 > unknown. The `0xC1`-under-letters branch stands because its keys match an independent decoding of
 > the consumer, not because the walk attributed it to a PID.
+
+### The whole subscription tree, and it clears the signal completely
+
+Grouping the walk by its top-level table id makes it legible, and it is the box's own statement of
+what it will accept:
+
+    table C1 under mask FF, 92 children      the A-Z index, keyed by letter
+    table A0 under mask FF,  6 children      Sky One, Sky Soap, Sky Travel, Sky Movies,
+    table A3 under mask FF,  6 children        Sky Sports 1, Sky News -- ALL SIX, under BOTH
+    table 73 under mask FF                   TOT
+    table 42 under mask FB / FF              SDT
+    table 4A under mask FF,  2 children      BAT
+    table 40 under mask FE / FF,  1 child    NIT
+
+A title section's extension is the listings id, so those children are channels, read back by name:
+`0065` Sky One, `0079` Sky Soap, `00FB` Sky Travel, `012D` Sky Movies, `0191` Sky Sports 1, `01F5`
+Sky News. **Six of six, under table `0xA0` and again under `0xA3`.**
+
+> **The signal side is now verified end to end.** The box subscribes to every channel's titles; the
+> dispatcher receives them (19 title sections in one acquisition); twenty-one programmes register;
+> the banner draws one. Coverage, day, block, service-id key, "never asks" and now SUBSCRIPTION are
+> all eliminated. **Nothing that can be changed in the broadcast will fill those cells.**
+
+Two smaller facts fall out and are worth keeping:
+
+- **`0xA1` and `0xA2` have no subscription at all**, and this port transmits six sections of each.
+  They reach the dispatcher and are dropped. The box wants the evening block (`0xA3`) and the
+  overnight block (`0xA0`), and nothing else — so two thirds of the title carousel is currently
+  wasted bandwidth rather than data the box refused.
+- **The `0xC1` branch has ninety-two children.** It is the one subscription the box holds that this
+  port has never answered, and the format is already decoded here: nine-byte records,
+  `count = (section_length - 9) / 9`, a ten-byte in-memory record, and an extension that must be a
+  letter `'A'`..`'Z'` or the consumer builds the list and frees it.

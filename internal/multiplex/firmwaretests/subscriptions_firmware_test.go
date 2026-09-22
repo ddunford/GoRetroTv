@@ -1,6 +1,7 @@
 package firmwaretests_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -102,7 +103,7 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 	type sub struct {
 		pid          uint16
 		depth        int
-		key, keyMask uint16
+		tag, tagMask uint16
 		flags        uint16
 		leaf         bool
 	}
@@ -117,9 +118,9 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 			flags := half(node + 2)
 			// Only the TOP level is a masked table-id test; below it the whole halfword is
 			// compared against a field of the section, so splitting it would invent a mask.
-			s := sub{pid: pid, depth: depth, key: k, flags: flags, leaf: flags&4 != 0}
+			s := sub{pid: pid, depth: depth, tag: k, flags: flags, leaf: flags&4 != 0}
 			if depth == 0 {
-				s.key, s.keyMask = k&0xff, k>>8
+				s.tag, s.tagMask = k&0xff, k>>8
 			}
 			found = append(found, s)
 			if !s.leaf && depth < 4 {
@@ -174,24 +175,71 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 		}
 		t.Logf("  PID %#04x: %d nodes%s", p, byPID[p], note)
 	}
-	shown := 0
+	// GROUPED BY THE TOP-LEVEL TABLE ID, because that is the question. A title section's extension
+	// is the LISTINGS ID, so a branch under table 0xA0..0xA4 lists the channels the box will accept
+	// programmes for -- and a channel missing from it is a channel whose programmes are delivered
+	// to nobody, however correctly they are transmitted.
+	type branch struct {
+		table, tableMask uint16
+		children         []uint16
+	}
+	var branches []*branch
+	var current *branch
 	for _, s := range found {
-		if shown >= 60 {
-			t.Logf("    ... and %d more", len(found)-shown)
-			break
+		if s.depth == 0 {
+			current = &branch{table: s.tag, tableMask: s.tagMask}
+			branches = append(branches, current)
+			continue
 		}
-		kind := "branch"
-		if s.leaf {
-			kind = "LEAF (a section matching here is delivered)"
+		if current != nil && s.depth == 1 {
+			current.children = append(current.children, s.tag)
 		}
-		t.Logf("    PID %#04x depth %d  key %02X under mask %02X  flags %04X  %s",
-			s.pid, s.depth, s.key, s.keyMask, s.flags, kind)
-		shown++
+	}
+	listings := guide.On(day)
+	ours := map[uint16]string{}
+	for i := range listings.Services {
+		ours[listings.Services[i].ListingsID] = listings.Services[i].Name
+	}
+	t.Logf("=== the tree, by top-level table id ===")
+	for _, b := range branches {
+		kind := ""
+		switch {
+		case b.table >= 0xa0 && b.table <= 0xa4:
+			kind = "  <- A SKY TITLE TABLE: its children are listings ids"
+		case b.table == 0xc1:
+			kind = "  <- the A-Z index: its children are letters"
+		}
+		t.Logf("  table %02X under mask %02X, %d children%s",
+			b.table, b.tableMask, len(b.children), kind)
+		line, shown := "", 0
+		for _, c := range b.children {
+			if name, mine := ours[c]; mine {
+				t.Logf("        child %04X = %s  <- ONE OF OURS", c, name)
+				continue
+			}
+			line += fmt.Sprintf(" %04X", c)
+			if shown++; shown%12 == 0 {
+				t.Logf("       %s", line)
+				line = ""
+			}
+		}
+		if line != "" {
+			t.Logf("       %s", line)
+		}
+		if b.table >= 0xa0 && b.table <= 0xa4 {
+			covered := 0
+			for _, c := range b.children {
+				if _, mine := ours[c]; mine {
+					covered++
+				}
+			}
+			t.Logf("    -> %d of our %d channels are subscribed under this table",
+				covered, len(ours))
+		}
 	}
 
 	// The question this was built for: is there a subscription whose top-level key admits a Sky
 	// title section on the listings PID?
-	listings := guide.On(day)
 	titlePIDs := map[uint16]bool{}
 	for p := range byPID {
 		if p >= 0x30 && p <= 0x37 {
@@ -204,10 +252,10 @@ func TestEverySectionSubscriptionTheBoxHolds(t *testing.T) {
 			continue
 		}
 		for table := byte(0xa0); table <= 0xa4; table++ {
-			if uint16(s.keyMask)&(uint16(s.key)^uint16(table)) == 0 { // #nosec G115 -- bytes
+			if s.tagMask&(s.tag^uint16(table)) == 0 { // #nosec G115 -- bytes
 				admits++
-				t.Logf("    a title table %#02x is admitted by PID %#04x key %02X/%02X",
-					table, s.pid, s.key, s.keyMask)
+				t.Logf("    a title table %#02x is admitted by PID %#04x tag %02X/%02X",
+					table, s.pid, s.tag, s.tagMask)
 				break
 			}
 		}

@@ -1,6 +1,7 @@
 package firmwaretests_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -476,4 +477,309 @@ func TestTheStructTheRecordBuilderIsHanded(t *testing.T) {
 	}
 	t.Logf("VERDICT: the first word -- the one that becomes record+0x0C and is masked with 0x10 -- "+
 		"is ZERO in %d of %d calls.", zero, len(calls))
+}
+
+// THE WRITE ITSELF: WHAT VALUE REACHES record+0x0C, AND WHERE FROM.
+//
+// The reading and the measurement disagreed, so neither is trusted and the instruction is watched
+// instead. The MIPS is unambiguous:
+//
+//	800a3586  lw v0,16(sp)     the saved struct pointer
+//	800a3588  lw v0,0(v0)      v0 = param_2[0]
+//	800a358c  sw v0,12(v1)     record + 0x0C = param_2[0]
+//
+// So the decompiler's `record+0x0C = *param_2` is right, and the earlier field map was wrong for a
+// reason worth keeping: it bucketed writes by `(address - base) % 24` against a base read at the
+// END of acquisition, and the array MOVES while it is being built. Every offset it reported was
+// shifted. `0x800A34A2` is `sw v0,20(v1)` -- record+0x14, the reference -- not +0x0C at all.
+//
+// This watches `0x800A358C` execute: `v0` is the value and `v1` the record base, so each write is
+// recorded as an exact (address, value) pair with no modulo arithmetic and no assumed base. If the
+// value is non-zero here while the record reads zero afterwards, something clears it later, and
+// that is a different bug from "we never send it".
+//
+// IT ASSERTS ITS OWN SUBJECT: the write must execute, or there is nothing to report.
+//
+// IT ONLY READS.
+func TestWhatValueReachesTheMaskedWord(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const theWrite = 0x800A358C
+
+	type put struct{ at, value uint32 }
+	var puts []put
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !a.Fetch || a.Virtual&^1 != theWrite {
+			return
+		}
+		st := box.Machine.Core.State()
+		puts = append(puts, put{at: st.GPR[3] + 12, value: st.GPR[2]})
+	}}
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	for i := 0; i < 160_000_000 && registered < want; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+		if box.Machine.Core.State().PC&^1 == pcPerEventRegister {
+			registered++
+		}
+	}
+	if len(puts) == 0 {
+		t.Fatalf("harness: the write at %08X never executed during acquisition, so nothing filled "+
+			"record+0x0C and its zero is simply never having been written", uint32(theWrite))
+	}
+
+	t.Logf("=== every write to record+0x0C during acquisition ===")
+	nonZero := 0
+	for i, p := range puts {
+		if i >= 12 {
+			t.Logf("    ... and %d more", len(puts)-12)
+			break
+		}
+		now := uint32(0)
+		if p.at >= 0x80000000 && (p.at&0x1fffffff)+4 <= box.RAM.Size() {
+			now = box.RAM.Read(p.at&0x1fffffff, bus.Word)
+		}
+		note := ""
+		if p.value != 0 {
+			nonZero++
+			note = "  <- NON-ZERO"
+			if now != p.value {
+				note = "  <- NON-ZERO WHEN WRITTEN, AND SOMETHING CHANGED IT SINCE"
+			}
+		}
+		t.Logf("    wrote %08X to %08X   (it now holds %08X)%s", p.value, p.at, now, note)
+	}
+	switch {
+	case nonZero == 0:
+		t.Logf("VERDICT: all %d writes put ZERO into record+0x0C. The value comes straight from the "+
+			"first word of the struct the builder is handed, so nothing upstream ever supplies a "+
+			"bit for the grid's 0x10 mask to find. THE SOURCE OF THAT WORD IS THE NEXT THING TO "+
+			"WALK BACK -- it is param_2[0] at 0x800A3588.", len(puts))
+	default:
+		t.Logf("VERDICT: %d of %d writes carried a NON-ZERO value, so the word is populated at "+
+			"least sometimes and the question is what clears it or which records miss out.",
+			nonZero, len(puts))
+	}
+}
+
+// WHICH LINE-UP FLAG BIT SETS THE ONE THE GRID MASKS FOR.
+//
+// The word the grid masks with 0x10 is `record+0x0C`, written by `0x800A358C` and holding **0xAA**
+// for a channel with no flags. 0xAA is a signature this project has already decoded on another
+// structure: four two-bit fields packed MSB-first, 1 where a bit is set and 2 where it is clear, so
+// all-clear reads 0xAA rather than zero. Bit 4 is the low bit of the SECOND field, so exactly one
+// of the line-up's four flag bits can set it.
+//
+// **That is a derivation, and derivations get measured here.** This gives each channel a different
+// flag value, reads back the word each record ends up with, and reports which value produced a word
+// the grid's mask can find. The record is located by watching the write itself rather than by
+// assuming a base -- an earlier probe bucketed by `(address - base) % 24` against a base read after
+// acquisition, and the array MOVES while it is built, so every offset it reported was shifted.
+//
+// IT ONLY READS. The flags ride in the BAT, as they always have.
+func TestWhichFlagBitSetsTheGridsMaskBit(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	const (
+		theWrite = 0x800A358C
+		gridMask = 0x10
+	)
+
+	listings := guide.On(day)
+	assign := []byte{0x1, 0x2, 0x4, 0x8, 0x0f, 0x0}
+	if len(listings.Services) != len(assign) {
+		t.Fatalf("harness: %d flag values for %d channels", len(assign), len(listings.Services))
+	}
+	sent := map[uint16]byte{}
+	for i := range listings.Services {
+		listings.Services[i].Flags = assign[i]
+		sent[listings.Services[i].Channel] = assign[i]
+	}
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var records []uint32
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if a.Fetch && a.Virtual&^1 == theWrite {
+			records = append(records, box.Machine.Core.State().GPR[3]+12)
+		}
+	}}
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	for i := 0; i < 160_000_000 && registered < want; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+		if box.Machine.Core.State().PC&^1 == pcPerEventRegister {
+			registered++
+		}
+	}
+	if len(records) == 0 {
+		t.Fatalf("harness: the write at %08X never executed, so no record was located", uint32(theWrite))
+	}
+
+	byChannel := map[uint16]string{}
+	for i := range listings.Services {
+		byChannel[listings.Services[i].Channel] = listings.Services[i].Name
+	}
+	t.Logf("=== each record's masked word, against the flags its channel was sent ===")
+	passing := map[byte]bool{}
+	for _, at := range records {
+		if at < 0x80000000 || (at&0x1fffffff)+8 > box.RAM.Size() {
+			continue
+		}
+		word := box.RAM.Read(at&0x1fffffff, bus.Word)
+		// The channel number sits at record+0x10, which is four bytes past the word just read.
+		channel := uint16(box.RAM.Read((at&0x1fffffff)+4, bus.Word)) // #nosec G115 -- low half
+		name, mine := byChannel[channel]
+		if !mine {
+			name = "(unidentified)"
+		}
+		flags := sent[channel]
+		hit := word & gridMask
+		note := ""
+		if hit != 0 {
+			note = "   <- PASSES THE GRID'S MASK"
+			passing[flags] = true
+		}
+		t.Logf("    %08X  word %08X  channel %4d %-14s flags %#03x  & %#02x = %02X%s",
+			at, word, channel, name, flags, gridMask, hit, note)
+	}
+	switch len(passing) {
+	case 0:
+		t.Logf("VERDICT: no flag value in this sweep produced a word the mask can find.")
+	default:
+		for f := range passing {
+			t.Logf("VERDICT: FLAGS %#03x SETS THE BIT THE GRID MASKS FOR. Every channel needs it.", f)
+		}
+	}
+}
+
+// EVERY CHANNEL WITH FLAG 0x04: DOES THE GRID DRAW ITS ROWS?
+//
+// The word the grid masks with 0x10 is four two-bit fields, and exactly one of the line-up's flag
+// bits sets the field that carries bit 4. Measured across a sweep that gave every channel a
+// different value:
+//
+//	flags 0x0 -> 0xAA (all clear)   flags 0x8 -> 0x6A (field0)
+//	flags 0x1 -> 0xA9 (field3)      flags 0x2 -> 0xA6 (field2)
+//	flags 0x4 -> 0x9A (field1)  <- 0x9A & 0x10 = 0x10, PASSES
+//	flags 0xF -> 0x55 (all set) <- also passes, being all of them
+//
+// So `0x04` is the bit. With one channel carrying it the grid drew content in its row area for the
+// first time in this project's history. This gives it to ALL SIX and asks the only question left:
+// does the whole grid fill?
+//
+// IT ONLY READS the box; the flag rides in the BAT's 0xB1 line-up entry exactly as the field was
+// always meant to.
+func TestTheGridWithEveryChannelFlagged(t *testing.T) {
+	// EVERY UNIFORM VALUE, BECAUSE 0x04 ALONE DID NOT DO IT. Giving all six channels 0x04 -- the bit
+	// measured to set the field the grid masks -- left the grid on its empty screen, while a MIXED
+	// sweep (0x1, 0x2, 0x4, 0x8, 0xF, 0x0) drew content in the row area. So passing the mask is
+	// necessary and not sufficient, and the four bits evidently do not all mean the same kind of
+	// thing. Sweeping the whole nibble costs one acquisition each and settles it without guessing
+	// which combination matters.
+	for _, flags := range []byte{0x04, 0x0f, 0x06, 0x0c, 0x05, 0x07} {
+		t.Run(fmt.Sprintf("flags_%#02x", flags), func(t *testing.T) { gridWithFlags(t, flags) })
+	}
+}
+
+func gridWithFlags(t *testing.T, uniform byte) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+	)
+	inTheGuide := uniform
+	listings := guide.On(day)
+	for i := range listings.Services {
+		listings.Services[i].Flags = inTheGuide
+	}
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+	t.Logf("all %d channels flagged %#02x; transport ready at state %d",
+		len(listings.Services), inTheGuide, state())
+
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.Step(); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+
+	artefact := fmt.Sprintf("grid-flags-%02x.png", uniform)
+	grid := openAllChannels(t, press, ".artifacts/"+artefact, true)
+	if err := dumpScreen(t, box, artefact); err != nil {
+		t.Fatal(err)
+	}
+	const emptyGrid = 0x42DBD889
+	if grid == emptyGrid {
+		t.Logf("flags %#02x: the grid is STILL the empty screen -- this value changes nothing", uniform)
+		return
+	}
+	t.Logf("*** flags %#02x: THE GRID DREW %08X, not the empty screen. Artefact %s ***",
+		uniform, grid, artefact)
 }

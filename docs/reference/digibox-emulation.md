@@ -8579,3 +8579,58 @@ machine's, or the dump is taken at the wrong moment.
 > the writer is `0x800A34A2` — and the source of its value is the next thing to measure, not to
 > infer. Watching the write itself and capturing the register it comes from is the measurement that
 > settles it.
+
+### THE ALL CHANNELS GRID DRAWS IN ITS ROW AREA, for the first time
+
+Two corrections first, because both were mine and both would have sent the work the wrong way.
+
+**The field map was shifted.** A probe bucketed writes by `(address - base) % 24` against a base
+read at the END of acquisition — and the array MOVES while it is built, so every offset it reported
+was wrong. `0x800A34A2` is `sw v0,20(v1)`: record `+0x14`, the reference, not `+0x0C` at all. The
+instruction that writes the masked word is `0x800A358C`, and watching it removes the arithmetic:
+
+    800a3586  lw v0,16(sp)     the saved struct pointer
+    800a3588  lw v0,0(v0)      v0 = param_2[0]
+    800a358c  sw v0,12(v1)     record + 0x0C = param_2[0]
+
+    wrote 03330002 to 802A7C08   (it now holds 000000AA)   ... six times, stride 24
+
+**And `0xAA` is a signature this project had already decoded on another structure**: four two-bit
+fields packed MSB-first, `01` where a bit is set and `10` where it is clear, so an all-clear record
+reads `0xAA` rather than zero. That is the line-up's **Flags** nibble. Sweeping it, one value per
+channel, reads the whole encoding off the machine:
+
+| flags sent | word | fields |
+|---|---|---|
+| `0x0` | `0xAA` | all clear |
+| `0x1` | `0xA9` | field3 |
+| `0x2` | `0xA6` | field2 |
+| **`0x4`** | **`0x9A`** | **field1 — `0x9A & 0x10 = 0x10`, PASSES the grid's mask** |
+| `0x8` | `0x6A` | field0 |
+| `0xF` | `0x55` | all set — passes too |
+
+**So an earlier negative was measured behind a closed gate and is withdrawn.** All four flag bits
+were swept once before and the grid was byte-identical — but that was before the private data
+specifier, when the filter callback returned `-1` and `local_60 == 0` short-circuited the mask test
+entirely. It was never reached. A negative measured behind a closed gate says nothing about the
+gate below it.
+
+### And then the screen changed
+
+With the mixed sweep on air the grid drew `63568A5B`, and with every channel carrying `0x0F` it drew
+`FE429791` — **neither of which is the empty `42DBD889` this project has measured on every single
+run since the screen was first opened.** The artefacts show content in the row area, spanning the
+grid's full width, with vertical breaks that line up with the `7.30pm` and `8.00pm` column headers.
+
+> **The grid is laying out programme cells.** The cells render as stripes rather than as text, so
+> the drawing is wrong — but the layout is right, and the row area is populated for the first time
+> in this project's history.
+
+**`0x04` alone is necessary and not sufficient**: every channel carrying it leaves the grid empty,
+while `0x0F` draws. So the four bits do not all mean the same kind of thing and what each one means
+is not established — it must not be guessed.
+
+*A note on the instrument.* Several uniform flag values could not be measured at all, because
+**the flags change the TV GUIDE menu too** — its hash moves off the pinned `0xDDBC18E9` and the
+route refuses to continue. That is the pin working as intended rather than a fault, but it means an
+experiment that changes the broadcast needs an acceptance that does not assume the menu is fixed.

@@ -219,6 +219,51 @@ every access to `0xB200A000`-`0xB200A0F4` by offset, size and PC inside handler 
 model what the 160 bytes do — today `boardlatch` models the first word as an echo and its own
 comment admits the wider identity is unestablished.
 
+### The modelled card answers what the box asks for, and the oracle comparison does not — 2026-09-22
+
+**Decision.** `csi.DefaultAckPolicy` answers `{0x52, 0x18, 0x41, 0x42}`. The oracle checkpoint
+comparison runs with `-ack-oracle`, which holds the card to `{0x52, 0x18}` — what the RECORDED
+browser oracle answers. The oracle file itself is untouched.
+
+**Why.** Leaving `0x41` and `0x42` unanswered starves `SMTTask`, the one task that drains the
+guest's event queue `EVQP0002`: it waits out a fifty-tick timeout per command, the queue fills, and
+it ends up suspended trying to add to the very pipe it alone drains. Eight handset presses and the
+box stops responding to the handset entirely (`gort-slq`). Those two are the ONLY codes the box
+sends while it fails, measured off the bus, and were swept one at a time — either alone is worth two
+presses, together they recover the entire effect of answering every code there is.
+
+**Why the oracle comparison is exempted rather than the fix withheld.** The browser oracle's card is
+silent on the same codes, so it would wedge in the same way for the same reason. That is the case
+`CLAUDE.md` already names: *the oracle proves this port matches the browser emulator, not that
+either matches a Digibox; where both are wrong in the same way they agree; inherited errors are
+caught only by the measured record.* This is an inherited error, caught and corrected. **Editing the
+oracle to agree is the one move that destroys its value**, so the comparison is instead run in the
+oracle's declared condition — exactly as it already runs without `-sky-gates`, against a stream
+named `oracle-cold-boot-nogates`.
+
+**Rejected alternatives.**
+- *Keep the narrow policy and live with the wedge.* The demo stops answering the handset after a
+  few presses, and every screen that needs navigating to becomes unmeasurable.
+- *Ship the wide policy as an opt-in flag.* The product restores a snapshot and boots unattended;
+  a fix nobody turns on is not a fix.
+- *Re-record the oracle stream from a browser emulator with the wider card.* The oracle's
+  independence comes from not being derived from this port's conclusions. Changing it because the
+  port changed is the failure mode the contract exists to prevent.
+- *Answer every code (`AckAll`).* Recovers no more of the effect and answers codes the box never
+  asks for while it fails, which is where a reply the box accepts and a real card would refuse does
+  its damage.
+
+**Future rung / trigger.** What a real card answers to `0x41` and `0x42`, and whether the payload
+matters, is NOT established — the policy sends a bare acknowledgement. Revisit if the box is ever
+seen to act on the reply's contents, or if a measured capture from real hardware becomes available.
+An instrument to settle it is described in the record: a watch on the assembled reply frame in RAM
+naming every PC that reads it. A differential PC census was tried and does not work — past the
+first divergence the two arms' schedules differ and the diff is a schedule, not a handler.
+
+**Sources.** `docs/reference/digibox-emulation.md`, the wedge section: the sweep, the oracle
+divergence with both halves controlled, and the byte-level proof of the frame splice that the
+change exposed in this port's own link.
+
 ### Deployment and access
 - **Public**, at `goretrotv.demosrv.uk`, TLS via the existing Traefik, as the predecessor did.
 - **Developer surfaces are not exposed.** The gdb stub and the instrument endpoints bind to

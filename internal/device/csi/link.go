@@ -26,6 +26,39 @@ const (
 	PowerupTicks = 120
 )
 
+// DefaultAckPolicy is the set of command codes the modelled front-panel micro answers.
+//
+// EVERY CODE HERE IS ON THE LIST FOR A MEASURED REASON, and the two that were added last were
+// added because their SILENCE WEDGED THE BOX.
+//
+//	0x52  card status. The record has the handler at 0x8002A534 reading frame[3], masking it to
+//	      three bits and releasing the Periph semaphore unconditionally, so the box genuinely
+//	      waits on this one and any value 0-7 satisfies it.
+//	0x18  the periodic heartbeat, reached from the descriptor at flash 0x9FC237A0.
+//	0x41,
+//	0x42  THE TWO THE BOX SENDS ON EVERY KEY PRESS. Left unanswered, SMTTask waits out its
+//	      fifty-tick timeout for each one, the event queue EVQP0002 that SMTTask alone drains
+//	      backs up, and after eight presses it is full with three tasks suspended on it and the
+//	      box stops responding to the handset entirely (gort-slq).
+//
+// THE LAST TWO ARE MEASURED BOTH WAYS. Across the eight presses that fill the pipe the box sends
+// exactly three codes -- 0x18 three times, 0x41 six times, 0x42 six times -- so these are not
+// candidates picked from the boot capture, they are the whole of what it asks for while it fails.
+// And they were swept one at a time, because two changes at once cannot say which mattered:
+//
+//	0x52 and 0x18 only       pipe FULL after  8 presses
+//	and 0x41                 pipe FULL after 10 presses
+//	and 0x42                 pipe FULL after 10 presses
+//	and both                 never full in 60, and never more than 4 of its 20 messages deep
+//	every code at all        identical to "and both"
+//
+// Either alone barely moves it; together they recover the ENTIRE effect of answering every code,
+// which is why the policy stops here rather than widening to the codes the box sends only at boot.
+// Answering a code a real card would refuse makes a machine that is plausibly wrong rather than
+// visibly broken, so the list is what the box demonstrably needs and nothing more.
+// Arms: internal/multiplex/firmwaretests/cardsilence_firmware_test.go.
+var DefaultAckPolicy = []uint8{0x52, 0x18, 0x41, 0x42}
+
 // Link is a one-byte receive register with a paced incoming wire. The card
 // model can enqueue reply frames through Queue; Key constructs an unsolicited
 // type-2 handset frame. Pump is called by the instruction loop.
@@ -42,14 +75,20 @@ type Link struct {
 	cardLive, boxBusy, txSeen bool
 	frame                     []byte
 	escaped                   bool
-	ack                       [4]uint64
-	interrupt                 *irq.Controller
+	// inFrame and sendingReply say that a frame has begun leaving for the guest and which queue it
+	// came from. THE SOURCE MUST NOT CHANGE UNTIL THE TERMINATOR HAS GONE: card replies and
+	// handset frames share this wire and share its framing, so a frame interrupted half way
+	// through is not a delayed frame, it is two corrupt ones, and the guest's de-framer cannot
+	// tell. See Pump.
+	inFrame, sendingReply bool
+	ack                   [4]uint64
+	interrupt             *irq.Controller
 }
 
 // New binds the link to the board interrupt controller.
 func New(interrupt *irq.Controller) *Link {
 	l := &Link{interrupt: interrupt}
-	l.SetAckPolicy([]uint8{0x52, 0x18})
+	l.SetAckPolicy(DefaultAckPolicy)
 	return l
 }
 
@@ -159,19 +198,45 @@ func (l *Link) Pump(now, boardTicks uint64) {
 	if !l.enabled() || l.ready || now < l.lastByteAt {
 		return
 	}
+	// WHICH QUEUE THE NEXT BYTE COMES FROM, AND IT DOES NOT CHANGE MID-FRAME.
+	//
+	// Card replies used to take priority unconditionally, so a reply generated while a handset
+	// frame was part-way out cut straight into it -- the guest received
+	// `05 80 02 1b 00 07 | 02 01 41 00 | d0 00` and de-framed two corrupt messages instead of a
+	// key and an acknowledgement. It went unnoticed for as long as the modelled card answered
+	// almost nothing and therefore almost never had anything to say at the wrong moment.
+	//
+	// A frame whose source has run dry can only come from a caller queueing a partial one, and
+	// stalling the link for ever would be worse than the splice; that case starts afresh.
+	const (
+		nothing = iota
+		fromReply
+		fromQueue
+	)
+	source := nothing
 	switch {
+	case l.inFrame && l.sendingReply && len(l.reply) > 0:
+		source = fromReply
+	case l.inFrame && !l.sendingReply && len(l.queue) > 0:
+		source = fromQueue
 	case len(l.reply) > 0:
+		source = fromReply
+	case len(l.queue) > 0:
+		source = fromQueue
+	}
+	switch source {
+	case fromReply:
 		if !l.cardLive || !l.txSeen || now-l.lastByteAt < TrafficInstructions {
 			return
 		}
 		l.data, l.reply = l.reply[0], l.reply[1:]
-		l.txSeen = false
-	case len(l.queue) > 0:
+		l.txSeen, l.sendingReply, l.inFrame = false, true, l.data != 0
+	case fromQueue:
 		if !l.cardLive || !l.txSeen || now-l.lastByteAt < TrafficInstructions {
 			return
 		}
 		l.data, l.queue = l.queue[0], l.queue[1:]
-		l.txSeen = false
+		l.txSeen, l.sendingReply, l.inFrame = false, false, l.data != 0
 	default:
 		period := uint64(IdleInstructions)
 		if l.boxBusy {
@@ -180,7 +245,7 @@ func (l *Link) Pump(now, boardTicks uint64) {
 		if !l.cardLive || now-l.lastByteAt < period {
 			return
 		}
-		l.data = 0
+		l.data, l.inFrame = 0, false
 	}
 	l.ready, l.lastByteAt = true, now
 	l.updateLine()
@@ -198,13 +263,16 @@ func (l *Link) Reset() {
 	l.queue, l.transmitted, l.lastByteAt, l.now = nil, nil, 0, 0
 	l.reply, l.frame, l.powerAtTick, l.timerTicks = nil, nil, 0, 0
 	l.cardLive, l.boxBusy, l.txSeen, l.escaped = false, false, false, false
-	l.SetAckPolicy([]uint8{0x52, 0x18})
+	l.inFrame, l.sendingReply = false, false
+	l.SetAckPolicy(DefaultAckPolicy)
 	l.updateLine()
 }
 
 // Snapshot captures all device-owned register, queue and timing state.
 func (l *Link) Snapshot() ([]byte, error) {
-	w := snapcodec.NewWriter(l.Name(), 3)
+	// v4 DROPPED THE ACK POLICY, which is model configuration rather than machine state -- see
+	// Restore. v3 blobs still load; they simply carry four words this build discards.
+	w := snapcodec.NewWriter(l.Name(), 4)
 	w.Words([]uint32{l.control, l.interruptEnable})
 	w.Uint8(l.data)
 	w.Bool(l.ready)
@@ -220,9 +288,8 @@ func (l *Link) Snapshot() ([]byte, error) {
 	w.Bool(l.txSeen)
 	w.Bool(l.escaped)
 	w.Bytes(l.frame)
-	for _, bits := range l.ack {
-		w.Uint64(bits)
-	}
+	w.Bool(l.inFrame)
+	w.Bool(l.sendingReply)
 	return w.Blob()
 }
 
@@ -232,7 +299,7 @@ func (l *Link) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
 	}
-	if err := r.Expect(l.Name(), 3, 3); err != nil {
+	if err := r.Expect(l.Name(), 3, 4); err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
 	}
 	regs, data, ready := r.Words(), r.Uint8(), r.Bool()
@@ -240,9 +307,26 @@ func (l *Link) Restore(blob []byte) error {
 	lastByteAt, now, powerAtTick, timerTicks := r.Uint64(), r.Uint64(), r.Uint64(), r.Uint64()
 	cardLive, boxBusy, txSeen, escaped := r.Bool(), r.Bool(), r.Bool(), r.Bool()
 	frame := r.Bytes()
-	var ack [4]uint64
-	for i := range ack {
-		ack[i] = r.Uint64()
+	// v4 added the two flags that keep a frame from being cut in half; a v3 blob predates them and
+	// restores to a link that is not mid-frame, which is what it was.
+	var inFrame, sendingReply bool
+	if r.Version() >= 4 {
+		inFrame, sendingReply = r.Bool(), r.Bool()
+	}
+	// THE ACK POLICY IS NOT MACHINE STATE AND IS DELIBERATELY NOT RESTORED. It describes what the
+	// modelled peripheral ANSWERS, which belongs to the model the way the link's baud rate does --
+	// and the product restores a snapshot on every start, so a policy read back out of one would
+	// pin whatever card behaviour was current when that snapshot was taken onto every later build.
+	// The two codes added to fix gort-slq would have worked in every test that boots cold and
+	// silently done nothing on the demo, which is the worst shape a fix can have.
+	//
+	// v3 blobs carry four words of it and are still accepted; they are consumed and dropped, so an
+	// existing private snapshot keeps loading and only the policy comes from the build. A caller
+	// that wants a diagnostic policy sets it after restoring, which is what the firmware tests do.
+	if r.Version() == 3 {
+		for i := 0; i < 4; i++ {
+			r.Uint64()
+		}
 	}
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
@@ -254,7 +338,9 @@ func (l *Link) Restore(blob []byte) error {
 	l.queue, l.reply, l.transmitted = queue, reply, transmitted
 	l.lastByteAt, l.now, l.powerAtTick, l.timerTicks = lastByteAt, now, powerAtTick, timerTicks
 	l.cardLive, l.boxBusy, l.txSeen, l.escaped = cardLive, boxBusy, txSeen, escaped
-	l.frame, l.ack = frame, ack
+	l.frame = frame
+	l.inFrame, l.sendingReply = inFrame, sendingReply
+	l.SetAckPolicy(DefaultAckPolicy)
 	l.updateLine()
 	return nil
 }

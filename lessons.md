@@ -68,3 +68,57 @@ member and passes reads exactly like a rule that covers them all.
 This is the project's own instrument rule wearing different clothes: *a census that cannot find the
 thing it is counting is a harness failure, never a count of zero.* A green check whose subject was
 never in scope is a zero dressed as a pass.
+
+### A gate nobody can start looks exactly like a gate nobody broke
+
+`tools/input-replay-gate.sh` and `tools/snapshot-runon-gate.sh` both used `rg`. On this machine
+`rg` is a shell FUNCTION from an interactive profile, not a binary, so a `#!/usr/bin/env bash`
+script gets `rg: command not found` and the gate dies on its first parse line — before it has
+checked anything. Both had been in that state, and nothing said so, because a gate that cannot
+start produces no failures.
+
+They were found only because a change to the CSI card policy needed exactly those two gates to
+verify it: the replay gate records a Sky key and compares two real-firmware framebuffer replays,
+which is the very path that change touched. Had the change been worse, they would still have been
+silent.
+
+**Gate scripts run in a bare non-interactive shell and get none of your profile.** Use POSIX tools
+(`grep -E`, not `rg`); and when a gate is the thing standing between you and shipping a behaviour
+change, check that it RAN, not merely that it did not complain.
+
+### Measure the multiplier before optimising for it
+
+`internal/multiplex/firmwaretests` blew its thirty-minute race-detector cap. Two fixes looked
+obviously right and both were wrong, and measuring took less time than either.
+
+**A shared acquisition** — twelve tests each spend up to 120M instructions watching the same
+fixture arrive on the same day, so acquire once and restore. It saved 26 seconds, not the 80 that
+was expected, because `runUntil` already early-exits the moment the block registers and never
+spends its budget. It also broke a test: the snapshot restores the BOX, but the transmitter is a
+plain Go object that stays fresh, so the two end up out of step and the box behaves differently.
+
+**Sampling the framebuffer less often** in the press loop, on the theory that hashing 400KB every
+65,536 instructions dominated. It made the test SLOWER — 507s to 593s — because a coarser sample
+means a press takes longer to be seen as settled, so each one runs more guest instructions. The
+cost was execution, not hashing.
+
+**The number that mattered took one command:** the same test timed plain and under the detector,
+60s against 507s, an 8.5x multiplier — against the "twelve" the Makefile had been guessing with.
+That multiplied out to show the package was already over the cap BEFORE anything was added to it,
+which changed the problem from "trim the new tests" to "this package should not be under the race
+detector at all".
+
+### Do not filter a command's stderr through a grep built for its stdout
+
+Immediately after writing the lesson above, I ran the whole race suite in a background shell as
+`./ctl.sh test 2>&1 | grep -E "^(FAIL|---|panic|# )"`. It came back with no output and an exit
+status of 127. No output looked like "everything passed" — the grep matches only failures — and the
+127 was the truth: `make` is not on `PATH` in a non-interactive background shell here, so
+`ctl.sh test` died instantly and printed `make: command not found`, which the grep swallowed
+because it does not start with FAIL.
+
+**A filter chosen for the success path hides the failure path.** If the pattern cannot match
+"command not found", a run that never started is indistinguishable from a run that passed. Either
+widen the pattern to cover how the thing fails, or send the raw output to a file and filter what you
+read rather than what you capture — and always read the exit status, which was sitting there saying
+127 the whole time.

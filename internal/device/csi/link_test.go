@@ -86,12 +86,78 @@ func TestLinkHoldsTheDeviceContract(t *testing.T) {
 			l.lastByteAt, l.now, l.powerAtTick, l.timerTicks = 2100, 2500, 120, 37
 			l.cardLive, l.boxBusy, l.txSeen, l.escaped = true, true, true, true
 			l.frame = []byte{3, 1, 0x52}
-			l.AckAll()
+			l.inFrame, l.sendingReply = true, true
 		},
-		Disturb:  func(device bus.Device) { device.Reset() },
-		Constant: []string{"interrupt"},
+		Disturb: func(device bus.Device) { device.Reset() },
+		// ack is the MODEL'S configuration, not the machine's state: it says what the peripheral
+		// answers, the way the baud rate says how fast it answers, and Restore deliberately takes
+		// it from the build rather than from the blob. Listing it here is this harness's own way
+		// of saying a field is not state, and it is the honest alternative to snapshotting
+		// something the product must never read back out of a file.
+		Constant: []string{"interrupt", "ack"},
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A CARD REPLY MUST NOT SPLICE ITSELF INTO A HANDSET FRAME.
+//
+// Both travel on this one wire and both are framed the same way -- bytes until a zero terminator --
+// so a frame interrupted half way through is not a delayed frame, it is TWO CORRUPT ONES. The
+// guest's de-framer has no way to tell that the bytes it is accumulating stopped being the same
+// message.
+//
+// THIS WAS REAL AND IT COST A GATE. Delivery took the reply queue first, unconditionally, so a
+// reply generated while a handset frame was part-way out cut straight into it. It went unnoticed
+// for as long as the modelled card answered only two command codes and therefore almost never had
+// anything to say; widening the policy to the two codes the box sends on every key press
+// (DefaultAckPolicy) made it common, and the links gate caught a Sky key that no longer reached the
+// guest's input-event routine at all.
+func TestACardReplyDoesNotSpliceItselfIntoAHandsetFrame(t *testing.T) {
+	t.Parallel()
+	link := New(nil)
+	link.Write(0, bus.Word, 0x80)
+	link.Write(0x30, bus.Word, 1)
+	link.Pump(0, PowerupTicks)
+	if err := link.Key(0x7d, 0); err != nil {
+		t.Fatal(err)
+	}
+	key := Encode([]byte{5, 0x80, 2, 0, 7, 0xd0})
+
+	// A command the policy answers, so a reply appears mid-frame. It is written one byte per
+	// delivered byte, which is how the guest clocks this link, and it starts on the third byte so
+	// the handset frame is already under way.
+	//
+	// THE ARGUMENT IS 0x08 AND NOT ZERO, which is not cosmetic: a zero byte IS the terminator on
+	// this wire unless it is escaped, so `03 01 41 00` ends the frame one byte early, fails its
+	// own length check and is dropped -- no reply, nothing spliced, and a test that passes while
+	// proving nothing. `03 06 41 08` is one of the real ones out of the record's boot capture.
+	command := []byte{3, 1, 0x41, 8, 0}
+	var got []byte
+	at := uint64(0)
+	for step := 0; step < 200 && len(got) < len(key)+len(command)+8; step++ {
+		at += TrafficInstructions
+		link.Pump(at, 0)
+		var out byte
+		if step >= 2 && len(command) > 0 {
+			out, command = command[0], command[1:]
+		}
+		link.Write(0x10, bus.Word, uint32(out))
+		link.Pump(at, 0)
+		if link.Read(0x20, bus.Word) != 1 {
+			continue
+		}
+		got = append(got, byte(link.Read(0x10, bus.Word)))
+		link.Write(0x20, bus.Word, 0)
+	}
+	if len(got) < len(key) {
+		t.Fatalf("harness: only %d bytes came back, too few to hold the %d-byte handset frame at "+
+			"all -- the link is not delivering and this proves nothing", len(got), len(key))
+	}
+	if !bytes.Contains(got, key) {
+		t.Fatalf("the handset frame %x does not appear contiguously in what the guest received:\n"+
+			"  %x\na reply cut into it, so the guest de-frames two corrupt messages instead of a "+
+			"key and an acknowledgement", key, got)
 	}
 }

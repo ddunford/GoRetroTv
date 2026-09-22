@@ -14,31 +14,39 @@ import (
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
 
-// WHAT IS THE BOX WAITING FOR WHEN IT WEDGES?
+// THE BOX MUST NOT WEDGE WHEN SOMEBODY USES THE MENU.
 //
-// Press the TV GUIDE menu a few times and it stops moving. That was filed as a menu gate -- "the
-// highlight will not pass entry 6" -- and the filing was wrong. UP stops working too; so does box
-// office, which leaves the menu altogether; and the stop point varies between runs, which a
-// disabled entry would not do.
+// It used to. Three or four presses of the TV GUIDE menu and the box stopped responding to the
+// handset ALTOGETHER -- not the menu, the box: UP died too, and so did `box office`, which leaves
+// the menu entirely. The cause is recorded in full and was this port's own: the event queue
+// EVQP0002 is drained by one task, SMTTask, and every key press made the box send two commands the
+// modelled card did not answer, so SMTTask waited out its fifty-tick timeout for each one, the
+// queue filled, and SMTTask ended up suspended trying to add to the very pipe it alone drains.
+// Answering those two codes (internal/device/csi.DefaultAckPolicy) fixed it.
 //
-// So this walks the box to the wall and then asks the RTOS rather than the screen. [0x801072B0] is
-// Nucleus's TCD_Execute_Task and is non-zero exactly when a task is actually running, so zero
-// means every task is blocked and the guest is sitting in the idle loop at 0x800D35DC. That
-// separates a wedge from a busy box declining to redraw, and it is a reading rather than an
-// inference.
+// SO THIS IS NOW A GUARD, AND IT IS DELIBERATELY NOT A NARROW ONE. It presses the menu forty times
+// and asserts the box is still answering at the end, because the failure it exists to catch is not
+// "the ack policy changed" -- it is "something, anywhere, starved the task that drains the event
+// queue". A test that only checked the policy would pass while the box wedged for a new reason.
 //
-// "EVERY TASK IS BLOCKED" IS STILL ONLY THE SYMPTOM RESTATED. The finding is what they are blocked
-// ON, and that is reachable: Nucleus builds a suspend block naming both the waiting task and the
-// object it is queued on, so the semaphores and event groups can be found and named. The record
-// reached its smartcard conclusion exactly this way -- "TASK0 blocked obtaining semaphore Periph",
-// "SMNTask waits on event group SMNEvts" -- and a box that can name what it is waiting for is a
-// box you can go and satisfy through its inputs.
-//
-// IT REPORTS RATHER THAN FAILS. The wedge is tracked as gort-slq and a test that failed on it
-// would red the suite until it is fixed, which is what the tracker is for. What this asserts is
-// its own route and its own presses; the wedge itself it characterises, and when gort-slq is fixed
-// the log below becomes the assertion.
-func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
+// ON FAILURE IT DIAGNOSES RATHER THAN JUST REPORTING A COUNT. Everything that was needed to find
+// this the first time is kept and runs when the guard trips: what every task is waiting on, which
+// of them moved since the box was idle, the pipe's own counters, and which code and which TASK
+// last touched it. That is a day's work the next person does not have to repeat, and it is the
+// reason this file is long.
+func TestTheBoxDoesNotWedgeWhenTheMenuIsUsed(t *testing.T) {
+	const watched = "EVQP0002"
+	// Far more than the three or four the wedge used to survive, and more than the ten entries the
+	// menu has, so the highlight wraps and keeps going. Not more than that, because this package
+	// runs under the race detector against a thirty-minute cap it has hit before.
+	const presses = 20
+	// THE MOVE COUNT IS A BACKSTOP AND NOT THE MAIN CHECK, because it measures repaint timing as
+	// much as health: a press that lands while the menu is painting is swallowed, which is an
+	// ordinary and separately tracked behaviour, and a healthy box scores around eighteen of
+	// forty here rather than forty. The wedge allowed three or four and then NOTHING, so ten
+	// separates them cleanly without the guard becoming a test of the settle budget.
+	const mustMove = 8
+
 	guide := demoGuide(t)
 	dict := demoDictionary(t)
 	box := restoredBox(t)
@@ -54,41 +62,18 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
 	}
 
-	// THE CONTROL, TAKEN BEFORE ANYTHING IS PRESSED. "Every task is blocked" is only damning if a
-	// working box does not look like that, and a box between events looks EXACTLY like that: every
-	// task sits on its own event group or its command queue waiting for work, which is what idle
-	// is. Without this reading the headline below would be an over-read dressed as a measurement.
+	// THE CONTROL, TAKEN BEFORE ANYTHING IS PRESSED, and it is kept even though the box no longer
+	// wedges: "every task is blocked" is what an IDLE box looks like too, and without this reading
+	// beside it the diagnosis below would call a resting box a deadlock.
 	baseline := rtosStateAt(t, box, "idle, before any key")
-
-	// THE PIPE THE WEDGE LANDS ON, found by name before anything is pressed so the same address is
-	// watched on both sides of the comparison. It asserts its own subject: EVQP0002 is where all
-	// three moving tasks end up, and a run that cannot find it is watching nothing.
-	const watched = "EVQP0002"
-	pipe := uint32(0)
-	objects, err := box.NucleusObjects()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, o := range objects {
-		if o.Name == watched {
-			pipe = o.Address
-		}
-	}
-	if pipe == 0 {
-		t.Fatalf("harness: the census found %d objects and no %s, so the watch below would be on "+
-			"address zero and every count it reports would be a fiction", len(objects), watched)
-	}
+	pipe := pipeNamed(t, box, watched)
 	t.Logf("watching %s at %08X", watched, pipe)
-
 	idleLink := csiTraffic(t, box, transmitter, csiWindow, pipe)
 	idleAfter := readRTOS(t, box)
-	t.Logf("hardware while idle and working: %s", idleLink)
+	t.Logf("hardware while idle: %s", idleLink)
 	t.Logf("tasks scheduled over %d idle instructions: %v", csiWindow, scheduled(baseline, idleAfter))
 
-	var watching bool
-	seen := map[uint32]int{}
 	hooks := board.StepHooks{}
-
 	press := func(raw uint8, name string, budget int) (uint32, uint32) {
 		t.Helper()
 		before := screenNow(t, box)
@@ -99,9 +84,6 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 		for i := 0; i < budget; i++ {
 			if err := transmitter.Pump(box.Machine.Retired); err != nil {
 				t.Fatal(err)
-			}
-			if watching {
-				seen[box.Machine.Core.State().PC&^1]++
 			}
 			if err := box.StepWithHooks(hooks); err != nil {
 				t.Fatal(err)
@@ -137,85 +119,91 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 		t.Fatalf("harness: never reached the tv guide tab (stuck at %08X)", tab)
 	}
 
-	// Down until it stops moving, counting the moves that actually happened.
-	moves := 0
-	for attempt := 0; attempt < 40; attempt++ {
-		if _, s := press(0x59, "", 4_000_000); s != 0 {
-			moves++
-			continue
-		}
-		// Three refusals in a row is the wall rather than a swallowed press.
-		if _, s2 := press(0x59, "", 4_000_000); s2 != 0 {
-			moves++
-			continue
-		}
-		if _, s3 := press(0x59, "", 4_000_000); s3 == 0 {
-			break
-		}
-		moves++
-	}
-	t.Logf("the highlight moved %d times before it stopped", moves)
-	if moves == 0 {
-		t.Fatal("harness: the highlight never moved at all, so there is no working press to compare")
-	}
-
-	// THE REFUSAL, recorded.
-	watching = true
-	seen = map[uint32]int{}
-	before, settled := press(0x59, "down AT THE WALL", 8_000_000)
-	refusal := seen
-	if settled != 0 {
-		t.Fatalf("harness: the press at the wall MOVED the screen (%08X -> %08X), so it is not a "+
-			"refusal and this diff would compare two acceptances", before, settled)
-	}
-
-	// IS IT THE MENU OR THE BOX? UP is tried first, then a key that leaves the menu altogether. If
-	// navigation is dead in both directions but box office still redraws, the refusal is the
-	// menu's; if nothing at all responds, the box has stopped taking input.
-	watching = false
-	_, up := press(0x58, "up one", 8_000_000)
-	if up == 0 {
-		_, escape := press(0x7D, "box office FROM THE WALL", 12_000_000)
-		if escape == 0 {
-			reportTheWedge(t, box, transmitter, baseline, idleLink, watched, pipe, before, moves)
+	// THE PIPE IS WATCHED THROUGHOUT, and this is the real check. The wedge is not "the menu
+	// stopped" -- that was the symptom that misled the first three readings of it -- it is the
+	// event queue filling because the one task that drains it got starved. Watching the queue's
+	// own counters catches that at its cause, and catches it even on a run where the screen
+	// happens to keep up.
+	countAt := (pipe & 0x1fffffff) + uint32(pipeCount)*4  // #nosec G115 -- a small constant index
+	waitAt := (pipe & 0x1fffffff) + uint32(pipeWaiting)*4 // #nosec G115 -- a small constant index
+	var deepest, everWaiting, countWrites uint32
+	hooks = board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !a.Write {
 			return
 		}
-		t.Logf("VERDICT: UP is dead but box office still redraws (%08X), so navigation specifically "+
-			"has stopped while the box still takes keys. The highlight moved %d times. That is a "+
-			"menu-level refusal in BOTH directions, not a disabled entry 7.", escape, moves)
-		return
+		switch a.Virtual & 0x1fffffff {
+		case countAt:
+			countWrites++
+			if a.Value > deepest {
+				deepest = a.Value
+			}
+		case waitAt:
+			if a.Value > everWaiting {
+				everWaiting = a.Value
+			}
+		}
+	}}
+	moves := 0
+	for attempt := 0; attempt < presses; attempt++ {
+		if _, s := press(0x59, "", 4_000_000); s != 0 {
+			moves++
+		}
 	}
-	seen = map[uint32]int{}
-	watching = true
-	_, ok := press(0x59, "down THAT WORKS", 8_000_000)
-	acceptance := seen
-	watching = false
-	if ok == 0 {
-		t.Fatal("harness: the press after UP did not move the screen either, so there is no " +
-			"working press in this pair")
+	capacity := box.RAM.Read((pipe&0x1fffffff)+uint32(pipeSize)*4, bus.Word) // #nosec G115
+	t.Logf("the highlight moved on %d of %d presses; %s reached %d messages deep with at most %d "+
+		"tasks suspended on it, its count written %d times", moves, presses, watched, deepest,
+		everWaiting, countWrites)
+	// A COUNT OF ZERO WOULD MEAN THE WATCH MISSED, not that the queue was quiet: every press puts
+	// messages through this queue by construction, so a silent counter is the instrument failing.
+	if countWrites == 0 {
+		t.Fatalf("harness: nothing wrote %s's message count across %d presses, so the watch is on "+
+			"the wrong address and every zero below is the instrument", watched, presses)
 	}
 
-	var only []uint32
-	for pc := range refusal {
-		if acceptance[pc] == 0 {
-			only = append(only, pc)
-		}
+	// AND THE BOX MUST STILL TAKE A KEY THAT LEAVES THE MENU, which is the check that separates a
+	// menu declining to redraw from a box that has stopped running. It was the reading that
+	// withdrew "the menu will not pass entry 6" in the first place.
+	//
+	// RETRIED, BECAUSE ONE PRESS IS NOT THE PROPERTY. A press landing while the menu is painting is
+	// swallowed -- that is why the highlight moves on roughly three presses in five -- so a single
+	// box-office press has a real chance of doing nothing on a perfectly healthy box, and asserting
+	// on it makes this guard flaky in the one direction a guard must never be: crying wolf about a
+	// wedge that is not there. It cost one false failure before it was noticed. The property is
+	// that the box still TAKES such a key, and three tries is far short of the "nothing at all
+	// responds, ever again" the wedge produced.
+	escape := uint32(0)
+	for attempt := 1; attempt <= 3 && escape == 0; attempt++ {
+		_, escape = press(0x7D, fmt.Sprintf("box office, after all that (try %d)", attempt), 12_000_000)
 	}
-	sort.Slice(only, func(a, b int) bool { return only[a] < only[b] })
-	t.Logf("refusal executed %d distinct PCs, acceptance %d; %d ran ONLY in the refusal",
-		len(refusal), len(acceptance), len(only))
-	if len(only) == 0 {
-		t.Log("VERDICT: the refusal runs nothing the acceptance does not. The decision is a taken " +
-			"branch inside shared code, not a separate path -- a read-watch is the next instrument.")
+
+	full, waiting := pipeStateNow(box, pipe)
+	switch {
+	case everWaiting > 0 || full:
+		t.Errorf("%s had %d tasks suspended on it during the presses and is %sfull now, reaching "+
+			"%d of its %d messages. That is the wedge at its cause, whether or not the screen "+
+			"kept up: the one task that drains this queue is being starved", watched, everWaiting,
+			map[bool]string{true: "", false: "not "}[full], deepest, capacity/8)
+	case escape == 0:
+		t.Error("the menu still moves but box office no longer redraws, so the box has stopped " +
+			"taking keys that leave the menu entirely -- which is how the wedge first showed")
+	case moves < mustMove:
+		t.Errorf("the highlight moved on only %d of %d presses, and the queue looks healthy. The "+
+			"box used to stop after three or four; something is swallowing presses well beyond "+
+			"the repaint window", moves, presses)
+	default:
+		t.Logf("the box was still answering after %d presses, and %s never went past %d messages "+
+			"with %d tasks suspended on it", presses, watched, deepest, waiting)
 		return
 	}
-	for i, pc := range only {
-		if i >= 40 {
-			t.Logf("    ... and %d more", len(only)-i)
-			break
-		}
-		t.Logf("    %08X  %d", pc, refusal[pc])
+	diagnoseTheWedge(t, box, transmitter, baseline, idleLink, watched, pipe)
+}
+
+// pipeStateNow reads whether a pipe is full and how many tasks are suspended on it.
+func pipeStateNow(box *board.Runtime, pipe uint32) (full bool, waiting uint32) {
+	at := func(index int) uint32 {
+		return box.RAM.Read((pipe&0x1fffffff)+uint32(index)*4, bus.Word) // #nosec G115 -- small index
 	}
+	return at(pipeAvailable) == 0, at(pipeWaiting)
 }
 
 // rtosState is what the guest's scheduler is doing and what every task is waiting for.
@@ -294,10 +282,14 @@ func rtosStateAt(t *testing.T, box *board.Runtime, when string) rtosState {
 	return state
 }
 
-// reportTheWedge asks the RTOS what it is doing and what it is waiting for, once the box has
-// stopped answering the handset altogether, and says what CHANGED since it was working.
-func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex,
-	baseline rtosState, idleLink csiLink, watched string, pipe uint32, screen uint32, moves int,
+// diagnoseTheWedge asks the RTOS what it is doing and what it is waiting for, and says what
+// CHANGED since the box was idle and working.
+//
+// It runs only when the guard above trips, and it is the whole of how the original wedge was
+// found: the task census against its idle control, the pipe's own counters, which code touched it
+// and -- the reading that named the deadlock -- which TASK was running at each of those accesses.
+func diagnoseTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex,
+	baseline rtosState, idleLink csiLink, watched string, pipe uint32,
 ) {
 	t.Helper()
 
@@ -308,10 +300,9 @@ func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Mul
 	}
 	wallLink := csiTraffic(t, box, transmitter, csiWindow, pipe)
 	wall := readRTOS(t, box)
-	t.Logf("RTOS at the wall: TCD_Execute_Task=[0x801072B0]=%08X ready=[0x801072D8]=%08X",
+	t.Logf("RTOS now: TCD_Execute_Task=[0x801072B0]=%08X ready=[0x801072D8]=%08X",
 		wall.exec, wall.ready)
-	t.Logf("the box retired %d instructions while unresponsive, so it is running rather than halted",
-		csiWindow)
+	t.Logf("the box retired %d further instructions, so it is running rather than halted", csiWindow)
 
 	// THE LINK THE HANDSET ARRIVES ON. The card is the clock master on this wire and the model
 	// follows the firmware: a queued byte is presented only once the guest has written one back,
@@ -320,18 +311,17 @@ func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Mul
 	// no key byte, and no idle byte either, because a waiting queue takes priority over idle. That
 	// is a stall this port could cause rather than a firmware defect, so it is measured before
 	// anything upstream is blamed.
-	t.Logf("hardware while idle and working: %s", idleLink)
-	t.Logf("hardware at the wall:            %s", wallLink)
+	t.Logf("hardware while idle:    %s", idleLink)
+	t.Logf("hardware at the moment: %s", wallLink)
 
-	t.Logf("%s at %08X, working window against the wall:", watched, pipe)
+	t.Logf("%s at %08X, the idle window against this one:", watched, pipe)
 	reportTheWatchedBlock(t, watched, pipe, idleLink, wallLink)
 
 	// WHICH TASKS STILL RUN. Status is a state and a state can be one a task passes through every
 	// few thousand instructions; the run count says whether it is passing through at all. A task
 	// frozen in status 5 and a task cycling through status 5 look identical in one sample and
 	// nothing alike in two.
-	t.Logf("tasks scheduled over %d instructions AT THE WALL: %v", csiWindow,
-		scheduled(wallBefore, wall))
+	t.Logf("tasks scheduled over %d instructions NOW: %v", csiWindow, scheduled(wallBefore, wall))
 	if wallLink.queued > 0 && wallLink.writes == 0 {
 		t.Logf("THE LINK IS STALLED, AND IT IS THIS PORT'S WIRE: %d bytes are queued for the guest "+
 			"and the guest wrote to the data register %d times in %d instructions. The model only "+
@@ -453,10 +443,6 @@ func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Mul
 		t.Logf("    %-10s %s", name, wall.on[name])
 	}
 
-	t.Logf("VERDICT: neither UP nor box office moved the screen from %08X. The BOX has stopped "+
-		"responding to input, so this is NOT a menu gate -- gort-slq. The highlight stopped after "+
-		"%d moves, and at a different entry on another run, which fits an unresponsive box rather "+
-		"than a disabled entry.", screen, moves)
 }
 
 // csiWindow is how long to watch the link for. It is the same budget on both sides of the
@@ -730,12 +716,12 @@ func reportTheWatchedBlock(t *testing.T, name string, at uint32, idle, wall csiL
 		t.Logf("    NOT ONE WORD of %s at %08X changed between the working window and the wall, so "+
 			"nothing moved through it in either direction", name, at)
 	}
-	readPipe(t, name, idle.block, "while working")
-	readPipe(t, name, wall.block, "at the wall")
+	readPipe(t, name, idle.block, "while idle")
+	readPipe(t, name, wall.block, "now")
 	for _, side := range []struct {
 		when string
 		link csiLink
-	}{{"while working", idle}, {"at the wall", wall}} {
+	}{{"while idle", idle}, {"now", wall}} {
 		touched := map[uint32]bool{}
 		for pc := range side.link.watchRead {
 			touched[pc] = true

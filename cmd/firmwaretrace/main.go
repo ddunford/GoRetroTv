@@ -11,6 +11,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/csi"
 	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/gdbstub"
@@ -58,6 +59,8 @@ func run() error {
 	key := flag.Int("key", -1, "raw handset code to send on the CSI link (-1 disables)")
 	ackCode := flag.Int("ack-code", -1, "additional CSI command code to acknowledge (-1 keeps measured default)")
 	ackAll := flag.Bool("ack-all", false, "diagnostic policy: acknowledge every CSI command")
+	ackOracle := flag.Bool("ack-oracle", false,
+		"restrict the card to the two codes the RECORDED browser oracle answers, for checkpoint comparison")
 	keyAt := flag.Uint64("key-at", 0, "instruction at which to queue the handset key")
 	nvram := flag.String("nvram", "", "optional persistent 16 KiB EEPROM image path")
 	snapshotIn := flag.String("snapshot-in", "", "restore a complete machine snapshot before the run")
@@ -124,6 +127,9 @@ func run() error {
 	if *ackAll && *ackCode >= 0 {
 		return fmt.Errorf("ack-all and ack-code are mutually exclusive")
 	}
+	if *ackOracle && (*ackAll || *ackCode >= 0) {
+		return fmt.Errorf("ack-oracle sets the whole policy and cannot be combined with ack-all or ack-code")
+	}
 	if *stopPC > 0xffffffff {
 		return fmt.Errorf("stop PC %#x exceeds 32-bit address space", *stopPC)
 	}
@@ -161,10 +167,26 @@ func run() error {
 	busMap, ram := runtime.Machine.Bus, runtime.RAM
 	core, interrupts := runtime.Machine.Core, runtime.IRQ
 	serial, master, sectionDemux := runtime.CSI, runtime.I2C, runtime.Demux
-	if *ackAll {
+	switch {
+	case *ackAll:
 		serial.AckAll()
-	} else if *ackCode >= 0 {
-		serial.SetAckPolicy([]uint8{0x52, 0x18, uint8(*ackCode)}) // #nosec G115 -- checked above.
+	case *ackOracle:
+		// THE CARD THE RECORDED ORACLE STREAM WAS MADE WITH, and nothing more.
+		//
+		// The browser oracle answers card status and the heartbeat and stays silent on everything
+		// else. This port used to do the same and no longer does: leaving those two unanswered
+		// starves the one task that drains the event queue, and the box stops responding to the
+		// handset after a few presses (gort-slq, gort-b9n). The fix is right and the oracle does
+		// not have it, so from about twenty million instructions into a cold boot the two machines
+		// are legitimately doing different things.
+		//
+		// A checkpoint comparison needs both sides in the same declared condition -- which is
+		// exactly why the oracle comparison already runs WITHOUT -sky-gates. This is the same
+		// move on the other axis, and it is NOT editing the oracle to agree: the oracle is
+		// untouched and still the independent check on the CPU, the devices and the boot.
+		serial.SetAckPolicy([]uint8{0x52, 0x18})
+	case *ackCode >= 0:
+		serial.SetAckPolicy(append(append([]uint8{}, csi.DefaultAckPolicy...), uint8(*ackCode))) // #nosec G115 -- checked above.
 	}
 	if *nvram != "" {
 		if err := master.BindImage(*nvram); err != nil {

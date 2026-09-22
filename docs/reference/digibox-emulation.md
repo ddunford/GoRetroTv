@@ -6788,8 +6788,14 @@ the firmware's.
 **THE FIRST VERSION OF THIS MEASUREMENT REPORTED THE OPPOSITE, CONFIDENTLY.** It sampled the pipe
 every two million instructions and found it empty every single time, in five hundred million -- true
 of every sample and false of the box. The depth is a transient, and this file's own retracted HISR
-finding says it in the same words: **polling a transient is not observing an event.** The count is
-now taken from the writes to it, which is every change it ever has.
+finding says it in the same words: **polling a transient is not observing an event.** The count was
+then taken from the WRITES to it, which is every change it ever has, and that is the reading above.
+
+*The test that made it has since been retired. It cost a full acquisition plus three hundred
+million instructions in a package that runs under the race detector against a thirty-minute cap it
+has hit before, and what it guarded against is now covered by the wedge guard, which watches the
+same queue's counters through forty presses. The finding is durable; the instrument was not worth
+its seat.*
 
 ##### AND THE WEDGE IS OURS: THE MODELLED CARD'S SILENCE IS WHAT FILLS IT
 
@@ -6821,6 +6827,156 @@ than the firmware's and load-bearing. Nothing is written into the guest.
 The arms are `internal/multiplex/firmwaretests/cardsilence_firmware_test.go`, and the control arm
 asserts that it reproduces the wedge -- an experiment whose control does not show the effect has
 nothing for its other arm to be compared against.
+
+##### THE FIX: TWO COMMAND CODES, AND THE BOX STOPS WEDGING
+
+**Which codes are in play is not a matter of opinion.** Across the eight presses that fill the pipe
+the box sends exactly three, taken off the bus rather than guessed:
+
+    code 18  x3   the heartbeat, already answered
+    code 41  x6   SILENT
+    code 42  x6   SILENT
+
+That is the whole question. `0x11`, `0x53`, `0x54`, `0x43`, `0x51`, `0x10` and `0x22` appear in the
+boot capture and are never sent again while the box fails, so answering them would be a change with
+no evidence behind it. **And the two were swept one at a time, because two changes at once cannot
+say which mattered:**
+
+    0x52 and 0x18 only       pipe FULL after  8 presses
+    and 0x41                 pipe FULL after 10 presses
+    and 0x42                 pipe FULL after 10 presses
+    and both                 never full in 60, never more than 4 of its 20 messages deep
+    every code at all        identical to "and both"
+
+Either alone barely moves it. **Together they recover the ENTIRE effect of answering every code**,
+which is why `csi.DefaultAckPolicy` stops at `{0x52, 0x18, 0x41, 0x42}`: it is what the box
+demonstrably asks for while it fails, and nothing more.
+
+The result, on the same route that used to stop at three presses:
+
+    the highlight moved on 12 of 20 presses; EVQP0002 reached 7 messages deep with at most
+    0 tasks suspended on it, its count written 129 times
+
+Twelve of twenty rather than twenty because a press landing while the menu paints is swallowed --
+an ordinary behaviour, separately tracked -- but the box answers throughout, `box office` still
+redraws at the end, and **nothing ever suspends on the queue**. `internal/multiplex/firmwaretests/
+wedge_firmware_test.go` is now a guard rather than a characterisation, and it guards the CAUSE:
+the queue's own counters, which catch the failure even on a run where the screen keeps up. Seven of
+twenty messages deep is the pressure a healthy box puts through this queue; twenty with three tasks
+suspended is the wedge.
+
+**And A-Z LISTINGS opens.** Nine moves down the TV GUIDE menu and the ninth entry selects, for the
+first time in this port's life. The screen draws its header and nothing else, which is the same
+shape as the ALL CHANNELS grid -- a screen that exists and has no rows -- and it is now a question
+that can be asked rather than one blocked behind the wedge.
+
+##### THE SNAPSHOT WOULD HAVE EATEN THE FIX
+
+`Link.Restore` put the ack policy back from the blob, and **the product restores a snapshot on
+every start.** So the two new codes would have worked in every test that boots cold and done
+absolutely nothing on the demo, whose `snapshots/post-acquisition.snapshot` was written when the
+policy was two codes long. That is the worst shape a fix can have: green everywhere it is measured
+and absent where it matters.
+
+The policy is now **model configuration rather than machine state** -- it says what the peripheral
+answers, the way the baud rate says how fast -- so `Restore` takes it from the build. The blob
+format went to v4 without it; v3 blobs are still accepted and their four words consumed and
+dropped, so existing private snapshots keep loading.
+
+**The device-contract check refused this at first and was right to.** `bustest` asserts that
+restoring a snapshot reproduces the device exactly, which is `ARCH-SNAP-1` and the reason a partial
+snapshot cannot quietly produce a plausible machine. The harness already has the vocabulary for
+this: a field listed as `Constant` is one the check is told is not state. Saying so out loud in the
+contract is the honest version; quietly dropping a field from the blob while still claiming
+completeness is not.
+
+##### A TEST THAT HAD BEEN MEASURING THE WRONG SCREEN
+
+The A-Z probe navigated **eight** entries, by the arithmetic that entry 1 plus eight moves is entry
+9. Its screenshot says **SPECIALIST**, which is entry 8. It had been reporting "A-Z LISTINGS did not
+read the array" about a screen that was not A-Z LISTINGS, and it passed while doing so -- one of
+the counted screen changes is not a highlight move.
+
+**No amount of read-counting would have caught that.** The instrument was working perfectly; it was
+pointed at the wrong thing. What caught it was looking at the picture, which cost one `Read` of a
+PNG the test had been writing all along.
+
+##### THE FIX BROKE THE HANDSET, AND THE GATE CAUGHT IT
+
+Answering two more codes made a Sky key stop reaching the guest's input-event routine on a cold
+boot -- `after-key=0` at `0x8006EA04` where it had been `2`, and the warm surface staying at the
+baseline's `9825B318/12` instead of becoming `F3634409/37`. **The restored-box tests were all
+greener than ever at the time.** The links gate found it.
+
+**The cause was a defect in this port's link that had been there all along.** Delivery took the
+card's reply queue first, unconditionally, so a reply generated while a handset frame was part-way
+out cut straight into it. Proved byte for byte in a unit test rather than argued:
+
+    the handset frame      05 80 02 1b 00 07 d0 00
+    what the guest got     05 80 02 1b 00 07 | 02 01 41 00 | d0 00 00
+
+Both travel on one wire and share its framing -- bytes until a zero terminator -- so an interrupted
+frame is not a delayed frame, it is **two corrupt ones**, and the guest's de-framer has no way to
+know the bytes it is accumulating stopped being the same message. It went unnoticed for as long as
+the modelled card answered almost nothing and therefore almost never had anything to say at the
+wrong moment; widening the policy to the two codes the box sends on every key press made it common.
+The link now finishes the frame it started before it changes source.
+
+##### THE ORACLE DIVERGES, AND THAT IS THE RIGHT ANSWER
+
+Even with the splice fixed, the cold-boot checkpoint comparison breaks:
+
+    DIVERGE  state diverged at window 20142 (instructions 20142000..20142999)
+             20142 checkpoints agreed
+
+**Both halves were measured separately rather than assumed.** With the whole change reverted the
+gate agrees over all 470,000 checkpoints; with the splice fix alone and the old policy it agrees
+over all 470,000; with the policy widened it diverges at twenty million. So the divergence is the
+ACK POLICY and nothing else.
+
+That is not a regression. **The browser oracle's card is silent on those codes too**, and a silent
+card starves the one task that drains the event queue -- so the oracle would wedge in exactly the
+same way for exactly the same reason. This file's own rule names the case:
+
+> The oracle proves this port matches the browser emulator, not that either matches a Digibox.
+> Where both are wrong in the same way they agree. **Inherited errors are caught only by the
+> measured record.**
+
+This is an inherited error, caught by the measured record and corrected. **The oracle must not be
+edited to agree** -- that is the one move that destroys its value, and it would look reasonable at
+the time.
+
+So the comparison is held to the oracle's declared conditions instead, with `-ack-oracle`. That is
+the same move the comparison already makes on the other axis: it runs WITHOUT `-sky-gates`, against
+a stream named `oracle-cold-boot-nogates`, because the oracle's menu-gate policy is declared rather
+than emergent. The oracle file is untouched and remains the independent check on the CPU, the
+devices and the boot; what changed is that the port no longer pretends its card is as deaf as the
+oracle's when the product's is not. **The product ships the fix; the comparison runs the oracle's
+card.** Both facts are stated wherever either is relied on.
+
+##### WHAT IS STILL NOT KNOWN ABOUT THESE TWO REPLIES
+
+The policy answers `0x41` and `0x42` with the generic frame -- a bare acknowledgement carrying the
+sequence number and the code, and no data byte. **Whether a real card would have answered those two
+that way is not established**, and this section says so rather than letting the fix imply it.
+
+What bounds the risk is the narrowness of the change, not a proof. The two codes are the only ones
+the box sends while it fails; answering them is the smallest change that recovers the effect of
+answering everything; and the box's behaviour afterwards is right rather than merely different --
+the menu navigates its ten entries, `box office` still leaves it, A-Z LISTINGS opens and draws its
+header, and the cold-boot Sky key reaches the input-event routine and paints the surface the oracle
+recorded. A reply being misread as data would be expected to send the box somewhere wrong, not
+somewhere correct.
+
+**An attempt to settle it by disassembly is recorded here as NOT having worked**, because a reader
+should not assume it was skipped. Running the box twice from one snapshot, identical but for
+whether the card answers, and diffing the executed PCs gives a contaminated answer: once the arms
+differ the whole schedule differs, and the silent arm ran five thousand distinct addresses against
+the answering arm's three thousand. The "only in the answering arm" set is then not a handler, it
+is a schedule. **A differential needs the two sides to stay comparable, and past the first
+divergence these do not.** Settling it wants a different instrument -- a watch on the assembled
+reply frame in RAM, naming every PC that reads it -- and that is worth building when the answer
+becomes load-bearing rather than now.
 
 ##### THE TASK STATUS NUMBERS, MEASURED OFF THIS BOX
 

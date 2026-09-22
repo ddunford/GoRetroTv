@@ -153,7 +153,15 @@ func guideSubscription(t *testing.T, box *board.Runtime, transmitter *multiplex.
 			return false
 		}
 		slot, ok, err := multiplex.GuideSubscription(box.RAM)
-		return err == nil && ok && slot.At != 0
+		// A SLOT THAT EXISTS IS NOT A SLOT THAT HAS BEEN FILLED IN. This used to stop at
+		// `slot.At != 0` -- the structure being somewhere rather than nowhere -- and would
+		// therefore hand back a slot the guide had allocated and not yet programmed, day zero and
+		// block zero, as though that were the subscription. It only ever showed up when something
+		// shifted the timing: widening the card's acknowledgement policy moved the press a little
+		// later relative to the guide's own work and the 12:00 case started reporting "listening
+		// for day 0". The day is what the caller asserts on, so waiting for the day is the
+		// condition that matches the subject.
+		return err == nil && ok && slot.At != 0 && slot.DayKey != 0
 	})
 	slot, ok, err := multiplex.GuideSubscription(box.RAM)
 	if err != nil {

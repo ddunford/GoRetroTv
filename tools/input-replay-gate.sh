@@ -20,12 +20,16 @@ for run in a b; do
         >"$work/replay-$run.out" 2>"$work/replay-$run.log"
 done
 
-record_result="$(rg -m1 '^surface hash=' "$work/record.log")"
-replay_a="$(rg -m1 '^surface hash=' "$work/replay-a.log")"
-replay_b="$(rg -m1 '^surface hash=' "$work/replay-b.log")"
-record_state="$(rg -m1 '^state-hash retired=' "$work/record.log")"
-state_a="$(rg -m1 '^state-hash retired=' "$work/replay-a.log")"
-state_b="$(rg -m1 '^state-hash retired=' "$work/replay-b.log")"
+# grep, NOT rg. On at least one machine here `rg` is a shell FUNCTION from an interactive profile
+# rather than a binary, so a non-interactive gate script gets "rg: command not found" and the whole
+# gate never runs -- silently, because a gate nobody can start looks exactly like a gate nobody
+# broke. grep -E is in POSIX and does the same job for these patterns.
+record_result="$(grep -m1 -E '^surface hash=' "$work/record.log")"
+replay_a="$(grep -m1 -E '^surface hash=' "$work/replay-a.log")"
+replay_b="$(grep -m1 -E '^surface hash=' "$work/replay-b.log")"
+record_state="$(grep -m1 -E '^state-hash retired=' "$work/record.log")"
+state_a="$(grep -m1 -E '^state-hash retired=' "$work/replay-a.log")"
+state_b="$(grep -m1 -E '^state-hash retired=' "$work/replay-b.log")"
 [[ "$record_result" == "$replay_a" && "$replay_a" == "$replay_b" ]] || { printf 'replayed framebuffer differs\n' >&2; exit 1; }
 [[ "$record_state" == "$state_a" && "$state_a" == "$state_b" ]] || { printf 'replayed instruction count or machine state differs\n' >&2; exit 1; }
 [[ "$record_result" == *'hash=F3634409 distinct=37'* ]] || { printf 'Sky key did not draw measured Box Office surface\n' >&2; exit 1; }

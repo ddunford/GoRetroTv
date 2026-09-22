@@ -19,8 +19,12 @@ end=11000000
 "$work/bin/firmwaretrace" -steps "$end" -interval "$end" -state-hash \
     -snapshot-in "$work/paused.snapshot" >"$work/restored.stream" 2>"$work/restored.log"
 
-cold="$(rg -m1 '^state-hash retired=11000000 hash=[0-9A-F]{8}$' "$work/cold.log")"
-restored="$(rg -m1 '^state-hash retired=11000000 hash=[0-9A-F]{8}$' "$work/restored.log")"
+# grep, NOT rg. On at least one machine here `rg` is a shell FUNCTION from an interactive profile
+# rather than a binary, so a non-interactive gate script gets "rg: command not found" and the whole
+# gate never runs -- silently, because a gate nobody can start looks exactly like a gate nobody
+# broke. grep -E is in POSIX and does the same job for these patterns.
+cold="$(grep -m1 -E '^state-hash retired=11000000 hash=[0-9A-F]{8}$' "$work/cold.log")"
+restored="$(grep -m1 -E '^state-hash retired=11000000 hash=[0-9A-F]{8}$' "$work/restored.log")"
 if [[ "$cold" != "$restored" ]]; then
     printf 'snapshot run-on mismatch: cold %s, restored %s\n' "$cold" "$restored" >&2
     exit 1

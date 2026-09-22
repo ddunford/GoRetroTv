@@ -151,22 +151,30 @@ func TestWhetherAtoZListingsReadsATableC1SentUnderItsLetter(t *testing.T) {
 	// are not among them, so 0x09 meaning "9" is an assumption this screen does
 	// not support. Down and select ARE proved: both moved this menu in the
 	// rec[2]/rec[3] probe.
-	// COUNT MOVES, NOT PRESSES. Eight downs moved the highlight four entries: the
-	// rest were swallowed, which is gort-slq reaching navigation. A press that
-	// changes nothing has to be repeated, so this counts screens that actually
-	// changed and keeps pressing until the highlight has moved eight times.
+	// COUNT MOVES, NOT PRESSES. A press that lands while the menu is painting is
+	// swallowed and changes nothing, so this counts screens that actually changed
+	// rather than presses made.
+	//
+	// NINE, NOT EIGHT, AND THE PICTURE IS WHY. Eight was the arithmetic -- entry 1
+	// plus eight moves is entry 9 -- and the screenshot it produced said
+	// SPECIALIST across the top, which is entry 8. The test had been reporting
+	// "A-Z LISTINGS did not read the array" about a screen that was not A-Z
+	// LISTINGS, and no amount of read-counting would have said so. One of the
+	// counted screen changes is not a highlight move; which one is not worth
+	// chasing, because the screen itself is the authority and it is checked below.
+	const wantEntry = 9
 	moves := 0
-	for attempt := 0; attempt < 40 && moves < 8; attempt++ {
-		if press(0x59, fmt.Sprintf("down (move %d/8)", moves+1), 4_000_000) != 0 {
+	for attempt := 0; attempt < 40 && moves < wantEntry; attempt++ {
+		if press(0x59, fmt.Sprintf("down (move %d/%d)", moves+1, wantEntry), 4_000_000) != 0 {
 			moves++
 		}
 	}
-	if moves < 8 {
+	if moves < wantEntry {
 		if err := dumpScreen(t, box, "tablec1-az-nav-stuck.png"); err != nil {
 			t.Fatal(err)
 		}
-		t.Fatalf("harness: the highlight moved only %d of 8 entries in 40 presses, so A-Z LISTINGS "+
-			"was never selected", moves)
+		t.Fatalf("harness: the highlight moved only %d of %d entries in 40 presses, so A-Z LISTINGS "+
+			"was never selected", moves, wantEntry)
 	}
 	az := uint32(0)
 	for attempt := 1; attempt <= 6 && (az == 0 || az == tab); attempt++ {

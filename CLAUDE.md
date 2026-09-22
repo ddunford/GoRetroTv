@@ -64,6 +64,12 @@ because the alternative is not "no shared layer", it is six improvised copies di
 only); the MIPS16 decode tables (cpu only); the blitter's fill-bit and the demux's match-unit
 semantics (their own devices). Domain knowledge stays in its package.
 
+- **The modelled card answers what the box asks for; the oracle comparison does not.** Leaving the
+  two codes the box sends on every key press unanswered starves the task that drains its event
+  queue and the box stops taking input. The browser oracle is silent on them too, so the port now
+  diverges from it by design: the comparison runs `-ack-oracle` in the oracle's declared condition,
+  exactly as it already runs without `-sky-gates`, and the oracle file is never edited to agree.
+
 - **Developer surfaces bind to localhost only.** The gdb stub and instrument endpoints are the one
   real security control on a public demo host, and they carry a conformance rule.
 

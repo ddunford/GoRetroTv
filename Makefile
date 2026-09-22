@@ -50,10 +50,35 @@ test: ## Run the tests
 # both fixed budgets, not slow machines, and a timeout raised over one of those
 # is hiding a bug rather than paying for the detector.
 #
+# THE THIRD RAISE, 2026-09-22, AND THE NUMBERS THIS TIME ARE MEASURED RATHER
+# THAN ESTIMATED. internal/multiplex/firmwaretests runs in 237s plain with the
+# tests it had before that date and about 320s with the wedge guard and the
+# card-policy arms added; one representative firmware test timed plain and then
+# under the detector gives the multiplier, and it is 8.5x, not the "twelve"
+# guessed above. So the package was ALREADY over thirty minutes at 237s x 8.5 =
+# 2015s BEFORE anything was added to it -- the raise is not paying for the new
+# tests, it is paying for a package that had quietly crossed the line.
+#
+# The condition above was checked rather than waved through. Every firmware loop
+# still early-exits: each press returns as soon as the screen settles, each
+# acquisition returns as soon as the block has registered, and each policy arm
+# returns as soon as the queue fills. The two loops that run to their full count
+# do so BY DESIGN, because what they demonstrate is a negative -- that the queue
+# never fills and the box never stops answering -- and a negative has no early
+# exit by definition. Those are bounded counts of bounded work, not a budget
+# waiting for something that will never arrive, which is the shape the rule
+# above exists to catch.
+#
+# Sixty rather than forty-five so this does not need touching again the next
+# time a firmware test is added, and because a slow machine has nowhere else to
+# go: the detector adds nothing to a deliberately single-threaded emulator loop,
+# so the honest long-term fix is to stop running these particular tests under it
+# at all, not to keep buying minutes.
+#
 # CI is unaffected either way: the firmware is not redistributable, so these
 # tests skip there.
 test-race: ## Run the tests under the race detector
-	go test -race -timeout 30m ./...
+	go test -race -timeout 60m ./...
 
 test-cover: ## Run the tests with coverage
 	go test -cover ./...

@@ -84,7 +84,7 @@ about code declares that instead, with a reason: `<!-- anchor: none - why -->`.
 ## The site
 
 <!-- anchor: scripts/docs-site.py -->
-<!-- fingerprint: sha256:0ce9c8d08cf8cbacf4a52fa138324b9347808499746d676ddcaad5e20c2a83eb @ 2026-09-22 -->
+<!-- fingerprint: sha256:84e3ad889bec5ee4852d30459a969e711508da63c1f402b885e711a2fcd4fc4a @ 2026-09-22 -->
 
 Read the docs in a browser, with search and navigation, instead of as raw markdown:
 

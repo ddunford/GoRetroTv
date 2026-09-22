@@ -86,7 +86,8 @@ func TestWhetherAPATMakesTheBoxAskForAProgrammeMap(t *testing.T) {
 			// takes any table on its PID" -- six times over, uniformly, which is the tell. The
 			// mapping from channel to unit is not exposed by the model, so it is not claimed here.
 			for _, f := range box.Demux.ArmedFilters() {
-				t.Logf("    channel %2d watches PID %04X", f.Filter, f.PID)
+				t.Logf("    channel %2d watches PID %04X, whole register word %08X (upper bits %05X)",
+					f.Filter, f.PID, f.Word, f.Word>>13)
 			}
 			for unit := uint8(0); unit < 16; unit++ {
 				var rules []string

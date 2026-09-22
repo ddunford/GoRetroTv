@@ -6513,18 +6513,30 @@ wants nothing more.
 *2026-09-22. The transport-stream plan began "send a PAT on PID 0x0000, because the box arms it and
 nothing has ever answered". Both halves of that were tested and the plan does not survive.*
 
-**PID 0x0000 IS armed**, transiently, during acquisition -- a single sample of the demux misses it
-and a continuous watch across a session finds it, which is the same shape as `0x52`. So a
-programme association table was built to ISO/IEC 13818-1, checked field by field against the
-specification, pushed on PID 0 at the moment the channel was open, and **accepted by the model**.
+**~~PID 0x0000 IS armed.~~ IT IS NOT, AND THAT WAS OUR BUG.** The claim came from this port's own
+`ArmedPIDs`, which read a channel register, masked off the low thirteen bits and reported the
+result as a PID. **A channel register of zero is a cleared channel, not a channel watching PID 0** --
+and 0 is a perfectly legal PID, so the two are indistinguishable to that code. The registers say so
+plainly once the whole word is looked at instead of the bottom of it:
+
+    channel 19 -> 00014034    channel 22 -> 00014014
+    channel 20 -> 00014033    channel 23 -> 00014011
+    channel 24 -> 00014010    and the one that read as PID 0 -> 00000000
+
+Every channel the guest programs carries `0x14000` above the PID field. The one that read as PID 0
+carries nothing at all. `channelPID` now requires those upper bits, and with it the box's armed set
+is `0x10, 0x11, 0x14, 0x33, 0x34, 0x52` and **PID 0 never appears in any phase of a session**.
+
+*So the programme association table was built to ISO/IEC 13818-1, checked field by field against the
+specification, pushed on PID 0 and accepted by the model -- because of a SECOND defect, below. The
+box ignored it, and now the reason is the simple one: it had never asked.*
 
 **The box did nothing with it.** It armed no new PID -- in particular not the programme map PID the
 table named, a number the firmware had no other reason to hold and whose appearance would have been
 proof the table was read and believed. The only PID that appeared afterwards was `0x0052`, which
 the record already has opening in response to our NIT.
 
-**And the hardware would have rejected it anyway.** At the moment PID 0 is open, six section
-channels are armed and six match units carry rules:
+**And the match units say the same thing from the other side.** Six units carry rules:
 
     channel 19 -> PID 0034      unit  1  table 40/FE ext 0020     the NIT
     channel 20 -> PID 0033      unit  2  table 42/FB ext 0020     the SDT
@@ -6533,10 +6545,10 @@ channels are armed and six match units carry rules:
     channel 23 -> PID 0011      unit  7  table A3/FF ...          the day's titles
     channel 24 -> PID 0010      unit 10  table C1/FF              the A-Z listings index
 
-**Not one unit filters for table `0x00`.** So an open PID channel is not the box asking for a PAT:
-the channel exists and every rule on this box is looking for something else. The box reaches its
-services without a programme association table, which for an OpenTV Sky receiver driven by NIT, SDT
-and BAT is entirely reasonable -- and it means PAT and PMT are not the way in to video.
+**Not one unit filters for table `0x00`.** Two independent readings, the channel registers and the
+match rules, and both say the box never asks for a programme association table. It reaches its
+services without one, which for an OpenTV Sky receiver driven by NIT, SDT and BAT is entirely
+reasonable -- and it means PAT and PMT are not the way in to video.
 
 ##### A MODELLING GAP THIS EXPOSED, AND IT MATTERS BEYOND THIS EXPERIMENT
 

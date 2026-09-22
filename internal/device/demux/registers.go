@@ -118,6 +118,32 @@ func (d *Demux) Write(off uint32, size bus.Size, value uint32) {
 	}
 }
 
+// channelPID reads a channel register, and says whether that channel is watching anything.
+//
+// A CHANNEL REGISTER OF ZERO IS A CLEARED CHANNEL, NOT A CHANNEL WATCHING PID 0, and telling those
+// two apart is not cosmetic: PID 0 is where a programme association table lives, so a cleared
+// channel read as "armed for PID 0" says the box is asking for a PAT when it is asking for nothing.
+// That reading sent this project as far as building a PAT, pushing it and measuring that the box
+// ignored it -- the box ignored it because it had never asked.
+//
+// The evidence is the shape of the registers the guest actually writes. Every channel it programs
+// carries 0x14000 above the thirteen-bit PID:
+//
+//	channel 19 -> 00014034    channel 22 -> 00014014
+//	channel 20 -> 00014033    channel 23 -> 00014011
+//	channel 24 -> 00014010    and the one that read as PID 0 -> 00000000
+//
+// So a channel with nothing above the PID field has not been programmed, whatever its low bits say.
+// What the 0x14000 MEANS is not established here and is not guessed at; only that its absence,
+// together with a zero PID, is a register nobody has written a filter into.
+func channelPID(word uint32) (uint16, bool) {
+	pid := word & 0x1fff
+	if pid == 0x1fff || word>>13 == 0 {
+		return 0, false
+	}
+	return uint16(pid), true // #nosec G115 -- masked to thirteen bits above
+}
+
 // ArmedFilter is one armed section channel: which of the thirty-two it is, and the PID it watches.
 type ArmedFilter struct {
 	// Filter is the section channel index, 0..31. IT IS NOT A MATCH-UNIT INDEX: there are 32
@@ -127,6 +153,11 @@ type ArmedFilter struct {
 	Filter uint8
 	// PID is the thirteen-bit PID that filter is watching.
 	PID uint16
+	// Word is the whole value the guest wrote to that channel's register. Only the low thirteen
+	// bits are the PID; what the rest carries is not established, and it is exposed rather than
+	// masked away because the binding between a channel and a match unit has to be written down
+	// SOMEWHERE and this register is where the guest says everything else about the channel.
+	Word uint32
 }
 
 // ArmedFilters answers which channel holds which PID, which ArmedPIDs alone cannot.
@@ -142,13 +173,14 @@ func (d *Demux) ArmedFilters() []ArmedFilter {
 		if !d.pidWritten[ch] || d.enable[2]&(1<<ch) == 0 {
 			continue
 		}
-		pid := d.pidChannels[ch] & 0x1fff
-		if pid == 0x1fff {
+		pid, ok := channelPID(d.pidChannels[ch])
+		if !ok {
 			continue
 		}
 		out = append(out, ArmedFilter{
-			Filter: uint8(ch),   // #nosec G115 -- bounded by FilterCount
-			PID:    uint16(pid), // #nosec G115 -- masked to thirteen bits above
+			Filter: uint8(ch), // #nosec G115 -- bounded by FilterCount
+			PID:    pid,
+			Word:   d.pidChannels[ch],
 		})
 	}
 	return out
@@ -162,9 +194,8 @@ func (d *Demux) ArmedPIDs() []uint16 {
 		if !d.pidWritten[ch] || d.enable[2]&(1<<ch) == 0 {
 			continue
 		}
-		pid := d.pidChannels[ch] & 0x1fff
-		if pid != 0x1fff {
-			pids = append(pids, uint16(pid)) // #nosec G115 -- a DVB PID is masked to 13 bits above
+		if pid, ok := channelPID(d.pidChannels[ch]); ok {
+			pids = append(pids, pid)
 		}
 	}
 	return pids

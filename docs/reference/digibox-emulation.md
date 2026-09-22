@@ -281,7 +281,7 @@ bits, and the handler column reuses a handful of addresses.
 
 <!-- anchor: internal/dvb/crc.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:9da366d730a9b79557ad615ac40aadd10cb92e7f6a35987ed5af6859796cea63 @ 2026-09-22 -->
+<!-- fingerprint: sha256:6c20f05300fee3af3259d2655db0e169b1f45defe7d5b941638a616501d3ff9e @ 2026-09-22 -->
 
 **Demux register block `0xB000A000`, size `0x160`**, declared in a 30-block SoC peripheral map at
 flash **`0x20FD8`** — which is the register map the NEC manual could never provide.
@@ -1034,7 +1034,7 @@ task is now free rather than mirroring.
 ## What the SI we broadcast does, and what it does not
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:062e48dd7cd4b35574007e408b8e2e1c84880b255481b2978ac75235eb719ef7 @ 2026-09-22 -->
+<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
 
 **It is received and parsed — proved by a name that could not have come from anywhere else.**
 Broadcasting an SDT whose services are called `ZQXBBC One` and `ZQXBBC Two` puts those exact
@@ -1709,7 +1709,7 @@ of the address space and reported on all of it. Neither zero looked thin.
 
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:5a6f953de8f73d5d1246853fb0fc15500b3182393c048cf7382092c25a137336 @ 2026-09-22 -->
+<!-- fingerprint: sha256:1caf21c8a6f4cf73ac8133d5f8da22dccac20687fddf4d7793833521abc9af7b @ 2026-09-22 -->
 
 **"The box parses our tables" was too generous, and this is the measurement that corrects it.**
 The delivery path is sound: the demux accepts the section, the LISR fires, the section task
@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:5c45a60d4e538a1be91529cc4c713ea5447394974e7721f619d69fd703d6c8e1 @ 2026-09-22 -->
+<!-- fingerprint: sha256:a686e0b0adfe61a1258e466896baecce93b8b9a89f033830ef3b05c611b87eb8 @ 2026-09-22 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2093,7 +2093,7 @@ to a subtable.**
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/device/demux/section.go -->
-<!-- fingerprint: sha256:eda3775c50b2887a42d83d7bb0a1455298a367ebb40fc742e1d06c3d26170ab3 @ 2026-09-22 -->
+<!-- fingerprint: sha256:3f0b1c8e7135a0c055b6ed793ef56edfb1e6246567caed0ec4271a2f0e141764 @ 2026-09-22 -->
 
 **Attaching a client means PROGRAMMING A SECTION FILTER.** `0x800B0C70(entry, 1)` switches on
 the subtable's type, and for type 4 it builds `{0xFE40, id}` — a mask/value pair matching
@@ -2142,7 +2142,7 @@ and the service list is unexplained any more.
 ## The ids in our SI are not ours to choose
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:062e48dd7cd4b35574007e408b8e2e1c84880b255481b2978ac75235eb719ef7 @ 2026-09-22 -->
+<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
 
 **A section is kept only if `find_subtable(id_from_its_header, type)` matches a REGISTERED
 subtable**, and the id it matches on is the halfword at `+30` of a subtable entry. So the
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:5c45a60d4e538a1be91529cc4c713ea5447394974e7721f619d69fd703d6c8e1 @ 2026-09-22 -->
+<!-- fingerprint: sha256:a686e0b0adfe61a1258e466896baecce93b8b9a89f033830ef3b05c611b87eb8 @ 2026-09-22 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -2398,7 +2398,7 @@ service-list module runs and grows. The screen is still 8 blits of blue.
 ## The service list rejects nothing — and the application is now working
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:062e48dd7cd4b35574007e408b8e2e1c84880b255481b2978ac75235eb719ef7 @ 2026-09-22 -->
+<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
 
 **The premise of this question was wrong, and finding that out relocated the search.** The SVL
 module's entire activity is a single `jalr $v1` at `0x800A6414` inside a dispatcher — when
@@ -4697,7 +4697,7 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:d97c8263603b7a519da8cdfb9476369326f1d2ac07ff29febf13f6f98dde4049 @ 2026-09-22 -->
+<!-- fingerprint: sha256:600a69e4855affb7f4db425f41c67fe38aab9086bff90abeac7a161b6f942eec @ 2026-09-22 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -4780,7 +4780,7 @@ fall out of that, and neither needs to be guessed.
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:ffd344e2b3da5bcab8ae529e07a76ff982964a97753a1e43b9aaa9b6b0d72170 @ 2026-09-22 -->
+<!-- fingerprint: sha256:c2686791408f1c7d64d00714f269e823b71417e3bd093e79f9d0d0c669bc582b @ 2026-09-22 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
@@ -5229,7 +5229,7 @@ still ahead, and the next rung is what `0xA1` carries.
 ### Table `0xA1` on PID `0x33`: the listings path, and the signature that gates it
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:ede3ef93be489dc1e9ca2735c74c6272f6fd0b02ca0c6ae0e1d1bddbd9b9dc6a @ 2026-09-22 -->
+<!-- fingerprint: sha256:f2d86d48db94d7abe4978a64943564ed93ccecdd348c338efe9fb757aeca2fe3 @ 2026-09-22 -->
 
 `scripts/digibox-probes/what-is-on-0xa1.js`. Three controls, all of which went silent.
 
@@ -6218,7 +6218,7 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:5177a9c26b695015306fa1e1a1ce1aa6217d7e48ac11c4913bfda0347fc89f93 @ 2026-09-22 -->
+<!-- fingerprint: sha256:d1f443f7143e0b22c463d24819cd1144dc9217f7edd100e870c9fb963582c295 @ 2026-09-22 -->
 
 *Seven probe runs. Every number below is from `scripts/digibox-probes/`, and the four claims that
 retired earlier readings each retired them by measurement rather than by argument.*
@@ -7713,7 +7713,7 @@ provable. The census now accepts the whole OpenTV title family.
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:5177a9c26b695015306fa1e1a1ce1aa6217d7e48ac11c4913bfda0347fc89f93 @ 2026-09-22 -->
+<!-- fingerprint: sha256:d1f443f7143e0b22c463d24819cd1144dc9217f7edd100e870c9fb963582c295 @ 2026-09-22 -->
 
 *20 Sep 2026, in the Go port, against the real firmware. This is the answer to TASK-6.13, and the
 task's own title is wrong: nothing about it is a day-of-eight problem.*
@@ -7805,7 +7805,7 @@ active one. Two things cost time and are worth carrying:
 ## Addressing the listings: two masks, and two facts that came off the screen
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:ede3ef93be489dc1e9ca2735c74c6272f6fd0b02ca0c6ae0e1d1bddbd9b9dc6a @ 2026-09-22 -->
+<!-- fingerprint: sha256:f2d86d48db94d7abe4978a64943564ed93ccecdd348c338efe9fb757aeca2fe3 @ 2026-09-22 -->
 
 *Measured 2026-09-20 while wiring the modelled multiplex into the running server. Everything here
 was found by being wrong first, and each wrong reading presented as **"the box is not asking"** —

@@ -288,7 +288,7 @@ answer more than once.
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/dvb/crc.go -->
-<!-- fingerprint: sha256:2af19c6bbed995048ca10fc536f46c5a16fb9b89d6ec5d6e0e67d28ee81840d8 @ 2026-09-22 -->
+<!-- fingerprint: sha256:168509bbbf7b88ae8c6c981aea35c4dd9acb5d349f6f5ac58f2da76b5bf6cda5 @ 2026-09-22 -->
 
 The box asks for exactly three PIDs and says so: `__dispState().pids` on a booted machine
 gives **filter 22 → PID 0x0014 (TDT, the clock), 23 → 0x0011 (SDT, the line-up), 24 → 0x0010

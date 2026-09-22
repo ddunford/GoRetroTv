@@ -8116,3 +8116,42 @@ row, records it, and stops short of the screen.
 
 > The second refusal is between computing a row and drawing it. Looking at bitmaps, colours or
 > geometry is looking in the wrong place.
+
+### The row body is the database side, and it never touches the drawing code at all
+
+Asking which INSTRUCTIONS paint the drawing surface — rather than how many writes each screen makes —
+separates the two screens cleanly. Exactly two (instruction, caller) pairs write it while the
+ten-row TV GUIDE menu draws and never while the grid does, and both come from one call site:
+
+    writes at 8009BF5A  called from 8009C344   6831 writes
+    writes at 8009BF0E  called from 8009C344      8 writes
+
+`0x8009C332`..`0x8009C34E` reads as exactly what it is:
+
+    8009c332  lhu   v1,0(s0)     the next character
+    8009c338  addu  a0,v0,v1     its glyph
+    8009c33e  addiu s0,2         advance the string
+    8009c340  jalr  v0           paint it
+    8009c344  lw    v0,52(sp)    <- the caller address the watch recorded
+    8009c346  addu  s1,v0        advance x by the stride
+    8009c34e  bnez  v0,0x8009c333  and round again for N characters
+
+A **string painter**: walk a run of halfwords, paint a glyph each, step across. Sixteen more pairs
+paint both screens (the shared rectangle and text machinery) and eight paint only the grid (its own
+furniture), so the two screens genuinely share their drawing code and this one loop is a real
+difference rather than an artefact of volume.
+
+**And that settles what the grid's row body is.** Its traced regions are `0x800A*`, `0x800B*` and
+`0x800D*` and it never enters `0x8009xxxx` — not once, in six iterations of four thousand
+instructions. It is not a draw path that refuses to draw. **It is the DATABASE side, assembling a
+list for the screen to draw from**, which is why it can compute six rows, write 737 words doing it,
+and leave the drawing surface untouched to the digit.
+
+> The grid's MIPS row loop builds a list. The screen itself is interpreted o-code, and it is the
+> o-code that draws. So the next question is not "why does the body not paint" — it never would —
+> but **what the o-code reads after the list is built, and why that comes back empty.**
+
+*A correction to this probe, recorded because the reasoning was tempting:* it first demanded the
+ten-row menu write the surface MORE than the empty grid, on the grounds that ten rows of text is
+more drawing than none. It is not — the grid paints a full-screen background, a header, a date, a
+clock and a time axis, which is far more pixels than ten short lines. Volume was never the signal.

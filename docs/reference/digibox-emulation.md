@@ -6558,6 +6558,45 @@ sequence byte the array carries alongside what arrived.
     +2  0x002E = 46 = the record count we sent, as `sh v1,2(a1)` said
     +4..11  zero
 
+#### THE EXTENSION IS A LETTER, AND THE TABLE IS AN A-Z INDEX
+
+*2026-09-22, and it supersedes the reading recorded below it.*
+
+`0x800C4F94`, one of the two functions the consumer calls with the extension, is a DISPATCH ON A
+LETTER:
+
+    sltiu a0,65          extension < 'A'?
+    sltiu a0,91          extension < '['?
+    lw    v0,0x800c51c0  a bias
+    addu  a0,v0
+    sll   a0,2           x4
+    addu  s0,a0          s0 = 0x800C51A0 + index*4      a table of list heads
+    ...otherwise         jalr 0x800C5130, which FREES THE WHOLE LIST
+
+**Measured on the boundary, and it is exact:**
+
+    extension 0x0040 '@'  one below 'A'   22 exclusive PCs   rejected
+    extension 0x0041 'A'                 525                 accepted
+    extension 0x004D 'M'                 525                 accepted
+    extension 0x005A 'Z'                 525                 accepted
+    extension 0x005B '['  one above 'Z'   22                 rejected
+
+Twenty-six list heads at `0x800C51A0`, one per initial letter. The TV GUIDE tab's ninth entry is
+**A-Z LISTINGS**, and that is what this table is for.
+
+**AND IT EXPLAINS THE NEGATIVE BELOW.** Every probe until now sent extension `0x0000` or `0x0100`,
+which are outside `'A'..'Z'`, so the consumer built the array, linked it, and then FREED IT -- which
+is why five screens read nothing. `0x800C5130` is `for (p = head; p; p = p->next) free(p);`, proved
+by its per-node call `0x800CCEF0` being the free that pairs with the allocator `0x800CCECC`: same
+pool global `0x800CCF40`, adjacent vtable slots `0x800CCF58` and `0x800CCF5C`. The list-walk read
+the header at **+4**, so the twelve-byte header is section_number at +0, record count at +2 and a
+**next POINTER at +4**.
+
+**A CORRECTION TO THIS FILE'S OWN SWEEP.** The earlier conclusion that the extension's "low byte
+must be `0x00`" was an artefact of which values were sampled -- `0x0001` and `0x01FF` were tried and
+the letters never were. The rule is the letter range; `0x0000` and `0x0100` also run a long path
+(492 and 553 PCs) and are something else again, not yet identified.
+
 #### NOTHING READS THE ARRAY — on any screen this port can reach
 
 *The bridge question, and the answer is a negative worth as much as a positive: the box parses a

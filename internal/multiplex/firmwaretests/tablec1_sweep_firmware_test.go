@@ -87,6 +87,21 @@ func TestWhichPIDAndExtensionTheTableC1ConsumerWants(t *testing.T) {
 	control, _ := exclusive(t, 0, 0, 0, nil)
 	t.Logf("control: %d distinct PCs with nothing delivered", len(control))
 
+	// THE EXTENSION IS A LETTER. 0x800C4F94 compares it against 65 and 91 -- 'A'
+	// and one past 'Z' -- and uses (extension + bias) * 4 to index a table of
+	// list heads at 0x800C51A0, freeing the list outright for anything outside
+	// that range. The earlier reading here, "low byte must be 0x00", was an
+	// artefact of which values this sweep happened to sample: 0x0001 and 0x01FF
+	// were tried and the letters never were.
+	for _, ext := range []uint16{0x0040, 0x0041, 0x004D, 0x005A, 0x005B} {
+		_, n := exclusive(t, 0xC1, 0x52, ext, control)
+		label := "outside 'A'..'Z'"
+		if ext >= 0x41 && ext <= 0x5A {
+			label = "a LETTER: " + string(rune(ext))
+		}
+		t.Logf("  extension %04X -> %4d exclusive PCs   (%s)", ext, n, label)
+	}
+
 	_, onTarget := exclusive(t, 0xC1, 0x52, 0x0100, control)
 	_, wrongPID := exclusive(t, 0xC1, 0x11, 0x0100, control)
 	_, wrongExt := exclusive(t, 0xC1, 0x52, 0x0200, control)

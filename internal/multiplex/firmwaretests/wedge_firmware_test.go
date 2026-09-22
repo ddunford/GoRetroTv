@@ -479,6 +479,11 @@ type csiLink struct {
 	// watchRead and watchWrite are the guest PCs that touched the watched control block, and how
 	// often. A blocked pipe's producer and consumer are code, and this is what names them.
 	watchRead, watchWrite map[uint32]int
+	// watchBy is which TASK was running at each of those accesses. The PCs say what the code does;
+	// only this says who runs it, and "which task drains this pipe" is the question the PCs cannot
+	// answer -- a send and a receive of the same pipe from the same task is a self-deadlock, and
+	// from two tasks it is an ordinary one. They need different fixes.
+	watchBy map[string]int
 	// block is the watched control block's words at the end of the window.
 	block []uint32
 }
@@ -497,8 +502,30 @@ func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multipl
 	watch uint32,
 ) csiLink {
 	t.Helper()
-	link := csiLink{watchRead: map[uint32]int{}, watchWrite: map[uint32]int{}}
+	link := csiLink{
+		watchRead: map[uint32]int{}, watchWrite: map[uint32]int{}, watchBy: map[string]int{},
+	}
 	var anyAccess int
+	// TCD_Execute_Task points at the control block of the task on the CPU, and the created-list
+	// walk already turns a control block into a name.
+	tasks, err := box.Tasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	named := make(map[uint32]string, len(tasks))
+	for _, task := range tasks {
+		named[task.TCB] = task.Name
+	}
+	whoIsRunning := func() string {
+		exec := box.RAM.Read(0x801072B0&0x1fffffff, bus.Word)
+		if name, ok := named[exec]; ok {
+			return name
+		}
+		if exec == 0 {
+			return "(no task running)"
+		}
+		return fmt.Sprintf("(unknown TCB %08X)", exec)
+	}
 	inWatch := func(a uint32) bool {
 		return watch != 0 && a >= watch && a < watch+controlBlockWords*4
 	}
@@ -516,11 +543,13 @@ func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multipl
 		case inWatch(a.Virtual | 0x80000000):
 			// The firmware quotes the same DRAM cached and uncached, so the watch has to match
 			// both windows onto it or half the traffic is invisible.
+			pc := box.Machine.Core.State().PC &^ 1
 			if a.Write {
-				link.watchWrite[box.Machine.Core.State().PC&^1]++
-				return
+				link.watchWrite[pc]++
+			} else {
+				link.watchRead[pc]++
 			}
-			link.watchRead[box.Machine.Core.State().PC&^1]++
+			link.watchBy[whoIsRunning()+" "+pipeSide(pc)]++
 		case a.Virtual&^uint32(csi.Size-1) == csi.Base:
 			if a.Write {
 				link.writes++
@@ -557,6 +586,41 @@ func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multipl
 	return link
 }
 
+// The two halves of the guest's pipe driver, read out of the firmware image with tools/disasm.sh
+// and named by what they do to the message count rather than by any symbol.
+//
+//	0x800CEBA0  SEND     ...  at 0x800CED50 it loads the count, adds one, stores it back, and
+//	                          every store to the free-byte field in it SUBTRACTS
+//	0x800CED68  RECEIVE  ...  at 0x800CEEDE it loads the count, subtracts one, stores it back, and
+//	                          every store to the free-byte field in it ADDS
+//
+// Both are reached through checking wrappers -- 0x800CF1A4 tail-calls the first and 0x800CF218 the
+// second, each via a word in its own literal pool -- and those wrappers validate the caller's
+// pointer against the four-character "PIPE" id at 0x800CF294, which is the same magic the object
+// census finds by scanning. Two independent routes to the same constant.
+//
+// WHY THE SPLIT MATTERS MORE THAN IT LOOKS. Counting control-block reads against writes does NOT
+// separate sending from receiving: both halves read most of the block and write a few words of it,
+// so a task that only ever receives still shows up "WRITING" the block. The first attribution here
+// did exactly that and made every task look like it did both.
+const (
+	pipeSendWorker    = 0x800CEBA0
+	pipeReceiveWorker = 0x800CED68
+	pipeDriverEnd     = 0x800CF180
+)
+
+// pipeSide says which half of the driver a program counter is in.
+func pipeSide(pc uint32) string {
+	switch {
+	case pc >= pipeSendWorker && pc < pipeReceiveWorker:
+		return "SENDING to"
+	case pc >= pipeReceiveWorker && pc < pipeDriverEnd:
+		return "RECEIVING from"
+	default:
+		return "otherwise touching"
+	}
+}
+
 // controlBlockWords is how much of a watched control block to read and compare.
 //
 // IT IS TRIMMED TO THE BLOCK, and the first version was not. Reading 0x40 words past a pipe whose
@@ -571,33 +635,50 @@ const controlBlockWords = 0x14
 // THE COUNTERS AND THE CODE ANSWER DIFFERENT HALVES. A pipe nobody drains has counters that stop
 // moving, which says the state is frozen; the PCs say WHO froze it, because a producer that is
 // still running and a producer that has gone away look identical in the counters alone.
-// The pipe control-block fields this port has established, by offset from the block.
+// The pipe control-block fields, every one of them read off the driver's own instructions rather
+// than out of a Nucleus header.
 //
-// NOTHING HERE IS TAKEN FROM A NUCLEUS HEADER, and the fields NOT in this list matter as much as
-// the ones in it. +0x30 holds 8011B80C, which the object census independently names as the
-// semaphore EVQS0002, and +0x48 holds SMTEvts -- so this block carries pointers to its sibling
-// objects where a bare control block would carry its buffer's end, and a reader that assumed the
-// Nucleus layout would have called the semaphore a buffer pointer and got a length out of it.
+//	+0x0C  the "PIPE" id, which the wrapper at 0x800CF1BC compares against 0x800CF294
+//	+0x18  first byte: 0 for variable-size messages, which this pipe is
+//	+0x1C  buffer length in bytes
+//	+0x20  messages held      send adds one at 0x800CED50, receive takes one at 0x800CEEDE
+//	+0x24  the message size   the wrapper checks the caller's length against it at 0x800CF1E4
+//	+0x28  bytes free         send subtracts, receive adds
+//	+0x2C  buffer start       the wrap-around target in both halves
+//	+0x30  buffer end         the bound both halves compare against
+//	+0x34  read pointer       written only by receive, at 0x800CEED4
+//	+0x38  write pointer      written only by send, at 0x800CED46
+//	+0x3C  tasks suspended    send adds one at 0x800CEC0C when there is no room
+//	+0x44  the suspension list, whose address send passes at 0x800CEC32
+//
+// A CORRECTION LIVES HERE, because it was a confident wrong reading and the shape of it recurs.
+// This comment previously said the block carries pointers to its sibling objects where a bare
+// control block carries its buffer's end, on the evidence that +0x30 holds 8011B80C and the object
+// census names that the semaphore EVQS0002. Both halves were true and the conclusion was not.
+// +0x30 IS the buffer's end; the buffer simply runs up to the composite structure that ENCLOSES
+// the pipe -- semaphore at +0x00, pipe control block at +0x28 -- and the fields past +0x3C in the
+// dump belong to that structure rather than to the pipe, because the window is wider than the
+// block. Two addresses that coincide are not a pointer, and adjacency is the commonest way for a
+// memory dump to look like a design.
 const (
-	pipeSize      = 0x1C / 4 // the buffer length in bytes; available equals it when nothing is queued
-	pipeCount     = 0x20 / 4 // messages held: zero when available equals size, non-zero when it does not
-	pipeUnit      = 0x24 / 4 // UNIDENTIFIED. It reads 32 and never moves, and it is not the message size
-	pipeAvailable = 0x28 / 4 // bytes still free
-	pipeRead      = 0x34 / 4 // the two move together and by the same step
+	pipeSize      = 0x1C / 4
+	pipeCount     = 0x20 / 4
+	pipeUnit      = 0x24 / 4
+	pipeAvailable = 0x28 / 4
+	pipeRead      = 0x34 / 4
 	pipeWrite     = 0x38 / 4
-	pipeWaiting   = 0x3C / 4 // tasks suspended on it
+	pipeWaiting   = 0x3C / 4
 )
 
 // readPipe states what a pipe control block says about itself.
 //
-// THE MESSAGE SIZE IS DERIVED, NOT LOOKED UP. Two fields sit beside the 160-byte size -- 32, which
-// never moves, and one that reads 0 when the pipe is empty and 20 when it is full. A field that is
-// exactly zero with nothing queued and exactly N with the buffer full is a COUNT of what is in it,
-// which makes the messages 160/20 = 8 bytes and leaves the 32 unidentified. Taking the 32 for the
-// message size instead gives five slots and no explanation of the other field at all, and it was
-// the first reading here until the empty sample was put beside the full one.
-//
-// The finding does not rest on that either way: FULL is read from available reaching zero.
+// THE TWO SIZE-LOOKING FIELDS ARE BOTH REAL AND MEAN DIFFERENT THINGS, which is why reading one
+// of them as "the message size" kept giving an arithmetic that did not close. +0x24 is the
+// message size the API validates against -- and this pipe is VARIABLE-SIZE, its flag byte zero, so
+// that is a MAXIMUM rather than a stride. +0x20 is how many messages are in it. The messages
+// actually being sent are four bytes stored in eight, so twenty of them fill the 160-byte buffer
+// exactly, and the 32 is the largest one that would have been allowed rather than the size of any
+// that were sent.
 func readPipe(t *testing.T, name string, block []uint32, when string) {
 	t.Helper()
 	if len(block) <= pipeWaiting {
@@ -617,7 +698,8 @@ func readPipe(t *testing.T, name string, block []uint32, when string) {
 	}
 	held := "nothing"
 	if block[pipeCount] > 0 {
-		held = fmt.Sprintf("%d messages of %d bytes", block[pipeCount], block[pipeSize]/block[pipeCount])
+		held = fmt.Sprintf("%d messages averaging %d bytes, against a %d-byte maximum",
+			block[pipeCount], block[pipeSize]/block[pipeCount], block[pipeUnit])
 	}
 	if (block[pipeCount] == 0) != (block[pipeAvailable] == block[pipeSize]) {
 		held = fmt.Sprintf("%d, which does not track the free count -- so it is NOT a message count",
@@ -670,9 +752,17 @@ func reportTheWatchedBlock(t *testing.T, name string, at uint32, idle, wall csiL
 			t.Logf("    %s %s: NOTHING touched it", name, side.when)
 			continue
 		}
+		by := make([]string, 0, len(side.link.watchBy))
+		for who := range side.link.watchBy {
+			by = append(by, who)
+		}
+		sort.Strings(by)
+		for _, who := range by {
+			t.Logf("    %s %s: %s it, %d accesses", name, side.when, who, side.link.watchBy[who])
+		}
 		t.Logf("    %s %s: %d distinct PCs", name, side.when, len(pcs))
 		for i, pc := range pcs {
-			if i >= 12 {
+			if i >= 200 {
 				t.Logf("        ... and %d more", len(pcs)-i)
 				break
 			}

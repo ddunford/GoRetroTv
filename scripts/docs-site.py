@@ -257,7 +257,12 @@ document.getElementById('tg').onclick=()=>{const r=document.documentElement;
  r.dataset.theme=d?'light':'dark';try{localStorage.setItem('t',r.dataset.theme)}catch(e){}};
 try{const t=localStorage.getItem('t');if(t)document.documentElement.dataset.theme=t}catch(e){}
 buildNav();
-const hash=decodeURIComponent(location.hash.slice(1)).split('::');show(D.docs[hash[0]]?hash[0]:D.start,hash[1]);
+function fromHash(){const h=decodeURIComponent(location.hash.slice(1)).split('::');
+ show(D.docs[h[0]]?h[0]:D.start,h[1]);}
+// A hash change on an already-loaded page fires no navigation, so without this a shared
+// deep link only works when the page is opened cold -- which is never how a link is used.
+addEventListener('hashchange',fromHash);
+fromHash();
 """
 
 

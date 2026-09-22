@@ -6508,6 +6508,38 @@ anything at all. That is the measured answer to "should we just broadcast everyt
 nowhere for most of it to go, and for the grid specifically the box has been asked directly and
 wants nothing more.
 
+#### THE BANNER RESOLVES CHANNELS AND THE GRID NEVER TOUCHES ONE -- the sharpest difference yet
+
+*The grid's silence needed a control, and there was one all along: press `tv guide` and the box
+draws a now-and-next bar carrying a real programme off our broadcast. That screen demonstrably
+resolves a channel to its listings, which is exactly what the grid fails to do.*
+
+**Both ignore the line-up.** The banner reads the box's own 18-byte service records **zero times in
+1,211,398 data reads** -- the same answer the grid gives -- while drawing a real programme. So those
+records are an acquisition-time structure that NO screen draws from, and the read watch over them
+has told us everything it can. That line of enquiry is closed rather than open.
+
+**But the banner handles our channel identifiers, and the grid handles none.** Watching for reads
+returning a value the firmware has no other reason to hold:
+
+    banner   8006B37C, 8006B35E  Sky Sports 1 listings id (401)   4 reads each
+             8006A96A, 8006A538, 8006A55E   the same, 2 each
+             8009192C            Sky News listings id (501)
+             8009419A, 80069AF4, 80068D60   Sky Travel listings id (251)
+    grid     Sky Travel only, and nothing else -- 401 and 501 read ZERO times
+
+`401` and `501` are the discriminator. The banner resolves them; **the grid never handles a real
+channel identifier at all.** It is not filtering our channels out and it is not failing to draw
+them -- it never has them.
+
+**So the channel-resolution code is named, in RAM, on this port.** `0x8006A538`, `0x8006A55E`,
+`0x8006A96A`, `0x8006B35E`, `0x8006B37C` and `0x8009192C` read our listings ids while a working
+screen resolves a channel. That is the replacement for TASK-7.1's four flash addresses: live
+addresses, executing here, doing the thing the grid does not.
+
+*And `0x80069AF4` and `0x80068D60` appear in BOTH lists, so some of the path is shared -- which is
+what makes the divergence worth following rather than two unrelated screens.*
+
 #### THE BOX DOES NOT WANT A PAT -- and PID 0 being armed does not mean it does
 
 *2026-09-22. The transport-stream plan began "send a PAT on PID 0x0000, because the box arms it and

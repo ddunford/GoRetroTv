@@ -310,6 +310,7 @@ func (m *Multiplex) transport(sub Subscription, listings *Listings) broadcast.Tr
 			Listings:  service.ListingsID,
 			Extra:     service.ListingsID,
 			Channel:   service.Channel,
+			Flags:     service.Flags,
 		})
 	}
 	return transport

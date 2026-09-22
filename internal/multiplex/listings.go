@@ -49,6 +49,13 @@ type ListedService struct {
 	// join between a channel and its programmes, and matching it is how a
 	// title section reaches the right row of the guide.
 	ListingsID uint16 `json:"listingsId"`
+	// Flags is the four-bit field the line-up entry carries in the low nibble
+	// at +7..8, which the guest unpacks into four separate bytes of the record
+	// it builds (record[13..16]). Its meaning is not established, so this
+	// carries the bits and names none of them; a field the box splits four ways
+	// is one it distinguishes between, and every feed this project has sent so
+	// far left all four clear.
+	Flags byte `json:"flags,omitempty"`
 	// Programmes are the day's events, in any order; they are sorted on load.
 	Programmes []ListedProgramme `json:"programmes"`
 }
@@ -305,6 +312,8 @@ func (l *Listings) validate() error {
 			return fmt.Errorf("%q has no serviceId", service.Name)
 		case service.ListingsID == 0:
 			return fmt.Errorf("%q has no listingsId, so its programmes could never be addressed", service.Name)
+		case service.Flags > 0x0f:
+			return fmt.Errorf("%q has flags %#x, and the line-up entry carries four bits", service.Name, service.Flags)
 		}
 		// Duplicates are the failure this catches: two channels sharing a
 		// listingsId would have their programmes filed under one another, and

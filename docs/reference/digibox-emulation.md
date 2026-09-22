@@ -7829,3 +7829,125 @@ before the settle was made long enough. Press, let the screen finish, then press
 
 That is the same instrument failure as hashing a frame at a chosen instruction, wearing different
 clothes: the box was not in the state the measurement assumed.
+
+## The grid abandons its row loop after one channel, and the instruction that ends it
+
+*Measured 2026-09-22, on this port, with the four-block broadcast on air and six services announced.
+Everything here is a read: no host poke, no memory injection, and every identifier hunted for is one
+the broadcast put into the box.*
+
+### First, a lead this task had been following is withdrawn
+
+The task's most concrete finding was that the now-and-next banner "resolves channels from page
+`0x80493`" — a read there returned `0x191`, Sky Sports 1's listings id — while the ALL CHANNELS grid
+reads the page above it 18,767 times and never touches `0x80493` at all. That difference was real
+and it was not about channels.
+
+A sweep of the whole of DRAM for the four announced channel numbers distinctive enough to mean
+something — 251, 301, 401 and 501 — finds the box holding them in twenty-eight places. **Not one of
+them is on page `0x80493` or `0x80494`.** Those pages are the o-code interpreter's own working
+memory; the `0x191` was a value in flight through it. **An address a value passes THROUGH is not
+where it lives**, and a read watch cannot tell the two apart — only asking where the number is
+STORED can.
+
+### The channel database, found by sweeping rather than by guessing at a page
+
+Two of the twenty-eight clusters are arrays rather than scratch: a constant stride, and their
+entries in **ascending channel order**, which is the order the grid draws in and an order nothing
+else in this box has a reason to impose.
+
+| base (one run) | stride | holds |
+|---|---|---|
+| `0x802A7BEC` | 24 | all six channels, ascending, channel number at `+16` |
+| `0x802AD9BC` | 6 | all six channels, ascending — the blob the detail call copies out |
+| `0x802FB8B8` | 32 | all six, twice each — read by neither screen |
+
+The addresses move between runs; the layout does not, and it was read off the instructions rather
+than inferred from a dump. **An instrument that pins these addresses will one day report a confident
+zero — find the array each run.**
+
+### `0x800A45C4` is "fill in this channel's details, by index", and its guard passes
+
+    800a45c4  lw   v0,16(sp)          the caller's index
+    800a45c6  li   v1,24              the stride
+    800a45ce  lw   v1,16(s0)          the channel database
+    800a45d0  lw   v1,88(v1)          +88 is the array base
+    800a45d4  lw   v1,20(v1)          entry+20, a reference
+    800a45d6  lw   v0,0x800a48b4      the constant 0xFFFFFFFF
+    800a45da  btnez 0x800a45e1        different -> fill the record
+    800a45dc  lw   v1,0x800a48b8      the same -> 0xFFFFFFFC, which is -4
+    800a45de  b    0x800a4649         and return, having written nothing
+
+Everything the caller wanted is on the far side of that test, and a screen told −4 for every channel
+would draw its furniture and no rows — which is the grid exactly. **It is not what is happening.**
+Read off the running box, **every one of the six channels carries `entry+20 = 6`**, not the
+sentinel, so the call would succeed for all of them. The field is a reference into an eight-byte
+table at `0x80164A80`; the same value for every channel says it selects a KIND, not a channel.
+
+### The measurement that names the difference
+
+Both screens, each on its own box, each reaching its screen by a pinned route:
+
+| | the banner (works) | the ALL CHANNELS grid |
+|---|---|---|
+| `0x800A45C4` channel detail | **5 calls** | **0 calls** |
+| `0x800A4B60` row-loop head | 0 | **1, with index 0 and limit 6** |
+| the 24-byte array | 209 reads, 41 (instruction, caller) pairs | 49 reads, 10 pairs |
+| the 6-byte array | 30 reads, all from one memmove | **not read once** |
+
+**The grid is not refused by the channel database — it never asks it.** And it is not short of
+channels: at its loop head the limit is **six**, which is what the broadcast announced. It enters
+the body at index 0 and never comes back for index 1.
+
+### The instruction that ends the loop
+
+    800a4ba0  lw    v1,20(v1)         entry+20, which is 6 for every channel
+    800a4ba4  sll   v1,3
+    800a4ba6  addu  v1,a2,v1          0x80164A80 + 6*8
+    800a4ba8  lhu   a0,4(v1)          a HANDLE, from 0x80164AB4
+    800a4bac  jalr  a2                call 0x800ADD08
+    800a4bb0  move  v1,v0
+    800a4bb2  cmpi  v1,2
+    800a4bb4  bteqz 0x800a4d8d        result == 2 -> LEAVE the loop
+    800a4bb8  slti  v1,2
+    800a4bba  btnez 0x800a4dad        result <  2 -> leave as well
+    800a4bbe  li    v1,7              otherwise draw the row
+
+The grid took the first branch, and that is measured rather than assumed: the reads at `0x800A4D92`
+and `0x800A4D98` execute only on the `== 2` path, and the watch saw both, once each.
+
+`0x800ADD08` is a **handle resolver**, not a listings lookup. It zeroes twelve bytes of the caller's
+buffer, then splits the sixteen-bit handle: `(id-1)>>12` chooses a pool and is bounds-checked
+against a count; `(id-1)&0xFFF` indexes into it, bounds-checked against the pool descriptor's
+`+16`, with `+8` the element size and `+12` the base. Every failure path returns zero. **Where the 2
+comes from is not yet established and must not be guessed** — the next measurement is to watch the
+fetches inside `0x800ADD08`..`0x800ADEC0` on the grid draw and take the path the box actually runs.
+
+### The line-up's four flag bits are closed
+
+The BAT's private `0xB1` entry ends with a halfword whose top twelve bits are the channel number and
+whose low four the guest unpacks into four separate bytes of its record. This port had never set
+them. Six channels were given six different values in one run — `0x1`, `0x2`, `0x4`, `0x8`, `0xF`
+and `0x0` as a control — so the rows that appeared would have named the bit.
+
+The bits arrive, **and the order is reversed**: bit 0 lands in `record[16]`, bit 3 in `record[13]`.
+The grid drew `42DBD889`, byte for byte the screen it has always drawn. **The flags are not what it
+filters on.**
+
+### The fifth wrong screen, and why the guard that caught the first four did not catch this one
+
+Four earlier measurements accepted the BOX OFFICE menu as the tv guide tab, because a LEFT from box
+office draws a screen DIFFERENT from the one before it. The guard learned from that pins the tab by
+hash — and a probe carrying that guard still measured the wrong screen, reporting a clean "the grid
+never asks the channel database — 0 calls against the banner's 5" from a screenshot of **the
+ten-entry TV GUIDE menu**. Select had not landed; the menu had merely redrawn, and a redraw of a
+screen is a different hash.
+
+> **"Different from the screen before it" is not "the screen I asked for", and the menu has more
+> than one hash.**
+
+It was caught by opening the picture and by nothing else — the hash, the read counts and the verdict
+text were all internally consistent and all wrong. The fix is mechanised rather than remembered: the
+route lives once, in `openAllChannels`, pinned at BOTH ends, and a probe that expects to MOVE the
+grid says so explicitly instead of the gate being loosened for everyone. On the very next run it
+earned itself: try 1 drew the menu redraw, try 2 the grid.

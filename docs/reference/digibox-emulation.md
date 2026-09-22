@@ -8859,3 +8859,37 @@ plausible-wrong-answer failure this project keeps paying for.
 `DigiboxSetup.java` now isolates each seed, clears and retries an address Ghidra has already decoded,
 NAMES every address it still could not seed, and reports `seeded N of M` — with a separate loud line
 when N is zero.
+
+### The subscription tree exists, and the box is subscribed to table `0xC1` under letters
+
+The dispatcher is the universal delivery path, and that is measured rather than assumed. Counting
+its executions by table id while twenty-one programmes were taken off the air:
+
+    table 0xa1  6      table 0xa3  5      table 0x73  1      table 0x42  1
+    table 0xa2  6      table 0xa0  2      table 0x70  1      table 0x4a  1   table 0x40  1
+
+Every section goes through it, titles included — and note this port transmits all four title blocks,
+`0xA0` through `0xA3`, not just the one the guide is listening for.
+
+Walking its structure off the running box finds **129 subscription nodes**, and one branch is worth
+recording on its own:
+
+    depth 0  key C1 under mask FF        table 0xC1
+    depth 1  key 41, 42, 43 ... 57       'A', 'B', 'C' ... 'W'
+
+**The box is subscribed to table `0xC1` with an extension per LETTER** — which is exactly what the
+A-Z index consumer at `0x800C4F94` was independently found to dispatch on, accepting `'A'`..`'Z'`
+and freeing the whole list for anything outside that range. Two readings taken months and methods
+apart agree, and **this port has never transmitted a `0xC1` section in normal operation.**
+
+**The PID attribution is NOT established and is not claimed.** A first walk hashed each armed PID
+into a bucket and searched the chain, and reported ninety-three subscriptions on PID `0x10` with
+**zero on `0x33`** — the PID twenty-one programmes demonstrably arrive on. That contradiction is
+what sent the dispatcher measurement above. Enumerating every bucket instead and reading each node's
+own field gives values of `0x10`, `0x16`, `0x17`, `0x1B`, `0x1E` and `0x1F`, every one of them ≤ 31
+and therefore a BUCKET INDEX rather than a PID: the field being read is the hash, not the
+subscription's PID.
+
+> So the tree is real, its contents are legible, and which PID each branch belongs to is still
+> unknown. The `0xC1`-under-letters branch stands because its keys match an independent decoding of
+> the consumer, not because the walk attributed it to a PID.

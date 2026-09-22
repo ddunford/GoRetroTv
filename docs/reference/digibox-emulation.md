@@ -8634,3 +8634,58 @@ is not established — it must not be guessed.
 **the flags change the TV GUIDE menu too** — its hash moves off the pinned `0xDDBC18E9` and the
 route refuses to continue. That is the pin working as intended rather than a fault, but it means an
 experiment that changes the broadcast needs an acceptance that does not assume the menu is fixed.
+
+## THE ALL CHANNELS GRID DRAWS ITS CHANNELS
+
+*2026-09-22. Six rows, in channel order, with names.*
+
+    101 Sky One        ..no listings available
+    121 Sky Soap       ..no listings available
+    251 Sky Travel     ..no listings available
+    301 Sky Movies     ..no listings available
+    401 Sky Sports 1   ..no listings available
+    501 Sky News       ..no listings available
+                       + 24 Hours    - 24 Hours
+
+Header, in-world date, clock, the half-hour axis, every announced channel with its right number and
+name in ascending order, and the ±24 Hours footer. Artefact:
+`.artifacts/stripes-after-waiting.png`.
+
+### Two changes did it, and both are in the signal
+
+1. **A private_data_specifier per service.** The grid's row filter at `0x800CB7B8` asks its object
+   for descriptor tag `0x5F` and returns `-1` without drawing when the answer is zero. Our SDT's
+   service descriptor loop carried only a `0x48`. DVB scopes a specifier to the descriptors that
+   follow it in the same loop, and the BAT already had one ahead of its `0xB1` — no loop had one per
+   service.
+2. **The line-up flags.** The enumeration reports a channel only when the filter accepts it AND
+   `(record[+0x0C] & 0x10) != 0`, and `record+0x0C` is the flags nibble encoded as four two-bit
+   fields (`01` set, `10` clear, all-clear reads `0xAA`). This port had never set one.
+
+### And the stripes were never a fault — the SETTLE was
+
+The rows first appeared as diagonal noise, on the grid and on the TV GUIDE menu alike, which read
+convincingly as a broken glyph path. **It was not reproducible**, and that is what saved it: the
+same flags and the same route drew the menu perfectly, all ten entries intact.
+
+So the screen was sampled while it was still painting. The settle detector takes a frame every
+65,536 instructions and stops after four identical ones — and a row that paints in bursts holds
+still across four samples and finishes later. Running fifty million instructions past the settle:
+
+    at the settle the grid was 43779DC8
+      at + 2M the screen became C4046A18
+      at + 4M the screen became F695A53C
+      at + 5M the screen became 914C8853
+
+**Three changes after the settle said it had stopped.** Every artefact this project has taken of
+this screen was taken at a settle, so every one of them may have caught a row mid-paint — including
+the ones that established "the grid draws no rows at all".
+
+> A settle is a statement about the last quarter of a million instructions. It is not a statement
+> that the screen has finished.
+
+### What is still missing
+
+Every row says **`..no listings available`**, so the channels are found and their programmes are
+not. That is now an ordinary listings question rather than a structural one, and the box holds
+twenty-one programmes for five of these six channels in the displayed window.

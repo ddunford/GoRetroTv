@@ -698,7 +698,7 @@ func TestTheGridWithEveryChannelFlagged(t *testing.T) {
 	// necessary and not sufficient, and the four bits evidently do not all mean the same kind of
 	// thing. Sweeping the whole nibble costs one acquisition each and settles it without guessing
 	// which combination matters.
-	for _, flags := range []byte{0x04, 0x0f, 0x06, 0x0c, 0x05, 0x07} {
+	for flags := byte(0x00); flags <= 0x0f; flags++ {
 		t.Run(fmt.Sprintf("flags_%#02x", flags), func(t *testing.T) { gridWithFlags(t, flags) })
 	}
 }
@@ -771,7 +771,9 @@ func gridWithFlags(t *testing.T, uniform byte) {
 	}
 
 	artefact := fmt.Sprintf("grid-flags-%02x.png", uniform)
-	grid := openAllChannels(t, press, ".artifacts/"+artefact, true)
+	// The flags change the tv guide menu as well as the grid, so the pinned route cannot be used
+	// here -- see openAllChannelsUnpinned for why that is a real weakening and not a convenience.
+	grid := openAllChannelsUnpinned(t, press, ".artifacts/"+artefact)
 	if err := dumpScreen(t, box, artefact); err != nil {
 		t.Fatal(err)
 	}

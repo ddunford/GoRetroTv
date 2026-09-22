@@ -90,3 +90,49 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 		uint32(allChannelsEmpty), seen, artefact)
 	return grid
 }
+
+// THE SAME ROUTE FOR EXPERIMENTS THAT CHANGE THE BROADCAST, AND IT IS DELIBERATELY WEAKER.
+//
+// `openAllChannels` pins the tv guide tab to 0xDDBC18E9 and that pin has earned its place -- it has
+// caught the wrong screen twice since it was written. But it assumes the menu is a CONSTANT, and it
+// is not: the menu lists channels, so changing what the broadcast says about them changes the menu
+// too. Sweeping the line-up flags moved it to 0xE84F6057, 0x65BA675D and 0x20DB8CF2 among others,
+// and the route refused to continue -- correctly, because a screen it cannot name is a screen it
+// must not measure.
+//
+// So an experiment that changes the broadcast gets this instead, and the difference is stated
+// rather than hidden: **it trusts the press count where the pinned route trusts a hash.** Two LEFTs
+// from the box office menu reach the tv guide tab, and select opens ALL CHANNELS. Every screen on
+// the way is logged and the destination is dumped, because with no hash to check against, THE
+// PICTURE IS THE ONLY PROOF -- and this project has measured the wrong screen five times.
+//
+// Use the pinned route wherever the broadcast is the ordinary one. Use this only where it cannot
+// be, and read the artefact.
+func openAllChannelsUnpinned(t *testing.T, press pressFunc, artefact string) uint32 {
+	t.Helper()
+	const boxOfficeMenu = 0x1CBD8D51 // this one does NOT depend on the channel list
+	menu := press(keyBoxOffice, "box office", 80_000_000)
+	if menu != boxOfficeMenu {
+		t.Fatalf("harness: box office drew %08X, not %08X -- the route starts from a screen it "+
+			"cannot name, and everything after it would be guesswork", menu, uint32(boxOfficeMenu))
+	}
+	var seen []uint32
+	for i := 1; i <= 2; i++ {
+		seen = append(seen, press(keyLeft, fmt.Sprintf("left %d of 2 to the tv guide tab", i), 80_000_000))
+	}
+	tab := seen[len(seen)-1]
+	if tab == 0 || tab == menu {
+		t.Fatalf("harness: two LEFTs from box office drew %08X, so the tab was not reached", tab)
+	}
+	grid := uint32(0)
+	for attempt := 1; attempt <= 6; attempt++ {
+		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
+		if grid != 0 && grid != tab && grid != menu {
+			t.Logf("the grid settled on %08X -- READ %s, there is no hash to check it against",
+				grid, artefact)
+			return grid
+		}
+	}
+	t.Fatalf("harness: select never left the tv guide tab (%08X); screens seen: %08X", tab, seen)
+	return grid
+}

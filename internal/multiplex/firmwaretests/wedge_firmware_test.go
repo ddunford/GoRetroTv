@@ -59,7 +59,28 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 	// task sits on its own event group or its command queue waiting for work, which is what idle
 	// is. Without this reading the headline below would be an over-read dressed as a measurement.
 	baseline := rtosStateAt(t, box, "idle, before any key")
-	idleLink := csiTraffic(t, box, transmitter, csiWindow)
+
+	// THE PIPE THE WEDGE LANDS ON, found by name before anything is pressed so the same address is
+	// watched on both sides of the comparison. It asserts its own subject: EVQP0002 is where all
+	// three moving tasks end up, and a run that cannot find it is watching nothing.
+	const watched = "EVQP0002"
+	pipe := uint32(0)
+	objects, err := box.NucleusObjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range objects {
+		if o.Name == watched {
+			pipe = o.Address
+		}
+	}
+	if pipe == 0 {
+		t.Fatalf("harness: the census found %d objects and no %s, so the watch below would be on "+
+			"address zero and every count it reports would be a fiction", len(objects), watched)
+	}
+	t.Logf("watching %s at %08X", watched, pipe)
+
+	idleLink := csiTraffic(t, box, transmitter, csiWindow, pipe)
 	idleAfter := readRTOS(t, box)
 	t.Logf("hardware while idle and working: %s", idleLink)
 	t.Logf("tasks scheduled over %d idle instructions: %v", csiWindow, scheduled(baseline, idleAfter))
@@ -156,7 +177,7 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 	if up == 0 {
 		_, escape := press(0x7D, "box office FROM THE WALL", 12_000_000)
 		if escape == 0 {
-			reportTheWedge(t, box, transmitter, baseline, idleLink, before, moves)
+			reportTheWedge(t, box, transmitter, baseline, idleLink, watched, pipe, before, moves)
 			return
 		}
 		t.Logf("VERDICT: UP is dead but box office still redraws (%08X), so navigation specifically "+
@@ -276,7 +297,7 @@ func rtosStateAt(t *testing.T, box *board.Runtime, when string) rtosState {
 // reportTheWedge asks the RTOS what it is doing and what it is waiting for, once the box has
 // stopped answering the handset altogether, and says what CHANGED since it was working.
 func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex,
-	baseline rtosState, idleLink csiLink, screen uint32, moves int,
+	baseline rtosState, idleLink csiLink, watched string, pipe uint32, screen uint32, moves int,
 ) {
 	t.Helper()
 
@@ -285,7 +306,7 @@ func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Mul
 	if err != nil {
 		t.Fatal(err)
 	}
-	wallLink := csiTraffic(t, box, transmitter, csiWindow)
+	wallLink := csiTraffic(t, box, transmitter, csiWindow, pipe)
 	wall := readRTOS(t, box)
 	t.Logf("RTOS at the wall: TCD_Execute_Task=[0x801072B0]=%08X ready=[0x801072D8]=%08X",
 		wall.exec, wall.ready)
@@ -301,6 +322,9 @@ func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Mul
 	// anything upstream is blamed.
 	t.Logf("hardware while idle and working: %s", idleLink)
 	t.Logf("hardware at the wall:            %s", wallLink)
+
+	t.Logf("%s at %08X, working window against the wall:", watched, pipe)
+	reportTheWatchedBlock(t, watched, pipe, idleLink, wallLink)
 
 	// WHICH TASKS STILL RUN. Status is a state and a state can be one a task passes through every
 	// few thousand instructions; the run count says whether it is passing through at all. A task
@@ -452,6 +476,11 @@ type csiLink struct {
 	queued                int
 	irq, timer            int
 	exceptions            int
+	// watchRead and watchWrite are the guest PCs that touched the watched control block, and how
+	// often. A blocked pipe's producer and consumer are code, and this is what names them.
+	watchRead, watchWrite map[uint32]int
+	// block is the watched control block's words at the end of the window.
+	block []uint32
 }
 
 func (l csiLink) String() string {
@@ -464,10 +493,15 @@ func (l csiLink) String() string {
 //
 // A COUNT OF ZERO HERE IS A READING, NOT A BROKEN INSTRUMENT, so it says what it examined: if the
 // observer saw no bus access at all then the hook is not installed and the zero is the harness.
-func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex, window int) csiLink {
+func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex, window int,
+	watch uint32,
+) csiLink {
 	t.Helper()
-	var link csiLink
+	link := csiLink{watchRead: map[uint32]int{}, watchWrite: map[uint32]int{}}
 	var anyAccess int
+	inWatch := func(a uint32) bool {
+		return watch != 0 && a >= watch && a < watch+controlBlockWords*4
+	}
 	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
 		// THE EXCEPTION VECTOR IS COUNTED AS A FETCH, not by sampling the PC between steps. The
 		// PC-sampling version read zero on a box that was plainly taking interrupts, because the
@@ -479,6 +513,14 @@ func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multipl
 		switch {
 		case a.Virtual == 0x80000180:
 			link.exceptions++
+		case inWatch(a.Virtual | 0x80000000):
+			// The firmware quotes the same DRAM cached and uncached, so the watch has to match
+			// both windows onto it or half the traffic is invisible.
+			if a.Write {
+				link.watchWrite[box.Machine.Core.State().PC&^1]++
+				return
+			}
+			link.watchRead[box.Machine.Core.State().PC&^1]++
 		case a.Virtual&^uint32(csi.Size-1) == csi.Base:
 			if a.Write {
 				link.writes++
@@ -507,5 +549,135 @@ func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multipl
 			"the link is the instrument rather than the link")
 	}
 	link.queued = box.CSI.Pending()
+	if watch != 0 {
+		for i := uint32(0); i < controlBlockWords; i++ {
+			link.block = append(link.block, box.RAM.Read((watch&0x1fffffff)+i*4, bus.Word))
+		}
+	}
 	return link
+}
+
+// controlBlockWords is how much of a watched control block to read and compare.
+//
+// IT IS TRIMMED TO THE BLOCK, and the first version was not. Reading 0x40 words past a pipe whose
+// control block is under 0x50 bytes ran the dump into whatever sits after it, and printed twenty
+// lines of a neighbouring structure's contents as though they were the pipe's -- plausible,
+// orderly, and nothing to do with the subject.
+const controlBlockWords = 0x14
+
+// reportTheWatchedBlock says which words of a control block moved between the two windows, and
+// which guest code touched it.
+//
+// THE COUNTERS AND THE CODE ANSWER DIFFERENT HALVES. A pipe nobody drains has counters that stop
+// moving, which says the state is frozen; the PCs say WHO froze it, because a producer that is
+// still running and a producer that has gone away look identical in the counters alone.
+// The pipe control-block fields this port has established, by offset from the block.
+//
+// NOTHING HERE IS TAKEN FROM A NUCLEUS HEADER, and the fields NOT in this list matter as much as
+// the ones in it. +0x30 holds 8011B80C, which the object census independently names as the
+// semaphore EVQS0002, and +0x48 holds SMTEvts -- so this block carries pointers to its sibling
+// objects where a bare control block would carry its buffer's end, and a reader that assumed the
+// Nucleus layout would have called the semaphore a buffer pointer and got a length out of it.
+const (
+	pipeSize      = 0x1C / 4 // the buffer length in bytes; available equals it when nothing is queued
+	pipeCount     = 0x20 / 4 // messages held: zero when available equals size, non-zero when it does not
+	pipeUnit      = 0x24 / 4 // UNIDENTIFIED. It reads 32 and never moves, and it is not the message size
+	pipeAvailable = 0x28 / 4 // bytes still free
+	pipeRead      = 0x34 / 4 // the two move together and by the same step
+	pipeWrite     = 0x38 / 4
+	pipeWaiting   = 0x3C / 4 // tasks suspended on it
+)
+
+// readPipe states what a pipe control block says about itself.
+//
+// THE MESSAGE SIZE IS DERIVED, NOT LOOKED UP. Two fields sit beside the 160-byte size -- 32, which
+// never moves, and one that reads 0 when the pipe is empty and 20 when it is full. A field that is
+// exactly zero with nothing queued and exactly N with the buffer full is a COUNT of what is in it,
+// which makes the messages 160/20 = 8 bytes and leaves the 32 unidentified. Taking the 32 for the
+// message size instead gives five slots and no explanation of the other field at all, and it was
+// the first reading here until the empty sample was put beside the full one.
+//
+// The finding does not rest on that either way: FULL is read from available reaching zero.
+func readPipe(t *testing.T, name string, block []uint32, when string) {
+	t.Helper()
+	if len(block) <= pipeWaiting {
+		t.Fatalf("harness: %s was read %d words, too few to hold the fields below", name, len(block))
+	}
+	if block[pipeAvailable] > block[pipeSize] || block[pipeSize] == 0 {
+		t.Logf("    %s %s: %d bytes free of a declared %d, which cannot be -- read as UNIDENTIFIED "+
+			"rather than named", name, when, block[pipeAvailable], block[pipeSize])
+		return
+	}
+	state := fmt.Sprintf("%d of %d bytes free", block[pipeAvailable], block[pipeSize])
+	switch block[pipeAvailable] {
+	case 0:
+		state = fmt.Sprintf("FULL -- not one of its %d bytes free", block[pipeSize])
+	case block[pipeSize]:
+		state = "empty"
+	}
+	held := "nothing"
+	if block[pipeCount] > 0 {
+		held = fmt.Sprintf("%d messages of %d bytes", block[pipeCount], block[pipeSize]/block[pipeCount])
+	}
+	if (block[pipeCount] == 0) != (block[pipeAvailable] == block[pipeSize]) {
+		held = fmt.Sprintf("%d, which does not track the free count -- so it is NOT a message count",
+			block[pipeCount])
+	}
+	t.Logf("    %s %s: %s, holding %s, %d tasks suspended on it, read %08X write %08X",
+		name, when, state, held, block[pipeWaiting], block[pipeRead], block[pipeWrite])
+}
+
+func reportTheWatchedBlock(t *testing.T, name string, at uint32, idle, wall csiLink) {
+	t.Helper()
+	if len(idle.block) != len(wall.block) || len(wall.block) == 0 {
+		t.Fatalf("harness: the watched block was read %d words while working and %d at the wall, so "+
+			"there is nothing to compare", len(idle.block), len(wall.block))
+	}
+	// THE WHOLE BLOCK IS PRINTED, not only the words that moved. A field's meaning comes from what
+	// it holds beside its neighbours -- a size against a count against a pointer pair -- and a diff
+	// alone hands a reader four changed numbers with nothing to read them against.
+	changed := 0
+	for i := range wall.block {
+		mark := "  "
+		if idle.block[i] != wall.block[i] {
+			mark, changed = "->", changed+1
+		}
+		t.Logf("    %s+0x%02X  %08X %s %08X", name, i*4, idle.block[i], mark, wall.block[i])
+	}
+	if changed == 0 {
+		t.Logf("    NOT ONE WORD of %s at %08X changed between the working window and the wall, so "+
+			"nothing moved through it in either direction", name, at)
+	}
+	readPipe(t, name, idle.block, "while working")
+	readPipe(t, name, wall.block, "at the wall")
+	for _, side := range []struct {
+		when string
+		link csiLink
+	}{{"while working", idle}, {"at the wall", wall}} {
+		touched := map[uint32]bool{}
+		for pc := range side.link.watchRead {
+			touched[pc] = true
+		}
+		for pc := range side.link.watchWrite {
+			touched[pc] = true
+		}
+		pcs := make([]uint32, 0, len(touched))
+		for pc := range touched {
+			pcs = append(pcs, pc)
+		}
+		sort.Slice(pcs, func(a, b int) bool { return pcs[a] < pcs[b] })
+		if len(pcs) == 0 {
+			t.Logf("    %s %s: NOTHING touched it", name, side.when)
+			continue
+		}
+		t.Logf("    %s %s: %d distinct PCs", name, side.when, len(pcs))
+		for i, pc := range pcs {
+			if i >= 12 {
+				t.Logf("        ... and %d more", len(pcs)-i)
+				break
+			}
+			t.Logf("        %08X  %d reads  %d writes", pc, side.link.watchRead[pc],
+				side.link.watchWrite[pc])
+		}
+	}
 }

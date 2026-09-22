@@ -6678,12 +6678,30 @@ kernel object names them at all**, which is not what a semaphore or event-group 
 queue pair `EVQS0002`/`EVQP0002`. A handset press has to become an event before any screen sees it,
 and the task that delivers events is the one that has moved.
 
-Only status 7 is established here as an event wait. 5 and 6 are printed raw rather than named,
-because naming them would put a guess where a reader would take a reading.
-
 **What this does NOT yet say** is which way the causation runs, and the temptation to assert it
 should be resisted: the smartcard module stalling and the event task stalling are both consistent
 with the other happening first. What it does say is where to look, and it is not the menu.
+
+##### THE TASK STATUS NUMBERS, MEASURED OFF THIS BOX
+
+This file previously established one value -- status 7 is an event wait -- and printed the rest raw,
+which was right at the time and is no longer necessary. **The correlation is measurable**, because
+every suspended task is queued on an object whose TYPE is read out of the guest, so the numbers name
+themselves. At the wall, across forty-two tasks:
+
+| status | queued on | count | |
+|---|---|---|---|
+| 2 | nothing names it | 1 | `UTIL`, which sleeps on a timer -- not a suspension list |
+| 4 | `QUEU` | 10 | **one type only** |
+| 5 | `PIPE` | 1 + 2 unnamed | a pipe wait; the two unnamed are the scan's gap, not a second type |
+| 6 | `SEMA` | 7 | **one type only** |
+| 7 | `EVNT` | 21 | **one type only**, and it agrees with what was already established |
+
+Four of the five are single-typed, which is what makes them readings rather than impressions. Status
+5 is the weak one: one task is visibly on `PIPE EVQP0002` and two more are in status 5 with nothing
+naming them, because the suspension-list field of some objects sits outside the window the scan
+walks. **That gap is stated rather than rounded off** -- "status 5 is a pipe wait" is a reading with
+one confirmed instance, not the four-square result the others are.
 
 ##### HOW THE OBJECTS GET NAMED, AND THE ARTEFACT THAT HAD TO BE RULED OUT
 

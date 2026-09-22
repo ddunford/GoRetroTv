@@ -41,6 +41,13 @@ const (
 	// and says nothing about why.
 	suspendBlock = 0x20
 
+	// How far into a control block to look for a suspension list. A task's own block is 0x70 of
+	// structure, but the other object types are laid out differently and their list heads sit
+	// further in -- a range that stopped at a task's length found the semaphore and event-group
+	// waits and silently missed every pipe. The two-way linkage below is what keeps a wider window
+	// honest: a field that is not a list head points at nothing that points back.
+	objectFields = 0x100
+
 	// The census must find at least this many named objects before it will believe its own scan.
 	// A guest with tasks running has dozens.
 	censusFloor = 4
@@ -53,9 +60,11 @@ type Task struct {
 	TCB uint32
 	// Name is the task's own name, as the firmware spelled it.
 	Name string
-	// Status is Nucleus's tc_status. THE RECORD ESTABLISHES ONLY ONE VALUE: 7 is an event wait.
-	// Callers print the others raw rather than naming them, because a named guess in an
-	// instrument's output gets read as a measurement.
+	// Status is Nucleus's tc_status. What the numbers mean was measured off the box rather than
+	// taken from a header, by reading the TYPE of the object each suspended task is queued on:
+	// 4 is a queue wait, 5 a pipe wait, 6 a semaphore wait, 7 an event-group wait, and 0 is
+	// runnable. Four of those had exactly one object type against them across forty-two tasks.
+	// A caller that meets a value not on that list prints it raw rather than naming it.
 	Status uint8
 	// Runs is the guest's own count of how many times the task has been scheduled.
 	Runs uint32
@@ -109,7 +118,7 @@ func (r *Runtime) Tasks() ([]Task, error) {
 }
 
 // TaskState reads a named task from the guest's live created-task list.
-// Status 7 means event wait; runs is the guest's own schedule count.
+// Status is Nucleus's tc_status, as Task documents; runs is the guest's own schedule count.
 func (r *Runtime) TaskState(name string) (status uint8, runs uint32, found bool, err error) {
 	err = r.walkTasks(func(t Task) {
 		if t.Name == name {
@@ -278,7 +287,7 @@ func (r *Runtime) TaskWaits() ([]TaskWait, error) {
 		if o.Type == "TASK" {
 			continue
 		}
-		for field := uint32(cbName + 8); field < cbLen; field += 4 {
+		for field := uint32(cbName + 8); field < objectFields; field += 4 {
 			head, ok := word(o.Address + field)
 			if !ok {
 				continue

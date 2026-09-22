@@ -8,6 +8,9 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/csi"
+	"github.com/ddunford/goretrotv/internal/device/hwtimer"
+	"github.com/ddunford/goretrotv/internal/device/irq"
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
 
@@ -56,6 +59,10 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 	// task sits on its own event group or its command queue waiting for work, which is what idle
 	// is. Without this reading the headline below would be an over-read dressed as a measurement.
 	baseline := rtosStateAt(t, box, "idle, before any key")
+	idleLink := csiTraffic(t, box, transmitter, csiWindow)
+	idleAfter := readRTOS(t, box)
+	t.Logf("hardware while idle and working: %s", idleLink)
+	t.Logf("tasks scheduled over %d idle instructions: %v", csiWindow, scheduled(baseline, idleAfter))
 
 	var watching bool
 	seen := map[uint32]int{}
@@ -149,7 +156,7 @@ func TestWhatTheBoxIsWaitingForWhenTheMenuWedges(t *testing.T) {
 	if up == 0 {
 		_, escape := press(0x7D, "box office FROM THE WALL", 12_000_000)
 		if escape == 0 {
-			reportTheWedge(t, box, baseline, before, moves)
+			reportTheWedge(t, box, transmitter, baseline, idleLink, before, moves)
 			return
 		}
 		t.Logf("VERDICT: UP is dead but box office still redraws (%08X), so navigation specifically "+
@@ -204,6 +211,22 @@ type rtosState struct {
 	// "changed" against any later sample -- which is the sample instant, not a finding.
 	running string
 	on      map[string]string
+	// runs is each task's own schedule count. Comparing two samples says which tasks ACTUALLY RAN
+	// in between, which is a different and blunter question from what they are queued on -- and
+	// the one that separates a task frozen in a state from a task cycling through it.
+	runs map[string]uint32
+}
+
+// scheduled names the tasks whose own run count moved between two samples.
+func scheduled(before, after rtosState) []string {
+	var ran []string
+	for name, n := range after.runs {
+		if n != before.runs[name] {
+			ran = append(ran, fmt.Sprintf("%s+%d", name, n-before.runs[name]))
+		}
+	}
+	sort.Strings(ran)
+	return ran
 }
 
 func readRTOS(t *testing.T, box *board.Runtime) rtosState {
@@ -214,6 +237,7 @@ func readRTOS(t *testing.T, box *board.Runtime) rtosState {
 		exec:  box.RAM.Read(0x801072B0&0x1fffffff, bus.Word),
 		ready: box.RAM.Read(0x801072D8&0x1fffffff, bus.Word),
 		on:    map[string]string{},
+		runs:  map[string]uint32{},
 	}
 	waits, err := box.TaskWaits()
 	if err != nil {
@@ -223,9 +247,9 @@ func readRTOS(t *testing.T, box *board.Runtime) rtosState {
 		if w.Task.TCB == state.exec {
 			state.running = w.Task.Name
 		}
-		// ONLY STATUS 7 IS ESTABLISHED. The record says status 7 is an event wait and says nothing
-		// about the others, so the rest are printed raw rather than given names this project has
-		// not measured. A named guess in an instrument's output gets read as a reading.
+		// THE STATUS IS PRINTED RAW BESIDE THE OBJECT'S TYPE, which is what lets the two be
+		// correlated further down instead of one of them being asserted. A number named here
+		// would be a name this instrument imported rather than measured.
 		where := "nothing names it"
 		for i, s := range w.On {
 			if i > 0 {
@@ -236,6 +260,7 @@ func readRTOS(t *testing.T, box *board.Runtime) rtosState {
 			where += s.Object.Type + " " + s.Object.Name
 		}
 		state.on[w.Task.Name] = fmt.Sprintf("status=%d %s", w.Task.Status, where)
+		state.runs[w.Task.Name] = w.Task.Runs
 	}
 	return state
 }
@@ -250,20 +275,45 @@ func rtosStateAt(t *testing.T, box *board.Runtime, when string) rtosState {
 
 // reportTheWedge asks the RTOS what it is doing and what it is waiting for, once the box has
 // stopped answering the handset altogether, and says what CHANGED since it was working.
-func reportTheWedge(t *testing.T, box *board.Runtime, baseline rtosState, screen uint32, moves int) {
+func reportTheWedge(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex,
+	baseline rtosState, idleLink csiLink, screen uint32, moves int,
+) {
 	t.Helper()
 
-	retiredBefore := box.Machine.Retired
-	for i := 0; i < 2_000_000; i++ {
-		if err := box.Step(); err != nil {
-			t.Fatal(err)
-		}
+	wallBefore := readRTOS(t, box)
+	waitsAtTheWall, err := box.TaskWaits()
+	if err != nil {
+		t.Fatal(err)
 	}
+	wallLink := csiTraffic(t, box, transmitter, csiWindow)
 	wall := readRTOS(t, box)
 	t.Logf("RTOS at the wall: TCD_Execute_Task=[0x801072B0]=%08X ready=[0x801072D8]=%08X",
 		wall.exec, wall.ready)
 	t.Logf("the box retired %d instructions while unresponsive, so it is running rather than halted",
-		box.Machine.Retired-retiredBefore)
+		csiWindow)
+
+	// THE LINK THE HANDSET ARRIVES ON. The card is the clock master on this wire and the model
+	// follows the firmware: a queued byte is presented only once the guest has written one back,
+	// because that is how the guest shifts its own frame out. So if the guest ever stops writing
+	// to the data register while something is queued, the link goes silent in BOTH directions --
+	// no key byte, and no idle byte either, because a waiting queue takes priority over idle. That
+	// is a stall this port could cause rather than a firmware defect, so it is measured before
+	// anything upstream is blamed.
+	t.Logf("hardware while idle and working: %s", idleLink)
+	t.Logf("hardware at the wall:            %s", wallLink)
+
+	// WHICH TASKS STILL RUN. Status is a state and a state can be one a task passes through every
+	// few thousand instructions; the run count says whether it is passing through at all. A task
+	// frozen in status 5 and a task cycling through status 5 look identical in one sample and
+	// nothing alike in two.
+	t.Logf("tasks scheduled over %d instructions AT THE WALL: %v", csiWindow,
+		scheduled(wallBefore, wall))
+	if wallLink.queued > 0 && wallLink.writes == 0 {
+		t.Logf("THE LINK IS STALLED, AND IT IS THIS PORT'S WIRE: %d bytes are queued for the guest "+
+			"and the guest wrote to the data register %d times in %d instructions. The model only "+
+			"clocks a queued byte out when the guest writes one in, so neither side moves again.",
+			wallLink.queued, wallLink.writes, csiWindow)
+	}
 
 	// THE COMPARISON IS THE FINDING. An idle box has every task blocked too, so the reading that
 	// matters is whether any task is waiting on something DIFFERENT from what it waited on while
@@ -333,6 +383,43 @@ func reportTheWedge(t *testing.T, box *board.Runtime, baseline rtosState, screen
 		t.Logf("    %-6q %d", kind, byType[kind])
 	}
 
+	// WHAT THE STATUS NUMBERS MEAN, TAKEN OFF THIS BOX RATHER THAN OUT OF A HEADER. The record
+	// established one value -- 7 is an event wait -- and printed the rest raw for want of
+	// evidence. The evidence is right here: every suspended task is queued on an object whose TYPE
+	// is read from the guest, so if every status-4 task is on a QUEU and every status-6 task on a
+	// SEMA, the numbers name themselves. A status with more than one type against it is NOT
+	// established, and the line says so rather than picking the commonest.
+	byStatus := map[uint8]map[string]int{}
+	for _, w := range waitsAtTheWall {
+		if byStatus[w.Task.Status] == nil {
+			byStatus[w.Task.Status] = map[string]int{}
+		}
+		if len(w.On) == 0 {
+			byStatus[w.Task.Status]["(nothing names it)"]++
+		}
+		for _, s := range w.On {
+			byStatus[w.Task.Status][s.Object.Type]++
+		}
+	}
+	statuses := make([]int, 0, len(byStatus))
+	for status := range byStatus {
+		statuses = append(statuses, int(status))
+	}
+	sort.Ints(statuses)
+	for _, status := range statuses {
+		kinds := byStatus[uint8(status)] // #nosec G115 -- the keys came from a uint8
+		parts := make([]string, 0, len(kinds))
+		for kind, n := range kinds {
+			parts = append(parts, fmt.Sprintf("%s x%d", kind, n))
+		}
+		sort.Strings(parts)
+		verdict := ""
+		if len(parts) == 1 {
+			verdict = "  <- one type only, so the number names itself"
+		}
+		t.Logf("    status %d: %v%s", status, parts, verdict)
+	}
+
 	names := make([]string, 0, len(wall.on))
 	for name := range wall.on {
 		names = append(names, name)
@@ -346,4 +433,79 @@ func reportTheWedge(t *testing.T, box *board.Runtime, baseline rtosState, screen
 		"responding to input, so this is NOT a menu gate -- gort-slq. The highlight stopped after "+
 		"%d moves, and at a different entry on another run, which fits an unresponsive box rather "+
 		"than a disabled entry.", screen, moves)
+}
+
+// csiWindow is how long to watch the link for. It is the same budget on both sides of the
+// comparison, because a count taken over two different windows is not a comparison.
+const csiWindow = 2_000_000
+
+// csiLink is what the hardware did over one window: the front-panel serial link the handset
+// arrives on, the interrupt controller and timer that drive the guest's clock, and how many times
+// the CPU actually entered its exception vector.
+//
+// THE EXCEPTION COUNT IS THE ONE THAT MATTERS and it is why this is not just a link counter. A
+// task that stops being scheduled has stopped being woken, and on this box waking is an interrupt.
+// Counting entries at 0x80000180 says whether interrupts are still arriving at all, which
+// separates "the guest stopped handling them" from "they stopped coming".
+type csiLink struct {
+	reads, writes, dataIn int
+	queued                int
+	irq, timer            int
+	exceptions            int
+}
+
+func (l csiLink) String() string {
+	return fmt.Sprintf("%d reads, %d writes (%d to the data register), %d queued; "+
+		"%d interrupt-controller and %d timer accesses; %d exception entries",
+		l.reads, l.writes, l.dataIn, l.queued, l.irq, l.timer, l.exceptions)
+}
+
+// csiTraffic runs the box for one window and counts what crosses the CSI's registers.
+//
+// A COUNT OF ZERO HERE IS A READING, NOT A BROKEN INSTRUMENT, so it says what it examined: if the
+// observer saw no bus access at all then the hook is not installed and the zero is the harness.
+func csiTraffic(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex, window int) csiLink {
+	t.Helper()
+	var link csiLink
+	var anyAccess int
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		// THE EXCEPTION VECTOR IS COUNTED AS A FETCH, not by sampling the PC between steps. The
+		// PC-sampling version read zero on a box that was plainly taking interrupts, because the
+		// vector is entered and left inside one step and is never the PC a caller sees.
+		if a.Fetch && a.Virtual != 0x80000180 {
+			return
+		}
+		anyAccess++
+		switch {
+		case a.Virtual == 0x80000180:
+			link.exceptions++
+		case a.Virtual&^uint32(csi.Size-1) == csi.Base:
+			if a.Write {
+				link.writes++
+				if a.Virtual&0xff == 0x10 {
+					link.dataIn++
+				}
+				return
+			}
+			link.reads++
+		case a.Virtual&^uint32(irq.Size-1) == irq.Base:
+			link.irq++
+		case a.Virtual >= hwtimer.Base && a.Virtual < hwtimer.Base+hwtimer.Size:
+			link.timer++
+		}
+	}}
+	for i := 0; i < window; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if anyAccess == 0 {
+		t.Fatal("harness: the observer saw no bus access at all over the window, so its zero for " +
+			"the link is the instrument rather than the link")
+	}
+	link.queued = box.CSI.Pending()
+	return link
 }

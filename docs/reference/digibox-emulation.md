@@ -6616,16 +6616,45 @@ outside the range is discarded -- which is the whole of the earlier "nothing rea
 explained, and the letter dispatch confirmed from the data structure rather than from an
 instruction count.
 
-#### The TV GUIDE menu will not move past entry 6
+#### THE BOX WEDGES AFTER A FEW MENU PRESSES -- every task blocked
 
-*Found while trying to OPEN A-Z LISTINGS, and it is why the screen half of this is still unanswered.*
+*~~The TV GUIDE menu will not move past entry 6.~~ **WITHDRAWN the same day it was written.** That
+reading was wrong, and the thing underneath it is worse and more useful.*
 
 The TV GUIDE tab lists ten entries -- ALL CHANNELS, ENTERTAINMENT, MOVIES, SPORTS,
 NEWS & DOCUMENTARIES, KIDS, MUSIC & RADIO, SPECIALIST, **A-Z LISTINGS**, PERSONAL PLANNER. The
-highlight moves down to entry 6 and stops: **forty DOWN presses moved it five times and then nothing
-at all**, with the screen hash identical across the last thirty-five. That is not the swallow
-behaviour -- thirty-five consecutive presses do not all get absorbed -- it is the menu refusing to
-go further.
+highlight moves a few entries down and then stops, and the first reading of that was "the menu
+refuses entries 7..10". **It is not a menu refusal at all.** Two things broke it:
+
+- **UP stops working too**, and so does `box office`, which leaves the menu entirely. Nothing moves
+  the screen.
+- **The stop point VARIES** -- five moves on one run, three on the next. A disabled entry 7 does not
+  move.
+
+**The RTOS says what it actually is.** At the wall, `[0x801072B0]` -- Nucleus's `TCD_Execute_Task`,
+which this file calls the single cheapest health check on the whole system -- reads **zero**, and so
+does `[0x801072D8]`. Every task is blocked and the guest is in the idle loop at `0x800D35DC`. It is
+not halted: it retired two million further instructions while unresponsive. **It is WEDGED.**
+
+The task census at the wall:
+
+    TASK0      status=7  runs=1883    EVENT WAIT
+    TASK1      status=7  runs=75      EVENT WAIT
+    SMNTask    status=7  runs=10430   EVENT WAIT
+    SMHKTask   status=5  runs=5
+    SMTTask    status=5  runs=2189
+    EVTTask    status=5  runs=49124
+    FETask     status=6  runs=11978
+    SCTask     status=6  runs=1
+
+Only status 7 is established by this file as an event wait; 5 and 6 are printed as raw numbers
+rather than named, because naming them would put a guess where a reader would take a reading.
+
+**This supersedes the menu explanation and probably others.** It is `gort-slq` -- recorded as "a key
+press is intermittently absorbed" -- and that description understates it: the box does not drop a
+press, it stops running anything. Any measurement taken after several menu presses is suspect until
+this is understood, and "the screen would not open" is now a symptom to check against this rather
+than a finding about the screen.
 
 So entries 7..10 are unreachable, A-Z LISTINGS among them, and the screen cannot be opened to see
 whether it draws what was linked. The same shape as the ALL CHANNELS grid: the screen exists, the

@@ -6768,10 +6768,28 @@ first attribution here did exactly that: both halves read most of the block and 
 it, so a task that only ever receives still reads as "writing". Splitting by which half of the
 driver the program counter is in is what separated them.
 
-**WHAT IS STILL OPEN is why the pipe fills.** Twenty four-byte messages fit in it, and while the
-handset works it sits empty -- so something changes the rate rather than the mechanism. The
-measurement that decides it is cheap: if the pipe fills on a box that is never touched at all, the
-keys are incidental and the cause is upstream of them.
+##### AND THE KEYS REALLY ARE THE CAUSE -- an untouched box never fills it
+
+The obvious suspicion was that the handset is a red herring: `EVQP0002` has traffic on an idle box
+too, sixteen sends and fifteen receives in two million instructions, so a queue that cannot keep up
+might drift into the wall on its own and the presses merely be when somebody looked. **It does
+not.** Five hundred million instructions with nothing touched at all:
+
+    EVQP0002: its message count was written 444 times, and the deepest it ever got was
+              1 of 20 messages, with at most 0 tasks suspended
+
+Plenty of traffic, and it is drained as fast as it arrives -- never two messages deep, never anyone
+waiting. **So a key press costs the consumer something it cannot absorb**, and the question is what
+`SMTTask` has to do per event that a handful of presses turns into twenty outstanding ones. That is
+a much smaller question than the one before it, and it points at the CSI link, which carries the
+handset and the smartcard on the same wire and whose pacing this file already calls ours rather than
+the firmware's.
+
+**THE FIRST VERSION OF THIS MEASUREMENT REPORTED THE OPPOSITE, CONFIDENTLY.** It sampled the pipe
+every two million instructions and found it empty every single time, in five hundred million -- true
+of every sample and false of the box. The depth is a transient, and this file's own retracted HISR
+finding says it in the same words: **polling a transient is not observing an event.** The count is
+now taken from the writes to it, which is every change it ever has.
 
 ##### THE TASK STATUS NUMBERS, MEASURED OFF THIS BOX
 

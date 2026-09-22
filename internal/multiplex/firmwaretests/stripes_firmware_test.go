@@ -1294,3 +1294,164 @@ func storeReaders(t *testing.T, wantBanner bool) map[uint32]int {
 	watching = false
 	return reads
 }
+
+// THE GATE IN THE GRID'S OWN CLOCK LOOKUP.
+//
+// 0x800A1E80 is a short function only the grid runs, and it is a gate with a fill behind it:
+//
+//	800a1e98  lw    v1,0x800a1ed8    -> the global at 0x80105FE4
+//	800a1e9a  lw    v1,0(v1)
+//	800a1e9c  cmpi  v1,32            it must be 32
+//	800a1e9e  btnez 0x800a1eb1       anything else: skip everything, return 0
+//	800a1ea0  lhu   v1,16(s0)        otherwise copy three fields out of 0x80163198
+//	800a1ea4  lhu   v1,18(s0)          into the caller's struct
+//	800a1ea8  lw    v1,40(s0)
+//	800a1eae  sw    v0,12(sp)        and return 1
+//
+// A screen that cannot find out what time it is cannot choose which programmes fall in its window,
+// and "..no listings available" is what that looks like from the sofa. So this reads the global and
+// watches what the function actually answers.
+//
+// **THE VALUE AND THE RETURN ARE MEASURED SEPARATELY ON PURPOSE.** Reading the global alone would
+// only say what it holds at the end; watching the return says what the grid was told each time it
+// asked, and the two disagreeing would itself be the finding.
+//
+// IT ASSERTS ITS OWN SUBJECT: the function must be called while the grid draws, or its silence is
+// the instrument.
+//
+// IT ONLY READS.
+func TestTheGateInTheGridsClockLookup(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+		// 0x800A1F14 is a LEAF function -- an MJD converter. It reads a 16-bit MJD from a1,
+		// subtracts 40587 (the MJD of the Unix epoch) and scales it. The grid runs it six times
+		// while reading the listings store, so these are the days it is looking at.
+		//
+		// **A BACKWARD SCAN FOR A PROLOGUE FOUND THE WRONG FUNCTION FOR IT.** Between 0x800A1ED4
+		// and 0x800A1F12 sits a literal pool, and pool words disassemble as plausible
+		// instructions, so the nearest preceding `addiu sp,-N` belonged to a function two
+		// boundaries earlier -- which was duly probed and never called at all. A leaf has no
+		// prologue to find.
+		mjdOf = 0x800A1F14
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+
+	calls := 0
+	days := map[uint32]int{}
+	watching := false
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !watching || !a.Fetch {
+			return
+		}
+		if a.Virtual&^1 != mjdOf {
+			return
+		}
+		calls++
+		// a1 points at the two bytes of the MJD being converted.
+		at := box.Machine.Core.State().GPR[5] & 0x1fffffff
+		if at+2 <= box.RAM.Size() {
+			hi := box.RAM.Read(at, bus.Byte)
+			lo := box.RAM.Read(at+1, bus.Byte)
+			days[hi<<8|lo]++
+		}
+	}}
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		if raw == keySelect {
+			calls, watching, days = 0, true, map[uint32]int{}
+		}
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.StepWithHooks(hooks); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+
+	openAllChannelsUnpinned(t, press, ".artifacts/clock-gate.png")
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	watching = false
+	if err := dumpScreen(t, box, "clock-gate.png"); err != nil {
+		t.Fatal(err)
+	}
+	if calls == 0 {
+		t.Fatalf("harness: %08X was never called while the grid drew, so its silence says nothing",
+			uint32(mjdOf))
+	}
+	ours := uint32(multiplex.MJDOf(day)) // #nosec G115 -- a date
+	t.Logf("the grid converted an MJD %d times; we transmit MJD %d", calls, ours)
+	keys := make([]uint32, 0, len(days))
+	for d := range days {
+		keys = append(keys, d)
+	}
+	sort.Slice(keys, func(a, b int) bool { return days[keys[a]] > days[keys[b]] })
+	matched := 0
+	for _, d := range keys {
+		note := "   <- NOT the day we transmit"
+		if d == ours {
+			note = "   <- OUR DAY"
+			matched += days[d]
+		}
+		t.Logf("    MJD %d, %d times%s", d, days[d], note)
+	}
+	if matched == 0 {
+		t.Logf("VERDICT: the grid never once looked at the day we transmit. Every programme we send "+
+			"is filed under MJD %d and the grid is asking about something else, which is a row of "+
+			"\"no listings available\" for every channel.", ours)
+		return
+	}
+	t.Logf("VERDICT: %d of %d conversions are for the day we transmit, so the grid IS looking at "+
+		"our day and the empty rows are not a date mismatch.", matched, calls)
+}

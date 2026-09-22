@@ -8776,3 +8776,39 @@ arguments come out as unresolved `unaff_` registers and the key halfwords read a
 register Ghidra could not attribute. The shape — a keyed tree walk — is legible and the field
 offsets are not yet trustworthy. Finding the function's true entry and seeding THAT is the next
 step, not reading further into this output.
+
+### A backward scan for a prologue is defeated by a literal pool
+
+Finding the real entry of a function from an address inside it is worth automating — Ghidra reports
+"no function here" for a MIPS16 address its flow never reached, and the fix is to seed the entry.
+Scanning backwards for the nearest `addiu sp,-N` finds it, and for five of the six addresses in the
+banner's store-reading set it did:
+
+    800A8690, 800A868C, 800A8688  ->  800A852C   (sp,-56)
+    800A84C8, 800A8492            ->  800A8430   (sp,-40)
+    800A8A8E                      ->  800A8A32   (sp,-40)
+    800A900E, 800A9144            ->  800A8FEC   (sp,-56)
+    800AC2B4                      ->  800AC28C   (sp,-8)
+
+**It is wrong whenever a literal pool sits between.** Pool words disassemble as plausible
+instructions, so the scan walks straight through them and returns a prologue from a function two
+boundaries earlier. `0x800A1F14` was resolved that way to `0x800A1E80`, which was duly probed and
+**never called at all** — the instrument's own subject assertion caught it, but only after a run.
+
+`0x800A1F14` is a LEAF: no prologue to find, and none needed. It is an MJD converter — it reads two
+bytes as a Modified Julian Date, subtracts 40587 (the MJD of the Unix epoch) and scales the result.
+
+> A backward prologue scan is a hint, not an answer. Confirm the function is entered before
+> building on it.
+
+### The grid is looking at the right day
+
+The grid runs that converter six times while reading the listings store, and the days are worth
+recording because they close another explanation:
+
+    MJD 51171, 3 times   <- the day this fixture transmits
+    MJD 51265, 3 times
+
+So **the empty rows are not a date mismatch**: the grid is asking about our day, three times, and
+still shows nothing. The second day is ninety-four later and is not yet explained; it is recorded
+rather than reasoned about.

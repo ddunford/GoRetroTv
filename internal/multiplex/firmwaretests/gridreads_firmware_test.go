@@ -105,6 +105,11 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 	}
 	flashReads := map[uint32]int{} // 4 KB page in the o-code region -> reads
 	namedReads := map[uint32]int{} // one of the four, read as data
+	// WHAT IS IN THE TABLES IT DOES WALK. Knowing a page is table-shaped says where to look;
+	// the address it read and the value it got back is the looking. Recorded per address so the
+	// structure shows itself -- a stride, a run of pointers, a block of text -- rather than being
+	// guessed at from a count.
+	walked := map[uint32]uint32{}
 	watching := false
 	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
 		if !watching || a.Fetch || a.Write {
@@ -120,6 +125,12 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 		}
 		page := (a.Virtual & 0x1fffffff) >> 12
 		pages[page]++
+		// The page number is the PHYSICAL address shifted, so the KSEG0 nibble is already gone --
+		// 0x8045D000 is page 0x0045D and not 0x8045D. Writing it the other way recorded nothing at
+		// all, and the check below is what said so rather than a silent empty table.
+		if page == 0x0045D || page == 0x00494 {
+			walked[a.Virtual&0x1fffffff] = a.Value
+		}
 		if spread[page] == nil {
 			spread[page] = map[uint32]bool{}
 		}
@@ -195,6 +206,9 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 		for k := range spread {
 			delete(spread, k)
 		}
+		for k := range walked {
+			delete(walked, k)
+		}
 		for k := range flashReads {
 			delete(flashReads, k)
 		}
@@ -242,6 +256,7 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 	}
 
 	reportGridPages(t, pages, spread, lo, hi)
+	reportWalkedTables(t, walked)
 
 	total := 0
 	for _, n := range flashReads {
@@ -320,5 +335,99 @@ func reportGridPages(t *testing.T, pages map[uint32]int, spread map[uint32]map[u
 	}
 	if n := pages[lo>>12]; n == 0 {
 		t.Logf("    the line-up's page (%08X) is NOT among them at all", 0x80000000|((lo>>12)<<12))
+	}
+}
+
+// reportWalkedTables prints what the grid actually found in the two table-shaped pages it walks.
+//
+// Addresses in order with the value read at each, because a structure announces itself that way and
+// not in a total: a fixed stride between non-zero entries is an array, a run of 0x8______ words is a
+// pointer table, printable bytes are text, and a page of zeros is a list that was never filled --
+// which is the single most likely shape for a screen that draws no rows.
+func reportWalkedTables(t *testing.T, walked map[uint32]uint32) {
+	t.Helper()
+	if len(walked) == 0 {
+		t.Fatal("harness: neither table-shaped page was recorded, so the filter above no longer " +
+			"matches the pages the histogram named and this says nothing")
+	}
+	addrs := make([]uint32, 0, len(walked))
+	for a := range walked {
+		addrs = append(addrs, a)
+	}
+	sort.Slice(addrs, func(i, j int) bool { return addrs[i] < addrs[j] })
+	var zero, pointers, printable int
+	for _, a := range addrs {
+		v := walked[a]
+		switch {
+		case v == 0:
+			zero++
+		case v>>28 == 8:
+			pointers++
+		}
+		if b := v >> 24; b >= 0x20 && b < 0x7f {
+			printable++
+		}
+	}
+	t.Logf("the two walked tables: %d distinct addresses read -- %d returned zero, %d returned a "+
+		"guest pointer, %d had a printable top byte", len(addrs), zero, pointers, printable)
+	// THE 0x8045D TABLE IS AN ARRAY AND ITS RUNS ARE THE FINDING. Ascending 16-bit values at a
+	// fixed stride is an index; where the values step by one they are a contiguous block, and where
+	// they jump the block ended. The LENGTH of each block is what can be compared against something
+	// we know -- six services, sixty-seven programmes -- and a length is a reading in a way that
+	// "the table looks like an index" is not.
+	var idx []uint32
+	for _, a := range addrs {
+		if a>>12 == 0x0045D && (a&7) == 2 {
+			idx = append(idx, a)
+		}
+	}
+	if len(idx) > 1 {
+		type run struct{ first, last, n uint32 }
+		var runs []run
+		cur := run{first: walked[idx[0]], last: walked[idx[0]], n: 1}
+		for _, a := range idx[1:] {
+			v := walked[a]
+			if v == cur.last+1 {
+				cur.last, cur.n = v, cur.n+1
+				continue
+			}
+			runs = append(runs, cur)
+			cur = run{first: v, last: v, n: 1}
+		}
+		runs = append(runs, cur)
+		t.Logf("the 8045D table: %d entries at an 8-byte stride, in %d ascending runs", len(idx), len(runs))
+		for i, r := range runs {
+			if i >= 10 {
+				t.Logf("        ... and %d more runs", len(runs)-i)
+				break
+			}
+			t.Logf("        %5d entries, ids %04X..%04X", r.n, r.first, r.last)
+		}
+	}
+
+	// A sample from EACH page rather than the first forty-eight of the pair, because the two are
+	// different structures and the first one alone would hide the second entirely.
+	for _, page := range []uint32{0x0045D, 0x00494} {
+		var in []uint32
+		for _, a := range addrs {
+			if a>>12 == page {
+				in = append(in, a)
+			}
+		}
+		if len(in) == 0 {
+			t.Logf("    page %08X: not read at all", 0x80000000|(page<<12))
+			continue
+		}
+		t.Logf("    page %08X: %d distinct addresses, first and last twelve:",
+			0x80000000|(page<<12), len(in))
+		for i, a := range in {
+			if i >= 12 && i < len(in)-12 {
+				continue
+			}
+			if i == len(in)-12 && len(in) > 24 {
+				t.Logf("        ...")
+			}
+			t.Logf("        %08X = %08X", 0x80000000|a, walked[a])
+		}
 	}
 }

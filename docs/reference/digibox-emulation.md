@@ -6426,6 +6426,51 @@ are indistinguishable in a read count and want opposite follow-ups:
 lives. That is the replacement for TASK-7.1's starting point, arrived at by measurement rather than
 inherited.
 
+#### ASK THE BOX WHAT IT WANTS -- and for this screen the answer is "nothing new"
+
+*The read watch had gone as far as it can, and the reason is worth keeping: **an empty list
+generates no reads at all**, so watching reads cannot find one. The absence of a channel list looks
+exactly like a channel list kept somewhere else. The two tables the grid does walk are not it --
+`0x8045D000` is a fixed 512-entry index filling a whole page at an 8-byte stride, and `0x80494000`
+holds `0x2D0` and `0x240` beside each other, which is 720x576, so it is the widget context.*
+
+So the question was put to the hardware instead. **This box says out loud what it wants**: the demux
+has sixteen match units and the guest programs them for the tables it is filtering for. All sixteen
+are dumped unconditionally, because the record's own rule is that "the box is not asking for it" is
+a symptom with four known causes and three of them were instruments that looked at some of the
+units rather than all of them. The armed state is taken before the grid is opened and again after,
+because what the box asks for while merely acquiring is not the question.
+
+**Opening the grid changes NOTHING -- the same twenty-five filters before and after.** So the empty
+grid is not a screen waiting on an input the transmitter is failing to send. It never asks for one.
+Whatever it needs, it expects to have already.
+
+#### WHAT THE BOX IS ASKING FOR, AND WHAT ANSWERS IT
+
+    PID 0010  armed, NEVER FED          PID 0011  armed and fed -- NIT, SDT and BAT
+    PID 0034  armed, NEVER FED          PID 0014  armed and fed -- TDT and TOT
+    PID 0052  armed, NEVER FED          PID 0033  armed and fed -- titles for MJD 51171
+
+    unit  1  table 40/FE  ext 0020      the NIT, actual and other
+    unit  2  table 42/FB  ext 0020      the SDT
+    unit  3  table 4A/FF  ext 1000      the BAT, bouquet 0x1000
+    unit  5  table 73/FF                the TOT
+    unit  7  table A3/FF  ...C7 E3      the day's titles, block 3
+    unit 10  table C1/FF  01/FE         the A-Z listings index
+
+**Three PIDs are armed and nothing has ever answered them**, and that list is the honest form of
+"emulate the whole satellite signal": not inventing tables and hoping one sticks, but filling the
+filters the box has ALREADY PROGRAMMED. `0x0010` is the standard DVB PID for the NIT and this
+transmitter sends its NIT on `0x11`; `0x0034` is `0x30 | 4`, the NEXT day's titles, which is the
+open issue about a broadcast that carries only today; `0x0052` is the one the record has carried for
+a while.
+
+**And the list is a boundary as much as an opportunity.** A section on a PID with no armed filter is
+dropped by the hardware before any code sees it, so transmitting beyond these PIDs cannot reach
+anything at all. That is the measured answer to "should we just broadcast everything": there is
+nowhere for most of it to go, and for the grid specifically the box has been asked directly and
+wants nothing more.
+
 **What is NOT established**, and is the open question: where the grid gets its channel list, and why
 it is empty. The count is not the gate -- the oracle's grid knew twelve channels and drew none
 either, so a list of the right length would not have helped.

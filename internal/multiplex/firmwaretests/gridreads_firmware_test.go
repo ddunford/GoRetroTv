@@ -287,6 +287,23 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 	}
 
 	reportGridPages(t, pages, spread, lo, hi)
+
+	// THE BANNER'S CHANNEL STRUCTURES, ASKED OF THE GRID DIRECTLY. The working now-and-next screen
+	// resolves a channel by walking structures at 0x80493B2C..0x80494D6C -- the first word it reads
+	// there is 0x191, which is Sky Sports 1's listings id -- and the grid handles no channel
+	// identifier at all. These two pages are therefore the exact place to ask whether the grid ever
+	// reaches the same data.
+	for _, page := range []uint32{0x00493, 0x00494} {
+		n, distinct := pages[page], len(spread[page])
+		if n == 0 {
+			t.Logf("THE GRID NEVER READS %08X AT ALL -- and the banner resolves our channels from "+
+				"there. That is the difference between the screen that works and the one that does "+
+				"not, stated as an address.", 0x80000000|(page<<12))
+			continue
+		}
+		t.Logf("the grid reads %08X %d times over %d distinct addresses",
+			0x80000000|(page<<12), n, distinct)
+	}
 	reportWalkedTables(t, walked)
 
 	total := 0

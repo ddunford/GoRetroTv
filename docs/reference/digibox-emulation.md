@@ -6540,6 +6540,32 @@ addresses, executing here, doing the thing the grid does not.
 *And `0x80069AF4` and `0x80068D60` appear in BOTH lists, so some of the path is shared -- which is
 what makes the divergence worth following rather than two unrelated screens.*
 
+##### AND THE DIFFERENCE IS ONE PAGE
+
+`0x8006A538` disassembles to `lw a0,0(v0)` inside a bounds-checked walk -- `s0` holds a base and a
+length, the cursor steps four bytes -- so it traverses an ARRAY, and the addresses it reads are that
+array's. Capturing them while the banner draws:
+
+    8006A538  12 addresses, 80493B2C..80494CCC    80493B2C = 00000191
+    8006A96A  31 addresses, 80493B30..80494D6C    80493B30 = 00000191
+    8006B35E  64 addresses, 80494B38..80494DCC
+
+`0x191` is **401**, Sky Sports 1's listings id, read out of `0x80493B2C`. So the box's channel
+structures run from page `0x80493` into `0x80494`, and the banner walks them.
+
+**The grid reads `0x80494` 18,767 times over 374 distinct addresses. It NEVER READS `0x80493` AT
+ALL.**
+
+That is the difference between the screen that works and the screen that does not, stated as an
+address rather than as a theory: both walk the upper page, and only one reaches the page where the
+channel identifiers actually are. Whatever gives the grid its cursor stops one page short of the
+data the banner starts from.
+
+**What this does NOT say** is why -- whether the grid is handed an empty list, a wrong base, or a
+length of zero. But it is the first thing in this investigation that distinguishes the two screens
+by something other than their outcome, and `0x8006A538`'s base-and-length pair at `s0` is where to
+look for it.
+
 #### THE BOX DOES NOT WANT A PAT -- and PID 0 being armed does not mean it does
 
 *2026-09-22. The transport-stream plan began "send a PAT on PID 0x0000, because the box arms it and

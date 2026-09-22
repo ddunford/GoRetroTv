@@ -66,6 +66,16 @@ func TestWhetherTheNowAndNextBannerReadsTheLineUp(t *testing.T) {
 	var anyRead int
 	inArray := map[uint32]int{}
 	valueHits := map[string]int{}
+	// WHERE THE RESOLUTION READS FROM, not just what it reads. 0x8006A538 disassembles to
+	// `lw a0,0(v0)` inside a bounds-checked walk -- s0 holds a base and a length, the cursor steps
+	// four bytes at a time -- so it is traversing an ARRAY, and the address it reads is that
+	// array's. A value says our channel was handled; the address says what is holding it, which is
+	// the thing the grid never reaches.
+	resolvers := map[uint32]bool{
+		0x8006A538: true, 0x8006A55E: true, 0x8006A96A: true,
+		0x8006B35E: true, 0x8006B37C: true, 0x8009192C: true,
+	}
+	readFrom := map[uint32]map[uint32]uint32{} // PC -> address -> last value
 	watching := false
 	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
 		if !watching || a.Fetch || a.Write {
@@ -78,6 +88,14 @@ func TestWhetherTheNowAndNextBannerReadsTheLineUp(t *testing.T) {
 		}
 		if what, mine := ours[a.Value]; mine {
 			valueHits[hexPC(pc)+" "+what]++
+		}
+		if resolvers[pc] {
+			if readFrom[pc] == nil {
+				readFrom[pc] = map[uint32]uint32{}
+			}
+			if len(readFrom[pc]) < 64 {
+				readFrom[pc][a.Virtual] = a.Value
+			}
 		}
 	}}
 
@@ -147,6 +165,8 @@ func TestWhetherTheNowAndNextBannerReadsTheLineUp(t *testing.T) {
 			"grid wants is somewhere neither screen has led us to.", anyRead)
 	}
 
+	reportResolvers(t, readFrom)
+
 	if len(valueHits) == 0 {
 		t.Log("and not one read returned a distinctive channel number or listings id of ours, on a " +
 			"screen that is displaying one of our programmes -- so the identifiers are resolved " +
@@ -164,5 +184,44 @@ func TestWhetherTheNowAndNextBannerReadsTheLineUp(t *testing.T) {
 			break
 		}
 		t.Logf("    %-52s %d", k, valueHits[k])
+	}
+}
+
+// reportResolvers says which addresses the channel-resolution instructions read from.
+//
+// A CONTIGUOUS RUN AT A FIXED STRIDE IS AN ARRAY, and its base is the answer this task wants: the
+// grid reaches no channel identifier at all, so whatever these instructions traverse is the
+// structure it never gets to.
+func reportResolvers(t *testing.T, readFrom map[uint32]map[uint32]uint32) {
+	t.Helper()
+	if len(readFrom) == 0 {
+		t.Log("none of the named resolution addresses read anything during this draw, so either " +
+			"they are not on the path this time or the PCs have moved -- not a finding either way")
+		return
+	}
+	pcs := make([]uint32, 0, len(readFrom))
+	for pc := range readFrom {
+		pcs = append(pcs, pc)
+	}
+	sort.Slice(pcs, func(a, b int) bool { return pcs[a] < pcs[b] })
+	for _, pc := range pcs {
+		addrs := make([]uint32, 0, len(readFrom[pc]))
+		for at := range readFrom[pc] {
+			addrs = append(addrs, at)
+		}
+		sort.Slice(addrs, func(a, b int) bool { return addrs[a] < addrs[b] })
+		stride := uint32(0)
+		if len(addrs) > 1 {
+			stride = addrs[1] - addrs[0]
+		}
+		t.Logf("    %08X read %d addresses, %08X..%08X, first stride %d",
+			pc, len(addrs), addrs[0], addrs[len(addrs)-1], stride)
+		for i, at := range addrs {
+			if i >= 6 {
+				t.Logf("        ... and %d more", len(addrs)-i)
+				break
+			}
+			t.Logf("        %08X = %08X", at, readFrom[pc][at])
+		}
 	}
 }

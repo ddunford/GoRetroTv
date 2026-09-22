@@ -310,10 +310,37 @@ func (m *Multiplex) transport(sub Subscription, listings *Listings) broadcast.Tr
 			Listings:  service.ListingsID,
 			Extra:     service.ListingsID,
 			Channel:   service.Channel,
-			Flags:     service.Flags,
+			Flags:     lineupFlags(service.Flags),
 		})
 	}
 	return transport
+}
+
+// inTheGuide is the line-up flag combination the TV GUIDE's list screens require, measured rather
+// than chosen.
+//
+// The guest unpacks the 0xB1 entry's four flag bits into a word the ALL CHANNELS enumeration masks
+// with 0x10 before it will report a channel, and that word is the nibble encoded as four two-bit
+// fields -- 01 where a bit is set, 10 where it is clear, so an all-clear channel reads 0xAA and can
+// never satisfy the mask. Bit 2 alone sets the field the mask looks at and is NOT enough: swept
+// past the settle, 0x04, 0x05, 0x0C and 0x0D all leave the grid empty, while 0x06, 0x07, 0x0E and
+// 0x0F draw it. **0x06 is the minimal set that works** -- adding bit 0 or bit 3 changes nothing,
+// and adding both (0x0F) puts a stray block over the header.
+//
+// What the two bits MEAN individually is not established, so this is the smallest combination
+// measured to work rather than a claim about their names.
+const inTheGuide = 0x06
+
+// lineupFlags defaults a channel with no flags of its own to the guide-visible set.
+//
+// Zero is a real value on the wire, so a schedule CAN ask for it -- but a channel nobody can see in
+// the guide is not what any schedule in this project means by listing a channel, and every one of
+// them predates the field existing. A schedule that wants something else says so and is obeyed.
+func lineupFlags(declared byte) byte {
+	if declared == 0 {
+		return inTheGuide
+	}
+	return declared
 }
 
 // titleWave answers every listings filter the box has programmed, and only

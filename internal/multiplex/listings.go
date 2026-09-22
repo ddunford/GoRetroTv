@@ -50,11 +50,11 @@ type ListedService struct {
 	// title section reaches the right row of the guide.
 	ListingsID uint16 `json:"listingsId"`
 	// Flags is the four-bit field the line-up entry carries in the low nibble
-	// at +7..8, which the guest unpacks into four separate bytes of the record
-	// it builds (record[13..16]). Its meaning is not established, so this
-	// carries the bits and names none of them; a field the box splits four ways
-	// is one it distinguishes between, and every feed this project has sent so
-	// far left all four clear.
+	// at +7..8. The guest unpacks it into a word the TV GUIDE's list screens
+	// mask before they will show a channel at all, so a channel with no flags
+	// is a channel the guide will not draw. Left unset it defaults to the
+	// measured guide-visible combination; set it to say otherwise. What the
+	// individual bits mean is not established and is not guessed at.
 	Flags byte `json:"flags,omitempty"`
 	// Programmes are the day's events, in any order; they are sorted on load.
 	Programmes []ListedProgramme `json:"programmes"`

@@ -1,6 +1,7 @@
 package firmwaretests_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 	"time"
@@ -211,6 +212,17 @@ func TestWhatTheStringPainterIsHandedForAStripedRow(t *testing.T) {
 //
 // IT ONLY READS.
 func TestWhetherTheStripedRowsFinishIfGivenTime(t *testing.T) {
+	// BOTH CANDIDATE VALUES, RE-ASKED PAST THE SETTLE. "Uniform 0x04 leaves the grid empty" was
+	// measured AT a settle, and the settle is now known to lie about this screen, so that result is
+	// withdrawn and the question re-put. 0x04 is the single bit measured to set the field the grid
+	// masks; 0x0F is all four. If 0x04 alone draws the grid, it is the value to transmit, because
+	// setting bits whose meaning is not established is exactly what this project does not do.
+	for _, flags := range []byte{0x05, 0x06, 0x07, 0x0c, 0x0d, 0x0e} {
+		t.Run(fmt.Sprintf("flags_%#02x", flags), func(t *testing.T) { stripesWithFlags(t, flags) })
+	}
+}
+
+func stripesWithFlags(t *testing.T, flagged byte) {
 	guide := demoGuide(t)
 	dict := demoDictionary(t)
 	box := restoredBox(t)
@@ -219,7 +231,6 @@ func TestWhetherTheStripedRowsFinishIfGivenTime(t *testing.T) {
 		transportAt = 0x802B2A54
 		stateOff    = 12
 		readyFrom   = 6
-		flagged     = 0x0f
 	)
 	listings := guide.On(day)
 	for i := range listings.Services {
@@ -275,8 +286,9 @@ func TestWhetherTheStripedRowsFinishIfGivenTime(t *testing.T) {
 		return drew
 	}
 
-	settled := openAllChannelsUnpinned(t, press, ".artifacts/stripes-at-settle.png")
-	if err := dumpScreen(t, box, "stripes-at-settle.png"); err != nil {
+	artefact := fmt.Sprintf("grid-settled-%02x.png", flagged)
+	settled := openAllChannelsUnpinned(t, press, ".artifacts/"+artefact)
+	if err := dumpScreen(t, box, artefact); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("at the settle the grid was %08X", settled)
@@ -298,9 +310,11 @@ func TestWhetherTheStripedRowsFinishIfGivenTime(t *testing.T) {
 			last, changes = now, changes+1
 		}
 	}
-	if err := dumpScreen(t, box, "stripes-after-waiting.png"); err != nil {
+	final := fmt.Sprintf("grid-final-%02x.png", flagged)
+	if err := dumpScreen(t, box, final); err != nil {
 		t.Fatal(err)
 	}
+	t.Logf("*** flags %#02x: the grid finished on %08X -- artefact %s ***", flagged, last, final)
 	if changes == 0 {
 		t.Logf("VERDICT: the screen did not change once in fifty million further instructions, so "+
 			"%08X is genuinely settled and the stripes -- if they are there -- are what the box "+
@@ -312,4 +326,109 @@ func TestWhetherTheStripedRowsFinishIfGivenTime(t *testing.T) {
 		"%08X. The settle was wrong and every artefact taken at one may have caught a row in the "+
 		"middle of painting. Read .artifacts/stripes-after-waiting.png against "+
 		".artifacts/stripes-at-settle.png.", changes, last)
+}
+
+// THE ALL CHANNELS GRID DRAWS ITS CHANNELS. This is the acceptance test for the screen.
+//
+// It sets NOTHING on the schedule: the flags come from the transmitter's own default, so this
+// exercises the path the demo runs rather than a value a test poked in. Two changes make it pass,
+// both in the signal -- a private_data_specifier per service in the SDT, and the guide-visible
+// line-up flags -- and either one missing puts the grid back to its empty screen.
+//
+// **IT WAITS FOR THE SCREEN TO FINISH, WHICH THE SETTLE DOES NOT.** Every measurement of this
+// screen in this project's history was taken at a settle -- four identical frames, 65,536
+// instructions apart -- and the rows paint in bursts that hold still across four samples and finish
+// afterwards. That is why the grid "drew no rows" for so long, and why a half-painted row looked
+// convincingly like a broken glyph path. A settle is a statement about the last quarter of a
+// million instructions; it is not a statement that the screen has finished.
+//
+// IT ASSERTS ITS OWN SUBJECT: the grid must stop being the empty screen, and the artefact is dumped
+// either way, because a hash cannot tell six rows from one and this project has measured the wrong
+// screen five times.
+func TestTheAllChannelsGridDrawsItsChannels(t *testing.T) {
+	guide := demoGuide(t)
+	dict := demoDictionary(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const (
+		transportAt = 0x802B2A54
+		stateOff    = 12
+		readyFrom   = 6
+		emptyGrid   = 0x42DBD889
+	)
+	off := uint32(transportAt) & 0x1fffffff
+	state := func() uint32 { return box.RAM.Read(off+stateOff, bus.Word) }
+
+	want := programmesInTheBlock(t, guide, day)
+	registered := 0
+	if at := runUntil(t, box, transmitter, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	// The grid gates on the transport being ready, and it reaches that about fifty-six million
+	// instructions after the last programme registers.
+	if reached := runUntil(t, box, transmitter, 400_000_000,
+		func(int) bool { return state() >= readyFrom }); reached < 0 {
+		t.Fatalf("harness: the transport never reached state %d; it is still %d", readyFrom, state())
+	}
+
+	press := func(raw uint8, label string, budget int) uint32 {
+		t.Helper()
+		before := screenNow(t, box)
+		if err := box.CSI.Key(raw, 0); err != nil {
+			t.Fatal(err)
+		}
+		stable, last, drew := 0, before, uint32(0)
+		for i := 0; i < budget; i++ {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+			if err := box.Step(); err != nil {
+				t.Fatal(err)
+			}
+			if i%65536 != 0 {
+				continue
+			}
+			now := screenNow(t, box)
+			if now == last && now != before {
+				stable++
+				drew = now
+				if stable >= 4 {
+					break
+				}
+				continue
+			}
+			stable, last = 0, now
+		}
+		t.Logf("%-32s drew %08X", label, drew)
+		return drew
+	}
+
+	settled := openAllChannelsUnpinned(t, press, ".artifacts/all-channels-grid.png")
+	// PAST THE SETTLE. The rows are still arriving when it says the screen has stopped.
+	final := settled
+	for i := 0; i < 50_000_000; i++ {
+		if err := transmitter.Pump(box.Machine.Retired); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+		if i%1_000_000 == 0 {
+			final = screenNow(t, box)
+		}
+	}
+	if err := dumpScreen(t, box, "all-channels-grid.png"); err != nil {
+		t.Fatal(err)
+	}
+	if final == emptyGrid {
+		t.Fatalf("the ALL CHANNELS grid is the EMPTY screen %08X: it settled on %08X and finished "+
+			"on the same empty picture. Read .artifacts/all-channels-grid.png", final, settled)
+	}
+	t.Logf("the grid settled on %08X and FINISHED on %08X, which is not the empty screen. "+
+		"Artefact: .artifacts/all-channels-grid.png", settled, final)
 }

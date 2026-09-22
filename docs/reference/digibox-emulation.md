@@ -8425,3 +8425,48 @@ twelve times and `(1,0xC6)` five, and nothing else.
 > This is the first time the question has a list of names rather than a region of memory. The next
 > step is to decompile those implementations and find which one the grid *should* have called, and
 > what it tests before calling.
+
+### The row callback is named, it runs six times, and it accepts every row
+
+Ghidra's decompilation of the enumeration showed a shape hand-reading MIPS16 had not reached:
+
+    local_44 = (*DAT_800a4c84)(iVar1);                        the transport HEALTH code
+    if ((local_44 == 4) || (local_44 == 2 && ...)) {          THE OUTER GATE
+      if (local_5c < 6 && *(int *)(DAT_800a4c90 + local_5c*0x2c + 0x28) != DAT_800a4c58) {
+        while (param_2 < local_6c && -1 < param_2) {          the row loop
+          if (*(int *)(iVar2 + 0x28) == 1) {
+            iVar3 = (*DAT_800a4c94)(handle, local_30);        the resolver, 0x800ADD08
+            if (iVar3 == 2) { ...bail... }
+            else if (1 < iVar3) {
+              local_60 = (**(code **)(DAT_800a4c90 + local_5c*0x2c + 0x24))(...)  THE ROW CALLBACK
+
+`DAT_800a4c90` holds **`0x80164978`**: six 44-byte descriptors, a mode at `+0x28` and a function
+pointer at `+0x24`. The table is past the end of the loaded application image, so it is built in
+DRAM at boot and can only be read off a running box:
+
+| | mode | callback |
+|---|---|---|
+| `[0]` `80164978` | 1 | `8009FE6D` |
+| **`[1]` `801649A4`** | **1** | **`800CB7B9`** — the grid, selector 1, captured from `t0` |
+| `[2]` `801649D0` | 0 | `800CBB61` |
+| `[3]` `801649FC` | 2 | `800CBB81` |
+| `[4]`, `[5]` | `FFFFFFFF` | null — the "not registered" sentinel the guard rejects |
+
+**And the enumeration does not ignore what that callback answers — it tests it.** `DAT_800a4ca4` is
+`0xFFFFFFFE`, minus two, and a callback that answers −2 is a row the enumeration abandons.
+
+Measured at the RETURN rather than at the call site, because reading a register when control merely
+leaves a range catches calls on the way out and reports a live register as a result — a mistake
+filed and withdrawn earlier the same day:
+
+    the row callback at 800CB7B8 was entered 6 times
+        called from 800A4C04, 6 times
+        answered FFFFFFFF (-1), 6 times
+
+**Six calls, one per channel, and not one answers −2.** So the enumeration accepts every row it is
+offered; `-1` is the value `local_60` is initialised to, and neither of the two tested branches
+fires. The rows are not refused by the loop.
+
+> The row callback IS the thing that should draw a row. It is called once per channel, it answers
+> "no error" every time, and the drawing surface takes not one extra write. **Whatever it tests
+> before declining to draw is the remaining question, and it is inside `0x800CB7B8`.**

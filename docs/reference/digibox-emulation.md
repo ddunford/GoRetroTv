@@ -8334,3 +8334,46 @@ part**: the banner enters the listings data path and the grid never does.
 
 The grid's o-code is present in flash and executing; it draws a header, a date, a clock and a time
 axis. It simply never enters the path the banner uses.
+
+### The decision is in the o-code, and TASK-7.1's oracle addresses were right all along
+
+Two results, and the second reverses a ruling this task was rebuilt around.
+
+**The grid enters the listings module zero times.** Bounding the functions that actually read the
+listings pages gives `0x800A8000`..`0x800AB000` — `0x800A8520`, `0x800A86DC`, `0x800A9046`,
+`0x800AA968`, and `0x800AA8F8`, the instruction that writes the transport state, is in the same
+range. While the banner draws, eleven distinct doors lead into that module and it reads the
+listings 1,436 times. **While the grid draws, not one of them opens.** The three doors the grid does
+execute — `0x800D0F88`, `0x800D0FDC`, `0x800CD8F2` — are the generic heap machinery both screens
+share, and the busiest banner door, `0x8001D792`, is in the C-library thunk table.
+
+So the MIPS listings code is not refusing the grid. **The grid never calls it**, which is why every
+MIPS-level probe has come back with a negative. The ALL CHANNELS screen is interpreted OpenTV
+o-code, and the decision is in the bytecode.
+
+**Which is traceable from here, because the interpreter fetches its bytecode AS DATA.** A flash read
+by the interpreter is an o-code program counter. While it draws, the grid reads flash 36,455 times
+across 48 pages, `0x9FC4D000` and `0x9FC8C000` busiest.
+
+**And now the reversal.** TASK-7.1 was written around four flash addresses taken from the browser
+oracle, and this port measured them as neither executed nor read — which is what retired the task's
+premise and sent the work off after the channel database instead. That measurement was taken with
+the transport at state 4, when the grid's row loop ran once and gave up. Re-asked with the first
+gate open:
+
+| address | what the oracle called it | reads |
+|---|---|---|
+| `0x9FC75F2E` | channel count write | **7** |
+| `0x9FC75F7A` | channel count read A | **7** |
+| `0x9FC762FC` | channel count read B | **7** |
+| `0x9FC77D40` | layout selector | **5** |
+
+**They are this port's addresses after all.** They were invisible only because the grid gave up
+before reaching them, and seven reads of a channel count matches the seven visits to the row-loop
+head exactly. The oracle was right and the retirement was an artefact of measuring a screen that
+had not finished.
+
+> Ghidra cannot help here: o-code is interpreted bytecode with no processor module. The tool for
+> this is `tools/ocode-disasm.py`, which decodes it against an operand table measured from the
+> running machine and whose `--check` refuses a listing whose instruction boundaries the machine
+> never fetched.

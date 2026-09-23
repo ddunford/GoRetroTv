@@ -97,22 +97,21 @@ func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 	accepting := map[uint32]bool{}
 	allScreen := walk(t, 0x01, "ALL CHANNELS", nil, func(pc uint32) { accepting[pc] = true })
 
-	// Then ENTERTAINMENT, recording every read as it goes. The exclusive PCs are not known until
-	// afterwards, so everything is kept and filtered at the end.
-	type load struct {
-		pc, at, value uint32
-		size          bus.Size
-	}
-	var loads []load
+	// Then ENTERTAINMENT, TWICE, and the second run is the whole reason this is three boxes
+	// rather than two.
+	//
+	// THE FIRST VERSION KEPT EVERY READ AND FILTERED AFTERWARDS, because the exclusive set is not
+	// known until both screens have run. A draw makes millions of reads, so it carried a cap -- and
+	// it hit that cap EXACTLY, four million reads in, which stopped the recording before the
+	// reject path ran. The probe then reported that none of the 44 addresses read anything, which
+	// is true of the truncated recording and says nothing whatever about the box. A guard that
+	// fires on the instrument's own limit and blames the subject is worse than no guard.
+	//
+	// The emulator is deterministic, so a second ENTERTAINMENT run executes exactly what the first
+	// did: computing the exclusive set from run one and recording ONLY those instructions' reads
+	// in run two needs no cap at all.
 	rejecting := map[uint32]bool{}
-	genreScreen := walk(t, 0x02, "ENTERTAINMENT", func(a bus.ObservedAccess, pc uint32) {
-		if a.Fetch || a.Write {
-			return
-		}
-		if len(loads) < 4_000_000 {
-			loads = append(loads, load{pc: pc, at: a.Virtual, value: a.Value, size: a.Size})
-		}
-	}, func(pc uint32) { rejecting[pc] = true })
+	genreScreen := walk(t, 0x02, "ENTERTAINMENT", nil, func(pc uint32) { rejecting[pc] = true })
 
 	if allScreen == genreScreen {
 		t.Fatalf("harness: both screens drew %08X, so there is no reject to read", allScreen)
@@ -123,12 +122,29 @@ func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 			exclusive[pc] = true
 		}
 	}
-	t.Logf("%d addresses run only while the genre screen rejects; %d reads recorded in total",
-		len(exclusive), len(loads))
+	t.Logf("%d addresses run only while the genre screen rejects", len(exclusive))
 	if len(exclusive) == 0 {
 		t.Fatal("harness: the genre screen ran nothing the accepting screen did not, so the " +
 			"differential found no reject path and there is nothing to read")
 	}
+
+	type load struct {
+		pc, at, value uint32
+		size          bus.Size
+	}
+	var loads []load
+	again := walk(t, 0x02, "ENTERTAINMENT again", func(a bus.ObservedAccess, pc uint32) {
+		if a.Fetch || a.Write || !exclusive[pc] {
+			return
+		}
+		loads = append(loads, load{pc: pc, at: a.Virtual, value: a.Value, size: a.Size})
+	}, func(uint32) {})
+	if again != genreScreen {
+		t.Fatalf("harness: the second ENTERTAINMENT run drew %08X where the first drew %08X, so "+
+			"the two are not the same experiment and the reads below belong to neither",
+			again, genreScreen)
+	}
+	t.Logf("%d reads made by those addresses", len(loads))
 
 	// WHAT THOSE INSTRUCTIONS READ, grouped by the instruction, with the values they saw.
 	type site struct {
@@ -155,9 +171,10 @@ func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 		}
 	}
 	if len(sites) == 0 {
-		t.Fatalf("harness: none of the %d exclusive addresses read anything at all, so this says "+
-			"nothing about what the screen looks up -- the branch may be a compare on a register "+
-			"loaded earlier, which is a different hunt", len(exclusive))
+		t.Fatalf("none of the %d exclusive addresses read memory at all, across a whole "+
+			"uncapped run. The reject is therefore a compare on a register loaded EARLIER, by an "+
+			"instruction both screens execute -- a different and larger hunt, and one this probe "+
+			"is not equipped for. It is not 'the screen looks up nothing'", len(exclusive))
 	}
 	pcs := make([]uint32, 0, len(sites))
 	for pc := range sites {

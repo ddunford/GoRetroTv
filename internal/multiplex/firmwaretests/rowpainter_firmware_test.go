@@ -207,7 +207,7 @@ func paintersFor(t *testing.T, wantGrid bool) map[painterSite]int {
 		return sites
 	}
 
-	const tvGuideMenu = 0xDDBC18E9 // verified by eye: ten rows of text
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	first := press(keyBoxOffice, "box office", 80_000_000)
 	tab := first
 	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
@@ -455,7 +455,7 @@ func TestWhetherTheRowLoopIsTheGridsOrEveryScreens(t *testing.T) {
 		return settled, hits
 	}
 
-	const tvGuideMenu = 0xDDBC18E9 // verified by eye: ten rows of text
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	screen, boxOfficeHits := press(keyBoxOffice, "box office (six rows)", 80_000_000)
 	menuHits := boxOfficeHits
 	for attempt := 1; attempt <= 6 && screen != tvGuideMenu; attempt++ {

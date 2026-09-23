@@ -29,7 +29,7 @@ import (
 //
 // IT ONLY READS.
 func TestEveryPIDTheBoxEverArms(t *testing.T) {
-	const tvGuideMenu = 0xDDBC18E9
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	const allChannels = 0x42DBD889
 
 	guide := demoGuide(t)

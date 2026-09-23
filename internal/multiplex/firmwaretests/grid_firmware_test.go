@@ -106,8 +106,10 @@ func TestTheGridsRowLoopEitherRunsOrItDoesNot(t *testing.T) {
 	// a twelve-iteration analysis and three sets of notes.
 	//
 	// Both hashes below were verified against the dumped pictures by eye.
-	const tvGuideMenu = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
-	const allChannels = 0x42DBD889 // "7.00pm Thu 24 / ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm"
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
+	// 0x42DBD889 -- ALL CHANNELS with no rows at all -- was this pin until the 0xB2 descriptor
+	// made the grid draw. That screen cannot be reached any more, so the pin is the pair the route
+	// names: searching, and filled.
 	menu := press(keyBoxOffice, "box office")
 	tab := menu
 	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
@@ -151,7 +153,7 @@ func TestTheGridsRowLoopEitherRunsOrItDoesNot(t *testing.T) {
 		// NOT "different from the menu" -- ALL CHANNELS by its own hash. A select that merely
 		// moves the highlight also produces a screen different from the menu, and that is
 		// indistinguishable here from the grid opening.
-		if settled == allChannels {
+		if atAllChannels(settled) {
 			grid = settled
 		}
 	}

@@ -42,7 +42,8 @@ import (
 // its own presses:
 //
 //   - the tv guide tab must hash to tvGuideMenuScreen, or the route failed early;
-//   - the grid must hash to allChannelsOpening, or the route failed late.
+//   - the grid must hash to one of the two frames ALL CHANNELS settles on -- searching, or
+//     filled -- or the route failed late.
 //
 // A pinned destination and a screen that might legitimately CHANGE are in tension, and the tension
 // is resolved by saying which is which rather than by loosening the gate: a probe that expects to
@@ -59,11 +60,24 @@ const (
 	// let the paint finish.
 	boxOfficeMenu     = 0xFE8D1CCC // six entries, MOVIES BY START TIME highlighted
 	tvGuideMenuScreen = 0x43779DC8 // ten entries, ALL CHANNELS highlighted
-	// THE GRID OPENS ON "SEARCHING FOR LISTINGS" and fills a few tens of millions of instructions
-	// later. That is the screen SELECT returns, so it is what the route checks; a probe that wants
-	// the filled grid runs its own tail afterwards and photographs the result.
-	allChannelsOpening = 0x144CF59D
+	// THE GRID HAS TWO SETTLED FRAMES AND BOTH ARE ARRIVAL. It opens on "Searching for listings"
+	// and fills a few tens of millions of instructions later, so which one a press returns depends
+	// on that press's budget -- a probe with a generous one sails through the searching frame and
+	// settles on the filled grid. Naming both is still a pin; naming one made four probes fail at
+	// a screen they had correctly reached.
+	//
+	// A probe that wants the FILLED grid must not assume it got it: run a tail and photograph the
+	// result. The fill is the thing most of this phase is measuring, so its hash is exactly what
+	// must be allowed to move.
+	allChannelsOpening = 0x144CF59D // "Searching for listings / Please wait"
+	allChannelsFilled  = 0x71A6DFE8 // six channels, programmes, continuation arrows
 )
+
+// atAllChannels reports whether a settled screen is the ALL CHANNELS grid, at either of the two
+// frames it holds still on.
+func atAllChannels(screen uint32) bool {
+	return screen == allChannelsOpening || screen == allChannelsFilled
+}
 
 func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange bool) uint32 {
 	t.Helper()
@@ -93,20 +107,21 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 	for attempt := 1; attempt <= 4; attempt++ {
 		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
 		seen = append(seen, grid)
-		if grid == allChannelsOpening {
+		if atAllChannels(grid) {
 			return grid
 		}
 		if wantChange && grid != 0 && grid != tvGuideMenuScreen && grid != boxOfficeMenu {
-			t.Logf("the grid settled on %08X, which is not the screen this project has measured "+
-				"every time before (%08X) -- READ %s AND SEE WHAT IT DRAWS",
-				grid, uint32(allChannelsOpening), artefact)
+			t.Logf("the grid settled on %08X, which is neither frame this project has measured "+
+				"ALL CHANNELS on (%08X searching, %08X filled) -- READ %s AND SEE WHAT IT DRAWS",
+				grid, uint32(allChannelsOpening), uint32(allChannelsFilled), artefact)
 			return grid
 		}
 	}
-	t.Fatalf("harness: select never opened the ALL CHANNELS grid (%08X). Screens seen: %08X. "+
+	t.Fatalf("harness: select never opened the ALL CHANNELS grid (%08X searching or %08X "+
+		"filled). Screens seen: %08X. "+
 		"A redraw of the menu is a DIFFERENT hash from the menu, so 'not the tab' is not arrival; "+
 		"open %s before believing anything else about this run",
-		uint32(allChannelsOpening), seen, artefact)
+		uint32(allChannelsOpening), uint32(allChannelsFilled), seen, artefact)
 	return grid
 }
 

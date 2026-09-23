@@ -292,7 +292,7 @@ func TestWhereADrawnRowActuallyLands(t *testing.T) {
 		return settled
 	}
 
-	const tvGuideMenu = 0xDDBC18E9 // verified by eye: ten rows of text
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	menu := press(keyBoxOffice, "box office", 80_000_000)
 	tab := menu
 	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {

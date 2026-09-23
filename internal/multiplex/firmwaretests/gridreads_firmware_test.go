@@ -175,8 +175,7 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 	// of them committed, reported "ALL CHANNELS" for a screen whose own screenshot says MOVIES BY
 	// START TIME -- the box office menu's first entry, reached because the route accepted the box
 	// office menu as the tv guide tab.
-	const tvGuideMenu = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
-	const allChannels = 0x42DBD889 // "7.00pm Thu 24 / ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm"
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	tab := menu
 	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
@@ -218,15 +217,19 @@ func TestWhetherTheAllChannelsGridReadsTheLineUp(t *testing.T) {
 		}
 		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
 		watching = false
-		if grid != allChannels {
+		if !atAllChannels(grid) {
 			continue
 		}
 		break
 	}
-	if grid != allChannels {
-		t.Fatalf("harness: select never reached ALL CHANNELS (%08X); the screen settled on %08X, "+
-			"and a screen that is merely DIFFERENT from the menu is exactly what has been measured "+
-			"by mistake before", uint32(allChannels), grid)
+	// THE DESTINATION IS THE GRID AT EITHER OF ITS TWO SETTLED FRAMES. This used to pin 0x42DBD889
+	// -- ALL CHANNELS with no rows at all -- which was the only thing it ever drew until the 0xB2
+	// descriptor unlocked the listings; that screen cannot be reached any more.
+	if !atAllChannels(grid) {
+		t.Fatalf("harness: select never reached ALL CHANNELS (%08X searching or %08X filled); the "+
+			"screen settled on %08X, and a screen that is merely DIFFERENT from the menu is "+
+			"exactly what has been measured by mistake before",
+			uint32(allChannelsOpening), uint32(allChannelsFilled), grid)
 	}
 
 	if err := dumpScreen(t, box, "grid-reads-all-channels.png"); err != nil {

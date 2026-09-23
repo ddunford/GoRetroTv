@@ -33,8 +33,7 @@ import (
 // because three instruments in this project have measured the wrong screen while reporting
 // confidently about this one.
 func TestWhatHoldsTheRowCountOnAListScreen(t *testing.T) {
-	const tvGuideMenu = 0xDDBC18E9 // ten entries, verified by eye
-	const allChannels = 0x42DBD889 // the grid, no rows, verified by eye
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	const boxOfficeRows, tvGuideRows = 6, 10
 
 	guide := demoGuide(t)
@@ -77,10 +76,14 @@ func TestWhatHoldsTheRowCountOnAListScreen(t *testing.T) {
 		t.Helper()
 		record = valueSet{}
 		watching = true
+		before := screenNow(t, box)
 		settled := pressAndLetItFinishHooked(t, box,
 			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
-		t.Logf("%-30s drew %08X over %d addresses", name, settled, len(record))
+		// THE SCREEN IT PRESSED FROM IS HALF THE MEASUREMENT. A press that reports 00000000 says
+		// only that nothing settled; which screen it was sitting on when it said so is what
+		// separates "the key was swallowed" from "the route is somewhere it did not mean to be".
+		t.Logf("%-30s %08X -> %08X over %d addresses", name, before, settled, len(record))
 		return settled, record
 	}
 
@@ -94,9 +97,15 @@ func TestWhatHoldsTheRowCountOnAListScreen(t *testing.T) {
 			uint32(boxOfficeMenu))
 	}
 	// Then the TV GUIDE menu -- ten entries.
+	//
+	// NO IDLE BETWEEN THE PRESSES. This used to run eight million instructions before each key, as
+	// a hand-rolled way of letting the last screen finish -- and pressAndLetItFinish's tail does
+	// that properly now. Measured 2026-09-23: with the idle in place, every LEFT from a settled
+	// box office menu is swallowed. Four presses in a row logged FE8D1CCC -> 00000000, and the
+	// "from" hash is what says it: the screen before the second press was still the box office
+	// menu, so the first press had not moved it either.
 	var tens valueSet
 	for attempt := 1; attempt <= 6 && screen != tvGuideMenu; attempt++ {
-		runUntil(t, box, transmitter, 8_000_000, func(int) bool { return false })
 		screen, tens = press(keyLeft, "left to the tv guide menu (ten entries)", 80_000_000)
 	}
 	if screen != tvGuideMenu {
@@ -105,14 +114,13 @@ func TestWhatHoldsTheRowCountOnAListScreen(t *testing.T) {
 	}
 	// Then the grid.
 	var gridReads valueSet
-	for attempt := 1; attempt <= 6 && screen != allChannels; attempt++ {
-		runUntil(t, box, transmitter, 8_000_000, func(int) bool { return false })
+	for attempt := 1; attempt <= 6 && !atAllChannels(screen); attempt++ {
 		screen, gridReads = press(keySelect,
 			fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
 	}
-	if screen != allChannels {
-		t.Fatalf("harness: never reached ALL CHANNELS (%08X); settled on %08X", uint32(allChannels),
-			screen)
+	if !atAllChannels(screen) {
+		t.Fatalf("harness: never reached ALL CHANNELS (%08X searching or %08X filled); settled "+
+			"on %08X", uint32(allChannelsOpening), uint32(allChannelsFilled), screen)
 	}
 
 	// THE CANDIDATES, ON A LADDER OF STRICTNESS RATHER THAN ONE RULE. The strictest version --

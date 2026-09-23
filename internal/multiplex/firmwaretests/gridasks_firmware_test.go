@@ -138,8 +138,7 @@ func TestWhatTheBoxAsksTheBroadcastForWhenTheGridOpens(t *testing.T) {
 	// Both verified by eye against the dumped pictures. A hash cannot tell ALL CHANNELS from the
 	// same menu with its highlight moved, and an earlier version of this route accepted the BOX
 	// OFFICE menu as the tv guide tab and measured MOVIES BY START TIME throughout.
-	const tvGuideMenu = 0xDDBC18E9
-	const allChannels = 0x42DBD889
+	const tvGuideMenu = tvGuideMenuScreen // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 	tab := menu
 	for attempt := 1; attempt <= 6 && tab != tvGuideMenu; attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
@@ -148,15 +147,21 @@ func TestWhatTheBoxAsksTheBroadcastForWhenTheGridOpens(t *testing.T) {
 		t.Fatalf("harness: never reached the TV GUIDE menu (%08X); settled on %08X",
 			uint32(tvGuideMenu), tab)
 	}
+	// THE DESTINATION IS THE GRID AT EITHER OF ITS TWO SETTLED FRAMES. This used to pin
+	// 0x42DBD889 -- ALL CHANNELS with no rows at all -- which was the only thing it ever drew
+	// until the 0xB2 descriptor unlocked the listings. That screen cannot be reached any more, so
+	// the pin was a loop that pressed SELECT six times and dived past the grid; route_test.go
+	// names the two frames it does settle on.
 	grid := uint32(0)
-	for attempt := 1; attempt <= 6 && grid != allChannels; attempt++ {
+	for attempt := 1; attempt <= 6 && !atAllChannels(grid); attempt++ {
 		runUntil(t, box, transmitter, 8_000_000, func(int) bool { return false })
 		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
 	}
-	if grid != allChannels {
-		t.Fatalf("harness: select never reached ALL CHANNELS (%08X); settled on %08X, and a screen "+
-			"that merely differs from the menu is what has been measured by mistake before",
-			uint32(allChannels), grid)
+	if !atAllChannels(grid) {
+		t.Fatalf("harness: select never reached ALL CHANNELS (%08X searching or %08X filled); "+
+			"settled on %08X, and a screen that merely differs from the menu is what has been "+
+			"measured by mistake before",
+			uint32(allChannelsOpening), uint32(allChannelsFilled), grid)
 	}
 	if err := dumpScreen(t, box, "grid-asks-all-channels.png"); err != nil {
 		t.Fatal(err)

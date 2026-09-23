@@ -52,6 +52,12 @@ type Multiplex struct {
 	// which is correct, and is why the line-up repeats at all only to catch a
 	// box that missed it.
 	version byte
+	// indexCursor is which letter the next index wave carries. The A-Z index goes out one letter
+	// at a time, so the transmitter has to remember where it had got to.
+	indexCursor int
+	// indexVersion is bumped once per full pass of the alphabet so each pass is a fresh delivery
+	// rather than a repeat the guest deduplicates away.
+	indexVersion byte
 
 	// lastSubscriptionErr is remembered so the driver can report a box that
 	// stopped asking, without logging the same line thousands of times.
@@ -87,6 +93,11 @@ type Counters struct {
 	// counted so that it is reported rather than assumed away: this port
 	// delivers by PID, and a section sent this way might not reach a Digibox.
 	TitlesDerived int
+	// Index counts table 0xC1 index waves -- the A-Z LISTINGS screens. It is separate from Titles
+	// because the two answer different questions: the titles are the programmes themselves and the
+	// index is only a set of references into them, so an index sent without titles is a screen
+	// full of unresolvable rows rather than a screen with fewer of them.
+	Index int
 }
 
 // InWorldClock is the time the broadcast claims it is. It is an interface
@@ -138,6 +149,7 @@ func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 		Clock:  m.clockWave,
 		Lineup: m.lineupWave,
 		Titles: m.titleWave,
+		Index:  m.indexWave,
 	})
 	if err != nil {
 		return nil, err
@@ -574,4 +586,131 @@ func lastSunday(year int, month time.Month) time.Time {
 		day = day.AddDate(0, 0, -1)
 	}
 	return day
+}
+
+// indexPID is where table 0xC1 arrives, measured rather than chosen.
+//
+// The subscription tree cannot answer this -- its PID node holds a field in 0x10..0x1F that reads
+// as a plausible PID on a box whose PIDs are 0x10, 0x11 and 0x14, and is not one. Pushing a section
+// at each armed PID in turn and watching the consumer execute does: 0x10, 0x11, 0x14, 0x33 and 0x34
+// never reach it, 0x52 runs 409 instructions inside it.
+const indexPID = 0x52
+
+// indexFlags and indexSelector are the two bytes an index record carries beside its references.
+//
+// They are the values MEASURED to work, and they are deliberately not named for a meaning. rec[2]'s
+// low nibble unpacks into four two-bit fields exactly as the line-up entry's flags nibble does --
+// 01 where a bit is set, 10 where it is clear -- and only the top two bits of rec[3] are read at
+// all. What any individual bit MEANS is unestablished, so a constant called indexVisible would
+// assert what nobody here has shown.
+const (
+	indexFlags    = 0x0f
+	indexSelector = 0xc0
+)
+
+// indexWave builds the table 0xC1 A-Z index: for each letter, the programmes whose titles begin
+// with it.
+//
+// WHAT AN INDEX RECORD IS, measured by sending six candidate layouts pointing at six different
+// programmes and reading which titles the screen drew: rec[0..1] is the CHANNEL'S LISTINGS ID and
+// rec[5..6] is the PROGRAMME'S EVENT ID. Layouts that put the event id at rec[0..1] drew nothing,
+// and so did one that put it at rec[7..8]; a layout that additionally wrote the listings id into
+// rec[7..8] still drew, which is what shows those two bytes are ignored rather than merely spare.
+//
+// THE INDEX IS A REFERENCE, NOT A COPY, so it names programmes the box may or may not hold: it
+// registers only the six-hour blocks it has subscribed to. It carries the WHOLE DAY anyway, and
+// that is measured rather than assumed -- sending one index entry for a stored programme and one
+// for an unstored one drew exactly the same screen as the stored one alone, so the box skips what
+// it cannot resolve. Carrying the day means the index is already right when the clock moves into
+// the next block, instead of being correct only for the six hours it was built in.
+//
+// A letter with no programmes is SKIPPED rather than sent empty: the builder refuses a section with
+// no records, because a section that announces nothing is indistinguishable at the screen from one
+// that never arrived.
+func (m *Multiplex) indexWave(uint64) ([]broadcast.Emission, error) {
+	listings := m.listings()
+	if listings == nil || len(listings.Services) == 0 {
+		return nil, nil
+	}
+	byLetter := map[byte][]broadcast.IndexRecord{}
+	for i := range listings.Services {
+		service := &listings.Services[i]
+		for n := range service.Programmes {
+			programme := &service.Programmes[n]
+			letter, ok := indexInitial(programme.Title)
+			if !ok {
+				continue
+			}
+			event := uint16(n + 1) // #nosec G115 -- a day's programmes, bounded by the section length
+			byLetter[letter] = append(byLetter[letter], broadcast.IndexRecord{
+				ID:       service.ListingsID,
+				Packed:   indexFlags,
+				Selector: indexSelector,
+				Data:     [5]byte{0, byte(event >> 8), byte(event & 0xff), 0, 0}, // #nosec G115 -- masked
+			})
+		}
+	}
+	// ONE LETTER PER WAVE, ROUND-ROBIN -- NOT NINETEEN SECTIONS IN ONE PUSH.
+	//
+	// This is what a carousel IS, and sending the alphabet in one burst is not a shortcut, it is a
+	// different thing that loses most of what it sends. Every index section goes to the same PID
+	// and therefore the same section filter, and a wave is pushed inside a single Pump with no
+	// guest instructions between the pushes -- so the box is handed nineteen sections without ever
+	// running the task that drains them. Measured: one burst of nineteen letters filled EIGHT of
+	// the twenty-six list heads, and the screen that opens on 'A' found nothing because 'A' was
+	// among the eleven lost. Nothing errored; the ring is twelve kilobytes and never wrapped.
+	//
+	// Serially, each section gets a whole IndexPeriod of guest time to itself, which is both the
+	// fix and what a real multiplex does.
+	// EVERY LETTER, INCLUDING THE EMPTY ONES. A six-channel schedule leaves seven letters with no
+	// programmes at all, and skipping them leaves those list heads null -- which is not the same
+	// thing as a letter with nothing on it. An empty section is a well-formed list of length zero
+	// and costs one wave.
+	letters := make([]byte, 0, 26)
+	for letter := byte('A'); letter <= 'Z'; letter++ {
+		letters = append(letters, letter)
+	}
+	letter := letters[m.indexCursor%len(letters)]
+	m.indexCursor = (m.indexCursor + 1) % len(letters)
+	// A NEW VERSION EACH TIME ROUND THE ALPHABET, because the box DEDUPLICATES a repeat.
+	//
+	// A carousel that sends the same bytes for ever is only useful if the receiver keeps what it
+	// was given, and this one does not: the guest drops a section whose table, extension and
+	// version it has already parsed, so every cycle after the first was discarded -- measured, all
+	// nineteen list heads filled and the screen still drawing "Searching for listings" a hundred
+	// million instructions later, while the same sections hand-delivered just before the screen
+	// opened filled it. Bumping the version once per full cycle makes each pass a fresh delivery,
+	// which is what a screen opened at a moment of the viewer's choosing needs.
+	if m.indexCursor == 0 {
+		m.indexVersion = (m.indexVersion + 1) & 0x1f
+	}
+	extension, err := broadcast.IndexLetter(letter)
+	if err != nil {
+		return nil, err
+	}
+	section, err := broadcast.IndexSection(extension, m.indexVersion, 0, 0, byLetter[letter])
+	if err != nil {
+		return nil, err
+	}
+	m.sent.Index++
+	return []broadcast.Emission{{PID: indexPID, Section: section}}, nil
+}
+
+// indexInitial is the letter a programme files under: the first character in 'A'..'Z', case
+// folded.
+//
+// "The X Files" files under T. Sky may well have dropped a leading article -- every A-Z index in
+// television does something about it -- but which words it stripped is not established here, and a
+// stop-word list invented now would put programmes under letters nobody measured.
+func indexInitial(title string) (byte, bool) {
+	for i := 0; i < len(title); i++ {
+		c := title[i]
+		if c >= 'a' && c <= 'z' {
+			c -= 'a' - 'A'
+		}
+		if c >= 'A' && c <= 'Z' {
+			return c, true
+		}
+	}
+	return 0, false
 }

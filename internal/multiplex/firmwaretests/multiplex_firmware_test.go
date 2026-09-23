@@ -28,8 +28,10 @@ func demoSchedule() broadcast.Schedule {
 		ClockPeriod:  20_000_000,
 		LineupPeriod: 60_000_000,
 		TitlePeriod:  60_000_000,
+		IndexPeriod:  2_000_000,
 		ClockSettle:  8_000_000,
 		LineupSettle: 4_000_000,
+		TitleSettle:  4_000_000,
 	}
 }
 

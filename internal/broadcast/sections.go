@@ -689,10 +689,12 @@ func IndexSection(extension uint16, version, sectionNumber, lastSectionNumber by
 		return nil, fmt.Errorf("broadcast: extension %#04x is not one the 0xC1 consumer "+
 			"dispatches, so the box would build the record array and free it", extension)
 	}
-	if len(records) == 0 {
-		return nil, fmt.Errorf("broadcast: an index section for extension %#04x with no records "+
-			"announces nothing", extension)
-	}
+	// A SECTION WITH NO RECORDS IS LEGAL HERE, and unlike every other builder in this package it
+	// is worth sending. The consumer computes its count as (section_length - 9) / 9, so an empty
+	// payload is a count of zero -- a well-formed EMPTY LIST -- and the parser still allocates the
+	// twelve-byte header and puts it in the letter's list head. That is the difference between a
+	// letter with nothing on it and a letter the box has never heard of, and the screen behaves
+	// differently for the two.
 	payload := make([]byte, 0, len(records)*indexRecordSize)
 	for _, record := range records {
 		payload = appendU16(payload, record.ID)

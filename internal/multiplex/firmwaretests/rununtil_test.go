@@ -109,3 +109,108 @@ func registeringProgrammes(box *board.Runtime, want int, got *int) func(int) boo
 		return *got >= want
 	}
 }
+
+// screenBodyNow is what the box is showing BELOW the tab strip, and it exists because the tab strip
+// moves on its own.
+//
+// The TV GUIDE menu carries an animated icon band across the top -- BOX OFFICE, SERVICES,
+// INTERACTIVE and a strip that shears while it paints. screenNow hashes the whole framebuffer, so
+// on that menu the hash never repeats, a press's "four identical frames" never arrive, and the
+// press reports a settled screen of 00000000 while the box is in fact responding perfectly. Two
+// probes read that as "the box has stopped taking input" and one of them chased it as a smartcard
+// fault; a third concluded the tv guide tab was unreachable and refused to continue.
+//
+// Hashing the body alone fixes it for every menu in the guide, because the animation is confined to
+// the band above them. The cut is at the top of the light panel, which is where the box's own
+// screens start their content.
+//
+// It is NOT a replacement for screenNow. A screen whose CONTENT is what changed -- a grid filling,
+// a list arriving -- must still be hashed whole, because the point there is to notice any
+// difference at all.
+const screenBodyTop = 120
+
+func screenBodyNow(t *testing.T, box *board.Runtime) uint32 {
+	t.Helper()
+	picture, err := box.Compose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bounds := picture.Bounds()
+	if bounds.Dy() <= screenBodyTop {
+		t.Fatalf("harness: the composed picture is %d rows, at or below the %d-row tab strip this "+
+			"crops, so the body hash would cover nothing", bounds.Dy(), screenBodyTop)
+	}
+	start := screenBodyTop * picture.Stride
+	if start >= len(picture.Pix) {
+		t.Fatalf("harness: cropping %d rows leaves nothing of a %d-byte framebuffer",
+			screenBodyTop, len(picture.Pix))
+	}
+	return statehash.HashBytes(picture.Pix[start:])
+}
+
+// pressAndLetItFinish sends a key, waits for the screen to settle, and THEN LETS THE PAINT FINISH.
+//
+// THIS IS THE SETTLE TRAP IN ITS THIRD COSTUME, and it has now bitten this project at every level.
+// The settle detector calls a screen finished after four identical samples 65,536 instructions
+// apart -- about a quarter of a million instructions of stillness. A menu painting under a busy
+// carousel holds a HALF-DRAWN frame still for longer than that, so the detector returns a real
+// framebuffer of a screen that has not finished drawing.
+//
+// That is where this package's screen pins came from, and two of them are the same screen:
+//
+//	0xDDBC18E9  the TV GUIDE menu MID-PAINT, its tab icon still sheared
+//	0x43779DC8  the same menu FINISHED, which route_test.go names "tvGuideMenuRedrawn" and treats
+//	            as evidence that a SELECT failed to land
+//
+// Both are the ten-entry menu with ALL CHANNELS highlighted; the pictures say so. So a route that
+// waits for 0xDDBC18E9 presses SELECT into a menu that is still painting -- which is exactly when a
+// press is swallowed -- then sees 0x43779DC8 and concludes the select did not land. It did not, and
+// the reason was the route.
+//
+// Running a tail after the settle costs ten million instructions a press and removes the whole
+// class. A screen that was already finished reports the same hash twice and nothing changes.
+func pressAndLetItFinish(t *testing.T, box *board.Runtime, pump func() error,
+	raw uint8, budget int) uint32 {
+	t.Helper()
+	before := screenNow(t, box)
+	if err := box.CSI.Key(raw, 0); err != nil {
+		t.Fatal(err)
+	}
+	step := func() {
+		if err := pump(); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stable, last, settled := 0, before, uint32(0)
+	for i := 0; i < budget; i++ {
+		step()
+		if i%65536 != 0 {
+			continue
+		}
+		now := screenNow(t, box)
+		if now == last && now != before {
+			stable++
+			settled = now
+			if stable >= 4 {
+				break
+			}
+			continue
+		}
+		stable, last = 0, now
+	}
+	if settled == 0 {
+		return 0
+	}
+	for i := 0; i < paintTail; i++ {
+		step()
+	}
+	return screenNow(t, box)
+}
+
+// paintTail is how long a settled screen is given to finish painting. Ten million instructions is
+// forty times the stillness the settle detector asks for, and was measured to be enough for the
+// slowest menu in the guide under a carousel carrying clock, line-up, titles and index.
+const paintTail = 10_000_000

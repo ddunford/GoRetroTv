@@ -184,12 +184,25 @@ type broadcastConfig struct {
 // SETTLES are the part that is load-bearing: the box programs its day-addressed
 // listings request once, so a line-up that arrives before the clock has landed
 // leaves it asking for the wrong day for ever.
+//
+// THE INDEX REPEATS FOR THE SAME REASON A CAROUSEL EXISTS AT ALL, and its rate IS load-bearing in
+// a way the others are not. One index wave carries ONE LETTER, so a full alphabet takes about
+// twenty periods -- and the list head a screen reads is only filled once its own letter has come
+// round. Two million instructions puts a whole cycle inside forty million, comfortably before a
+// viewer can walk the menus to A-Z LISTINGS.
+//
+// One letter per wave rather than the alphabet at once is not a throttle, it is the fix: every
+// index section goes to the same PID and therefore the same section filter, and a wave is pushed
+// inside a single Pump with no guest instructions between the pushes. Nineteen at once filled
+// eight of twenty-six list heads and lost the rest, silently.
 var airSchedule = bcast.Schedule{
 	ClockPeriod:  20_000_000,
 	LineupPeriod: 60_000_000,
 	TitlePeriod:  60_000_000,
+	IndexPeriod:  2_000_000,
 	ClockSettle:  8_000_000,
 	LineupSettle: 4_000_000,
+	TitleSettle:  4_000_000,
 }
 
 // loadBroadcast reads the schedule and the dictionary, or reports that nothing

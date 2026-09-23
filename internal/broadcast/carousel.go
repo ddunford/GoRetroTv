@@ -62,6 +62,12 @@ type Source struct {
 	Lineup func(now uint64) ([]Emission, error)
 	// Titles supplies the OpenTV title sections.
 	Titles func(now uint64) ([]Emission, error)
+	// Index supplies the table 0xC1 index sections -- the A-Z LISTINGS screens.
+	//
+	// It is OPTIONAL, and a carousel without one is a carousel whose A-Z screens say
+	// "Searching for listings" for ever. Nothing else degrades: the now-and-next banner and the
+	// per-channel schedule read the title store directly.
+	Index func(now uint64) ([]Emission, error)
 }
 
 // Schedule is the carousel's timing, in instructions.
@@ -74,6 +80,8 @@ type Schedule struct {
 	LineupPeriod uint64
 	// TitlePeriod is the gap between title waves.
 	TitlePeriod uint64
+	// IndexPeriod is the gap between index waves. It is ignored when Source.Index is nil.
+	IndexPeriod uint64
 	// ClockSettle is how long after the FIRST clock wave the line-up is held
 	// back. This is the "clock first" rule with a number on it: the box needs
 	// the TDT delivered, parsed and applied before the BAT starts acquisition,
@@ -86,6 +94,12 @@ type Schedule struct {
 	// silently, which from outside is indistinguishable from a box that
 	// received it and ignored it.
 	LineupSettle uint64
+	// TitleSettle is how long after the FIRST title wave the index is held back, and it is the
+	// same rule one rung further up. An index record is a REFERENCE -- the channel's listings id
+	// and the programme's event id -- so a screen handed one before the titles have been stored
+	// resolves it against an empty store and draws nothing, which looks exactly like an index the
+	// box never received.
+	TitleSettle uint64
 }
 
 // Carousel emits waves of sections on an instruction-counted schedule, holding
@@ -101,11 +115,14 @@ type Carousel struct {
 	nextClock  uint64
 	nextLineup uint64
 	nextTitles uint64
+	nextIndex  uint64
 
 	clockedAt  uint64 // instruction of the first clock wave
 	lineupAt   uint64 // instruction of the first line-up wave
+	titledAt   uint64 // instruction of the first title wave
 	sentClock  bool
 	sentLineup bool
+	sentTitles bool
 }
 
 // NewCarousel validates a schedule and a source and returns a carousel that
@@ -136,6 +153,9 @@ func NewCarousel(schedule Schedule, source Source) (*Carousel, error) {
 	}
 	if source.Titles == nil {
 		return nil, fmt.Errorf("broadcast: a carousel with no title source carries no programmes")
+	}
+	if source.Index != nil && schedule.IndexPeriod == 0 {
+		return nil, fmt.Errorf("broadcast: carousel IndexPeriod is zero with an index source set; a wave due every zero instructions never stops firing")
 	}
 	return &Carousel{schedule: schedule, source: source}, nil
 }
@@ -190,6 +210,24 @@ func (c *Carousel) Wave(now uint64) ([]Emission, error) {
 		}
 		wave = append(wave, sections...)
 		c.nextTitles = now + c.schedule.TitlePeriod
+		if !c.sentTitles && len(sections) > 0 {
+			c.sentTitles, c.titledAt = true, now
+		}
+	}
+
+	// THE INDEX REPEATS FOR EVER AND THAT IS THE POINT, not a cost to be trimmed. The 0xC1 parser
+	// hands its decoded array to whatever already sits in the list-head slot for that extension, so
+	// a section that arrives before its screen exists is decoded and dropped. A viewer opens A-Z
+	// LISTINGS at a moment of their own choosing, so the only way the screen can ever be fed is for
+	// the index to keep coming round -- which is exactly what a broadcast carousel is.
+	if c.source.Index != nil && c.sentTitles &&
+		now >= c.titledAt+c.schedule.TitleSettle && now >= c.nextIndex {
+		sections, err := c.source.Index(now)
+		if err != nil {
+			return nil, fmt.Errorf("broadcast: carousel index wave at %d: %w", now, err)
+		}
+		wave = append(wave, sections...)
+		c.nextIndex = now + c.schedule.IndexPeriod
 	}
 
 	return wave, nil
@@ -223,6 +261,15 @@ func (c *Carousel) NextDue() uint64 {
 		}
 		if titles < due {
 			due = titles
+		}
+	}
+	if c.source.Index != nil && c.sentTitles {
+		index := c.nextIndex
+		if hold := c.titledAt + c.schedule.TitleSettle; hold > index {
+			index = hold
+		}
+		if index < due {
+			due = index
 		}
 	}
 	return due

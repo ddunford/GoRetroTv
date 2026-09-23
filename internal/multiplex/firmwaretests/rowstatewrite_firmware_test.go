@@ -72,6 +72,7 @@ func TestWhatWritesTheGridsRowState(t *testing.T) {
 		at    uint32
 		value uint32
 		ocode uint32
+		pc    uint32
 	}
 	var (
 		watching = true // from the very start: the write happens before the grid opens
@@ -115,7 +116,8 @@ func TestWhatWritesTheGridsRowState(t *testing.T) {
 		}
 		for row := uint32(0); row < rows; row++ {
 			if at == expectedBase+row*rowStride {
-				writes = append(writes, write{at: at, value: a.Value, ocode: lastOp})
+				writes = append(writes, write{at: at, value: a.Value, ocode: lastOp,
+					pc: box.Machine.Core.State().PC &^ 1})
 				values[a.Value]++
 				return
 			}
@@ -171,8 +173,8 @@ func TestWhatWritesTheGridsRowState(t *testing.T) {
 			t.Logf("    ... and %d more", len(writes)-40)
 			break
 		}
-		t.Logf("    row %d at %08X <- %d   from o-code %08X",
-			(w.at-base)/rowStride, w.at, w.value, w.ocode)
+		t.Logf("    row %d at %08X <- %d   MIPS %08X   (o-code %08X)",
+			(w.at-base)/rowStride, w.at, w.value, w.pc, w.ocode)
 	}
 	vals := make([]uint32, 0, len(values))
 	for v := range values {

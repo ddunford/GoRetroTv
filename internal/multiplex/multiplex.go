@@ -382,7 +382,18 @@ func (m *Multiplex) guideRow(service *ListedService) (*broadcast.GuideRow, error
 	if err != nil {
 		return nil, err
 	}
-	return &broadcast.GuideRow{Text: text}, nil
+	// At8 IS NOT DECORATION: THE GRID BRANCHES ON IT. A type-1 row -- which is what a normal TV
+	// channel gets, because its line-up kind is 1 -- reads the BYTE at record+8 and takes a
+	// different path when it is non-zero:
+	//
+	//	9fc73957  add_nnnnnnnn 0x0002e258   ; ds + 0x2E258 + 336*row, i.e. record+8
+	//	9fc7395d  getc
+	//	9fc73961  jnz_nn 0x9fc73985         ; non-zero -> away from the "no listings" draw
+	//
+	// and record+8 is exactly where the 0xB2 parser puts the descriptor's first scalar
+	// (rec[8] = d[2]). Left at zero it falls through to "..no listings available" every time.
+	// WHAT THE VALUE MEANS is not established; 1 is the smallest thing that is not zero.
+	return &broadcast.GuideRow{At8: 1, Text: text}, nil
 }
 
 // secondsOfDay is the in-world clock's time as seconds since midnight.

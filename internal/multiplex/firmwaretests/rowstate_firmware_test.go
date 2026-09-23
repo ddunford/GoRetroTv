@@ -197,7 +197,11 @@ func TestWhatTheGridsRowStateFieldHolds(t *testing.T) {
 			note = "  <- 2: this row WOULD have drawn a programme"
 			twos++
 		}
-		t.Logf("    row %2d at %08X  =  %d%s", row, at, seen[at], note)
+		// AND THE BYTE THE TYPE-1 PATH BRANCHES ON. record+8 is read by the o-code at 0x9FC7395D
+		// and a non-zero value takes the row away from the "..no listings available" draw; it is
+		// also where the 0xB2 parser puts the descriptor's first scalar.
+		at8 := box.RAM.Read((at+8)&0x1fffffff, bus.Byte)
+		t.Logf("    row %2d at %08X  type %d   record+8 = %d%s", row, at, seen[at], at8, note)
 	}
 	t.Logf("%d of %d rows hold 2. The grid draws a programme only for those, and "+
 		"\"..no listings available\" for the rest.", twos, len(addrs))

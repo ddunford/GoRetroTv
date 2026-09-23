@@ -502,8 +502,43 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 	if !asking {
 		return nil, nil
 	}
-	listings := m.listings()
-	mjd := MJDOf(m.clock.Now())
+	now := m.clock.Now()
+	wave, err := m.titlesFor(sub, now)
+	if err != nil {
+		return nil, err
+	}
+	// AND TOMORROW, WHEN THE BOX HAS ASKED FOR IT.
+	//
+	// The guide registers TWO notification slots -- the block its clock is in and the one after --
+	// and in the evening the second is the next DAY's first block, because what follows 18:00-24:00
+	// belongs to tomorrow. Answering only today leaves that subscription unanswered, and the box
+	// says so in its own words: at 23:15, with the whole evening registered, the banner reads
+	// "Further schedule information is not available" under a programme that runs to midnight, and
+	// the grid's 12.00am column is empty on every channel.
+	//
+	// WHAT GATES IT IS THE BOX, not a clock rule here. It arms the next day's listings PID itself
+	// when it wants that day, so sub.Arms is the signal -- the same "let the box name what it
+	// wants" that every other rung on this carousel follows. A transmitter that decided for itself
+	// when tomorrow was due would be broadcasting at a subscription rather than answering one.
+	tomorrow, err := m.titlesFor(sub, now.AddDate(0, 0, 1))
+	if err != nil {
+		return nil, err
+	}
+	wave = append(wave, tomorrow...)
+	if len(wave) > 0 {
+		m.sent.Titles++
+	}
+	return wave, nil
+}
+
+// titlesFor is one day's title sections, addressed to that day's PID, or nothing when the box has
+// not armed it.
+func (m *Multiplex) titlesFor(sub Subscription, day time.Time) ([]broadcast.Emission, error) {
+	listings := m.guide.On(day)
+	if listings == nil || len(listings.Services) == 0 {
+		return nil, nil
+	}
+	mjd := MJDOf(day)
 	// THE DAY DECIDES THE PID, AND THE BOX MUST HAVE ARMED IT. A box arms the
 	// PID for the day it is in and, in the evening, for the day after; a
 	// section pushed at a PID it has not armed reaches nothing and reports no
@@ -518,7 +553,8 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 	// The box programs its request once and never re-subscribes, so after
 	// midnight its filter still names yesterday -- and answering that would
 	// fill the guide with a day that has gone. An evening box also programmes
-	// one for TOMORROW, which is a day this transmitter has no clock for yet.
+	// one for TOMORROW, which its caller answers by calling this a second time
+	// with the next day rather than by widening what one call accepts.
 	var requests []TitleRequest
 	for _, request := range sub.Titles {
 		if request.MJD() == mjd {
@@ -552,7 +588,7 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 			if !request.Wants(service.ListingsID) {
 				continue
 			}
-			quarters, err := m.records(service)
+			quarters, err := m.records(service, day)
 			if err != nil {
 				return nil, err
 			}
@@ -573,9 +609,6 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 				wave = append(wave, broadcast.Emission{PID: request.PID, Section: section})
 			}
 		}
-	}
-	if len(wave) > 0 {
-		m.sent.Titles++
 	}
 	return wave, nil
 }
@@ -605,10 +638,14 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 // carries a sixth of a day rather than all of it -- and a programme that will
 // not fit in its own block no longer stops the rest of the day being built,
 // which it did when the whole day was one section.
-func (m *Multiplex) records(service *ListedService) ([TitleQuarters][]broadcast.TitleRecord, error) {
+func (m *Multiplex) records(service *ListedService, day time.Time) ([TitleQuarters][]broadcast.TitleRecord, error) {
 	const secondsPerDay = 24 * 60 * 60
 	var quarters [TitleQuarters][]broadcast.TitleRecord
-	offset := londonOffset(m.clock.Now()).OffsetMinutes * 60
+	// THE OFFSET IS THE BROADCAST DAY'S, not the clock's, and those differ twice a year. Using
+	// the clock's would put tomorrow's listings an hour out on the two changeover days -- the kind
+	// of wrong that reads as a plausible schedule rather than as a bug, which is exactly what the
+	// UTC conversion below was written to avoid in the first place.
+	offset := londonOffset(day).OffsetMinutes * 60
 	total := 0
 	for i, programme := range service.Programmes {
 		local, err := programme.StartSeconds()

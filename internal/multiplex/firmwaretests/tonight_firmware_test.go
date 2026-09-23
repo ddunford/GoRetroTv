@@ -8,7 +8,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
 
-// WHAT THE GUIDE SAYS IS ON NEXT WHEN THE CURRENT PROGRAMME RUNS TO MIDNIGHT.
+// TOMORROW ARRIVES WHEN TONIGHT RUNS OUT.
 //
 // gort-k1z carries its own stop-gate and this is it: MEASURE BEFORE BUILDING. The reasoning is
 // that the guide registers TWO notification slots -- the block its clock is in and the one after
@@ -25,9 +25,23 @@ import (
 // THE GRID IS READ AT THE SAME HOUR for the same reason: its three columns at 23:15 are 23:00,
 // 23:30 and 00:00, and that third column is tomorrow whatever the banner does.
 //
-// IT ASSERTS ITS OWN SUBJECT: the banner must draw and the programme on air must be the one the
-// schedule says, or the run is of a box that never got the evening's listings and the empty NEXT
-// below would mean nothing.
+// MEASURED BEFORE THE FIX, WHICH IS WHY THIS PROBE EXISTS IN THIS SHAPE. With today only on air:
+//
+//	the banner   NOW Midnight Mass / "Further schedule information is not available"
+//	the grid     columns 11.00pm / 11.30pm / 12.00am, every midnight cell EMPTY
+//
+// The transmitter now answers the next day's subscription too, and the grid is the proof: the
+// midnight column fills for EXACTLY the channels whose schedule has something there. Sky News runs
+// "Sky News Overnight" from 00:00 and Sky Movies runs "Heat"; the other four have nothing before
+// 06:00 and their midnight cells stay empty, which is the correct answer rather than a failure.
+//
+// THE BANNER IS READ ON A CHANNEL THAT HAS A NEXT PROGRAMME, and that is not a detail. The box
+// wakes tuned to Sky One, whose schedule genuinely ends at midnight -- so its banner says "further
+// schedule information is not available" both before and after this fix, and a probe that read
+// only that surface would report no change from a change that plainly works.
+//
+// IT ASSERTS ITS OWN SUBJECT: the evening block must be fully registered, or an empty midnight
+// column would be about a missed delivery rather than about the next day.
 //
 // IT ONLY READS.
 func TestWhatIsOnNextWhenTonightRunsOut(t *testing.T) {
@@ -84,22 +98,8 @@ func TestWhatIsOnNextWhenTonightRunsOut(t *testing.T) {
 	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
 	press := azPressFunc(t, box, pump)
 
-	// THE BANNER FIRST. 0x80 is the tv guide key and it draws the now-and-next strip over the
-	// picture -- the one surface that names NEXT in words.
-	banner := uint32(0)
-	for attempt := 1; attempt <= attempts && banner == 0; attempt++ {
-		banner = press(0x80, fmt.Sprintf("tv guide banner (%d)", attempt), pressBudget)
-	}
-	if banner == 0 {
-		t.Fatal("harness: the tv guide key drew nothing, so there is no banner to read")
-	}
-	if err := dumpScreen(t, box, "tonight-banner.png"); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("the banner drew %08X -- READ .artifacts/tonight-banner.png: NOW should be %q, and "+
-		"what it says under it is the whole measurement", banner, onAir)
-
-	// AND THE GRID, whose third column at this hour is tomorrow.
+	// THE GRID FIRST, because its third column at this hour is tomorrow and it names every channel
+	// at once.
 	menu := uint32(0)
 	for attempt := 1; attempt <= attempts && menu != boxOfficeMenu; attempt++ {
 		menu = press(keyBoxOffice, "box office", pressBudget)
@@ -132,9 +132,44 @@ func TestWhatIsOnNextWhenTonightRunsOut(t *testing.T) {
 	if err := dumpScreen(t, box, "tonight-grid.png"); err != nil {
 		t.Fatal(err)
 	}
+	filled := screenNow(t, box)
+	// The grid with NOTHING after midnight, measured before the next day went on air. It is named
+	// rather than described because "the grid changed" is not a finding and "it is no longer the
+	// screen that had an empty midnight column" is.
+	const midnightEmpty = 0xFF5F7884
 	t.Logf("the grid settled on %08X -- READ .artifacts/tonight-grid.png: its columns are 23:00, "+
-		"23:30 and 00:00, and the last of those is tomorrow", screenNow(t, box))
-	t.Log("VERDICT IS THE TWO PICTURES. An empty NEXT and an empty midnight column mean the " +
-		"next-day subscription is genuinely unanswered and gort-k1z is worth building; anything " +
-		"drawn there means the box has its own route to tomorrow and it is not.")
+		"23:30 and 00:00, and the last of those is tomorrow", filled)
+	if filled == midnightEmpty {
+		t.Fatalf("the grid is still %08X, the screen measured with today alone on air -- every "+
+			"midnight cell empty. The next day's sections are not reaching the box", filled)
+	}
+
+	// AND THE BANNER, ON A CHANNEL THAT HAS SOMETHING AFTER MIDNIGHT. Sky Movies is the fourth row
+	// and runs "Heat" from 00:00; Sky One, which the box wakes tuned to, genuinely has nothing
+	// until 06:00 and would say so however well this worked.
+	for i := 0; i < 3; i++ {
+		press(keyDown, fmt.Sprintf("down to Sky Movies (%d of 3)", i+1), 20_000_000)
+	}
+	viewing := uint32(0)
+	for attempt := 1; attempt <= attempts && (viewing == 0 || viewing == filled); attempt++ {
+		viewing = press(keySelect, fmt.Sprintf("select to view (%d)", attempt), pressBudget)
+	}
+	if viewing == 0 || viewing == filled {
+		t.Fatalf("harness: SELECT never left the grid (%08X), so no channel was tuned and there "+
+			"is no banner to read", filled)
+	}
+	for i := 0; i < 40_000_000; i++ {
+		if err := pump(); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := dumpScreen(t, box, "tonight-banner.png"); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("the tuned channel's banner drew %08X -- READ .artifacts/tonight-banner.png: it must "+
+		"name the channel the picture shows, and its NEXT line is what tomorrow bought",
+		screenNow(t, box))
 }

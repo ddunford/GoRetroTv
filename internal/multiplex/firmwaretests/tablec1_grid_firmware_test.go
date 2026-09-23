@@ -46,7 +46,7 @@ func TestWhetherTheAllChannelsGridWantsAnIndexToo(t *testing.T) {
 	control := gridWithIndexRun(t, false, "grid-index-control.png")
 	delivered := gridWithIndexRun(t, true, "grid-index-delivered.png")
 	t.Logf("=== control   (nothing delivered): %08X", control)
-	t.Logf("=== delivered (64 genre indexes):  %08X", delivered)
+	t.Logf("=== delivered (every 0xC1 arm):     %08X", delivered)
 	if control == delivered {
 		t.Logf("the grid finished on the same screen either way, so it is NOT waiting on a table " +
 			"0xC1 genre index in any of the sixteen categories -- which is worth knowing, because " +
@@ -106,6 +106,21 @@ func gridWithIndexRun(t *testing.T, deliver bool, artefact string) uint32 {
 			t.Fatal("harness: no programme in the block produced an index record, so nothing " +
 				"would be delivered and the grid's emptiness would measure this loop")
 		}
+		// EVERY ARM OF THE DISPATCH, NOT JUST THE GENRE ONE. 0x800C4C34 routes four ways, and two
+		// of them -- extension 0x0000 and 0x00FF, each with its own single list head -- have
+		// never been transmitted by this port at all. That matters because of what the A-Z screen
+		// turned out to want: it searched for ever while nineteen of its twenty-six heads were
+		// filled and seven were null, and filling the empty ones is what made it draw. A screen
+		// waiting on a head that has never existed looks exactly like a screen waiting on data.
+		var extensions []uint16
+		extensions = append(extensions, 0x0000, 0x00ff)
+		for letter := byte('A'); letter <= 'Z'; letter++ {
+			ext, err := broadcast.IndexLetter(letter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			extensions = append(extensions, ext)
+		}
 		version := byte(0)
 		sent := 0
 		for category := byte(0); category < 16; category++ {
@@ -114,22 +129,28 @@ func gridWithIndexRun(t *testing.T, deliver bool, artefact string) uint32 {
 				if err != nil {
 					t.Fatal(err)
 				}
-				section, err := broadcast.IndexSection(ext, version&0x1f, 0, 0, records)
-				if err != nil {
+				extensions = append(extensions, ext)
+			}
+		}
+		for _, ext := range extensions {
+			section, err := broadcast.IndexSection(ext, version&0x1f, 0, 0, records)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := box.Demux.Push(probePID, section); err != nil {
+				t.Fatalf("harness: extension %#04x was refused (%v)", ext, err)
+			}
+			version++
+			sent++
+			// ONE AT A TIME, with guest instructions in between. A burst on one PID is handed to a
+			// box that never runs the task that drains it: nineteen sections at once filled eight
+			// of twenty-six heads and lost the rest, silently.
+			for i := 0; i < 300_000; i++ {
+				if err := transmitter.Pump(box.Machine.Retired); err != nil {
 					t.Fatal(err)
 				}
-				if err := box.Demux.Push(probePID, section); err != nil {
-					t.Fatalf("harness: extension %#04x was refused (%v)", ext, err)
-				}
-				version++
-				sent++
-				for i := 0; i < 300_000; i++ {
-					if err := transmitter.Pump(box.Machine.Retired); err != nil {
-						t.Fatal(err)
-					}
-					if err := box.Step(); err != nil {
-						t.Fatal(err)
-					}
+				if err := box.Step(); err != nil {
+					t.Fatal(err)
 				}
 			}
 		}
@@ -148,8 +169,22 @@ func gridWithIndexRun(t *testing.T, deliver bool, artefact string) uint32 {
 				filled++
 			}
 		}
-		t.Logf("delivered %d records under each of %d genre extensions, before a key was pressed; "+
-			"%d of 64 category slots now hold a non-null head", len(records), sent, filled)
+		// AND THE TWO ARMS NOBODY HAS EVER SENT. Extension 0x0000 is slot 0 of the letter table and
+		// 0x00FF has a pointer of its own; "ALL PROGRAMMES" being the master list and ALL CHANNELS
+		// being the master grid is the reason to look here at all.
+		heads := box.RAM.Read(uint32(0x800C51A0)&0x1fffffff, bus.Word)
+		zeroHead := box.RAM.Read(heads&0x1fffffff, bus.Word)
+		ffPtr := box.RAM.Read(uint32(0x800C51A4)&0x1fffffff, bus.Word)
+		ffHead := box.RAM.Read(ffPtr&0x1fffffff, bus.Word)
+		t.Logf("extension 0x0000 head = %08X, extension 0x00FF head = %08X", zeroHead, ffHead)
+		if zeroHead == 0 && ffHead == 0 {
+			t.Fatalf("harness: neither the 0x0000 nor the 0x00FF head was filled by %d delivered "+
+				"sections, so those two arms did not land and the grid below says nothing about "+
+				"them", sent)
+		}
+		t.Logf("delivered %d records under each of %d extensions (0x0000, 0x00FF, all 26 letters "+
+			"and all 64 genre slots), before a key was pressed; %d of 64 category slots now hold "+
+			"a non-null head", len(records), sent, filled)
 		if filled == 0 {
 			t.Fatalf("harness: not one of the 64 category slots was filled by %d delivered "+
 				"sections, so the arrays were handed to null and the grid below measures the "+

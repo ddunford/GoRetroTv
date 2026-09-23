@@ -46,11 +46,23 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 		// Both verified by eye against their artefacts rather than inferred from a change.
 		tvGuideMenuScreen = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 		allChannelsEmpty  = 0x42DBD889 // "ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm", no rows
-		// THE MENU'S SECOND HASH. A select that does not land leaves the ten-entry menu on screen
-		// and it settles on this instead of on tvGuideMenuScreen. Verified by eye TWICE, from two
-		// different probes' artefacts, both of which had reported it as the grid. It is listed
-		// here because "not the tab" is the check that let it through, and a screen known not to
-		// be arrival should be named rather than re-derived by whoever opens the next PNG.
+		// THE MENU'S SECOND HASH -- AND IT IS THE SAME SCREEN, WHICH IS WHY SELECT KEPT NOT
+		// LANDING. Corrected 2026-09-22, by picture.
+		//
+		// 0xDDBC18E9 above is this menu MID-PAINT, with its tab icon still sheared. 0x43779DC8 is
+		// the same menu FINISHED. Neither is a redraw and neither is a failure: the settle
+		// detector calls a screen done after four identical samples 65,536 instructions apart --
+		// about a quarter of a million instructions of stillness -- and a menu painting under a
+		// busy carousel holds a HALF-DRAWN frame still for longer than that.
+		//
+		// So a route that waits for 0xDDBC18E9 presses SELECT into a screen that is still drawing,
+		// which is exactly when a press is swallowed, and then sees 0x43779DC8 and concludes the
+		// select did not land. It did not, and the route is why. The fix is to let the paint finish
+		// before reading the screen -- pressAndLetItFinish in rununtil_test.go, which runs a tail
+		// after the settle; with it the whole box-office-to-A-Z walk runs with no swallowed press
+		// at all. **This route should be moved onto it**, and its two pins re-derived as finished
+		// frames at the same time; it is left alone here only because doing that blind would
+		// re-pin the grid route on hashes nobody has looked at.
 		tvGuideMenuRedrawn = 0x43779DC8
 	)
 	menu := press(keyBoxOffice, "box office", 80_000_000)

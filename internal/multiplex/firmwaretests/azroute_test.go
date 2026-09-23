@@ -130,3 +130,48 @@ func azPressFunc(t *testing.T, box *board.Runtime, pump func() error) pressFunc 
 		return drew
 	}
 }
+
+// openAllChannelsFinished is the route to the ALL CHANNELS grid, pinned on a FINISHED frame.
+//
+// route_test.go's version pins the TV GUIDE menu to 0xDDBC18E9, which is that menu MID-PAINT, and
+// pins the box office menu to a hash a finished paint does not produce either. Both were taken with
+// the settle detector, which calls a screen done after about a quarter of a million instructions of
+// stillness -- less than a menu painting under a busy carousel holds a half-drawn frame. That is
+// why SELECT "kept not landing" there: the route pressed into a screen that was still drawing.
+//
+// This one pins the single screen that has been verified by picture -- the ten-entry TV GUIDE menu,
+// finished, with ALL CHANNELS highlighted as entry 1 -- and takes ONE select from it. The
+// destination is deliberately not pinned: the grid filling is the thing under test, so its hash is
+// exactly what must be allowed to change. The artefact is the proof, as it has been for all five
+// wrong measurements this project has made of this screen.
+func openAllChannelsFinished(t *testing.T, press pressFunc, artefact string) uint32 {
+	t.Helper()
+	var seen []uint32
+	note := func(s uint32) uint32 { seen = append(seen, s); return s }
+
+	if drew := press(keyBoxOffice, "box office", 80_000_000); drew != 0 {
+		note(drew)
+	}
+	tab := uint32(0)
+	for attempt := 1; attempt <= 8 && tab != azTVGuideMenu; attempt++ {
+		if drew := press(keyLeft, fmt.Sprintf("left to the tv guide tab (%d)", attempt), 80_000_000); drew != 0 {
+			tab = note(drew)
+		}
+	}
+	if tab != azTVGuideMenu {
+		t.Fatalf("harness: never reached the finished TV GUIDE menu (%08X); screens seen: %08X. "+
+			"Every hash here is a FINISHED frame -- if the menu has genuinely changed, re-derive "+
+			"it with TestDumpEveryScreenOnTheAtoZWalk and look at the pictures",
+			uint32(azTVGuideMenu), seen)
+	}
+	grid := uint32(0)
+	for attempt := 1; attempt <= 6 && grid == 0; attempt++ {
+		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (%d)", attempt), 80_000_000)
+	}
+	if grid == 0 || grid == tab {
+		t.Fatalf("harness: SELECT never left the TV GUIDE menu (%08X); screens seen: %08X", tab, seen)
+	}
+	t.Logf("ALL CHANNELS opened on %08X -- READ %s, it is the only thing that says what it drew",
+		grid, artefact)
+	return grid
+}

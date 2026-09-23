@@ -31,54 +31,32 @@ run: build ## Build and run the emulator server
 test: ## Run the tests
 	go test ./...
 
-# Go's default per-package timeout is ten minutes, and it exists to catch a
-# HUNG test. It is not the right guard here: internal/broadcast and
-# internal/multiplex run real firmware for hundreds of millions of instructions
-# -- a couple of dozen boxes restored from a snapshot -- and the race detector
-# costs that about twelve times its plain runtime, so a minute and a quarter
-# here is a quarter of an hour there. It is sized for internal/multiplex, which
-# is the slowest, and it has needed raising twice as that package grew.
+# THE TWO PASSES, AND WHY THEY ARE TWO.
 #
-# Their own loops are the hang detector now. Every firmware loop runs under a
-# budget and fails BY NAME when the machine does not do what it was waiting for
-# -- see internal/multiplex/rununtil_test.go -- so a hang is reported as "the
-# box never asked" rather than as a timeout, which is a better failure anyway.
-# Raising this stops a slow but healthy run being reported as a hang; it does
-# not remove a guard, because the guard moved inside. That is only true while
-# the guard holds, so BEFORE RAISING IT AGAIN, check that every firmware loop
-# still early-exits: the two occasions this package crossed ten minutes were
-# both fixed budgets, not slow machines, and a timeout raised over one of those
-# is hiding a bug rather than paying for the detector.
+# The race detector costs this project's firmware tests EIGHT TIMES their plain runtime -- measured
+# 2026-09-23 on one real-firmware test, 1.88s against 15.06s -- and it is looking for something that
+# cannot be there. These tests drive a deliberately single-threaded emulator; "no goroutine in the
+# instruction loop" is one of the recorded architecture decisions, and concurrency lives at the
+# edges. At eight times, the firmware package alone runs for hours: the race pass was not slow, it
+# was UNRUNNABLE inside any timeout worth setting, and a check nobody can run gates nothing. That is
+# what this target used to be, and raising the cap three times is what kept it looking fine.
 #
-# THE THIRD RAISE, 2026-09-22, AND THE NUMBERS THIS TIME ARE MEASURED RATHER
-# THAN ESTIMATED. internal/multiplex/firmwaretests runs in 237s plain with the
-# tests it had before that date and about 320s with the wedge guard and the
-# card-policy arms added; one representative firmware test timed plain and then
-# under the detector gives the multiplier, and it is 8.5x, not the "twelve"
-# guessed above. So the package was ALREADY over thirty minutes at 237s x 8.5 =
-# 2015s BEFORE anything was added to it -- the raise is not paying for the new
-# tests, it is paying for a package that had quietly crossed the line.
+# So the boxes SKIP UNDER -race, gated at the two restoredBox fixtures the way they already skip
+# under -short, and the detector runs over everything else -- internal/web and the transport, where
+# a race can actually live, and where it costs seconds. The two firmware packages complete the race
+# pass in about eleven seconds between them.
 #
-# The condition above was checked rather than waved through. Every firmware loop
-# still early-exits: each press returns as soon as the screen settles, each
-# acquisition returns as soon as the block has registered, and each policy arm
-# returns as soon as the queue fills. The two loops that run to their full count
-# do so BY DESIGN, because what they demonstrate is a negative -- that the queue
-# never fills and the box never stops answering -- and a negative has no early
-# exit by definition. Those are bounded counts of bounded work, not a budget
-# waiting for something that will never arrive, which is the shape the rule
-# above exists to catch.
+# The plain pass then runs everything INCLUDING the boxes, which is where they are actually
+# exercised. Its timeout is a HANG guard and nothing else: every firmware loop runs under an
+# instruction budget and fails BY NAME when the machine does not do what it was waiting for (see
+# internal/multiplex/firmwaretests/rununtil_test.go), so a genuine hang is reported as "the box
+# never asked" rather than as a timeout. Before raising this again, check that guard still holds --
+# the two occasions this package crossed ten minutes were both fixed budgets, not slow machines.
 #
-# Sixty rather than forty-five so this does not need touching again the next
-# time a firmware test is added, and because a slow machine has nowhere else to
-# go: the detector adds nothing to a deliberately single-threaded emulator loop,
-# so the honest long-term fix is to stop running these particular tests under it
-# at all, not to keep buying minutes.
-#
-# CI is unaffected either way: the firmware is not redistributable, so these
-# tests skip there.
-test-race: ## Run the tests under the race detector
-	go test -race -timeout 60m ./...
+# CI is unaffected either way: the firmware is not redistributable, so these tests skip there.
+test-race: ## Run the race detector where races can be, then the firmware boxes plain
+	go test -race -timeout 20m ./...
+	go test -timeout 150m ./...
 
 test-cover: ## Run the tests with coverage
 	go test -cover ./...

@@ -86,6 +86,21 @@ func restoredBox(t *testing.T) *board.Runtime {
 	if testing.Short() {
 		t.Skip("skipping a real-firmware box under -short; run ./ctl.sh test for these")
 	}
+	// AND -race SKIPS THEM TOO, which is a decision rather than a convenience. These tests drive a
+	// deliberately single-threaded emulator -- "no goroutine in the instruction loop" is one of
+	// this project's architecture decisions -- so the detector is hunting data races in a loop
+	// that structurally cannot have one. What it costs is not marginal: measured 2026-09-23 on one
+	// real-firmware test, 1.88s plain against 15.06s under -race, a multiplier of EIGHT. At that
+	// rate the firmware package alone runs for hours and `go test -race` cannot finish inside any
+	// timeout worth setting, so the race pass was not slow, it was UNRUNNABLE -- and a check
+	// nobody can run gates nothing.
+	//
+	// The races worth finding are in internal/web and the transport, which stay under the detector
+	// and cost seconds. The boxes are covered by the plain pass instead; ./ctl.sh test runs both.
+	if underRaceDetector {
+		t.Skip("skipping a real-firmware box under -race: the emulator is single-threaded by " +
+			"design, the detector costs 8x, and the plain pass covers these")
+	}
 	dir := filepath.Join("..", "..", "..", "firmware")
 	if _, err := os.Stat(filepath.Join(dir, firmware.FileU202)); os.IsNotExist(err) {
 		t.Skip("private firmware is not installed")

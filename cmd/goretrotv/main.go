@@ -426,9 +426,31 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	const inputInterval = 1024
 	const frameInterval = 500_000
 	const stateInterval = 4_000_000
+	const progressInterval = 5_000_000
+	// THRESHOLDS RATHER THAN MODULO, and it is not a micro-optimisation for its own sake. This
+	// loop runs once per EMULATED INSTRUCTION, and three of those intervals are not powers of two
+	// -- so `count % 500_000` and its two siblings each compiled to a 64-bit DIVISION on the
+	// hottest path in the program, tens of cycles apiece against an instruction that costs a few
+	// hundred. Comparing against a running threshold is the same schedule for an add.
+	//
+	// The counter advances by exactly one per Step (Runtime.Step sets Retired = i+1), so `count >=
+	// next` first holds at exactly the instruction `count % interval == 0` did, and stepping the
+	// threshold by its interval keeps them in lockstep for ever. Same instants, no division.
+	align := func(now, interval uint64) uint64 {
+		if now%interval == 0 {
+			return now
+		}
+		return (now/interval + 1) * interval
+	}
+	start := box.Machine.Retired
+	nextInput := align(start, inputInterval)
+	nextFrame := align(start, frameInterval)
+	nextState := align(start, stateInterval)
+	nextProgress := align(start, progressInterval)
 	for {
 		count := box.Machine.Retired
-		if count%inputInterval == 0 {
+		if count >= nextInput {
+			nextInput = count + inputInterval
 			// The cancellation is returned with the cause rather than dropped.
 			// stopContext is the process shutting down and its caller has
 			// nothing to report, but a loop that swallows the only error it
@@ -461,7 +483,8 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 			return stopHalt, err
 		}
 		count = box.Machine.Retired
-		if count%5_000_000 == 0 {
+		if count >= nextProgress {
+			nextProgress = count + progressInterval
 			if logger.Enabled(ctx, slog.LevelDebug) {
 				frame, err := box.Compose()
 				if err != nil {
@@ -471,12 +494,14 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 					"csi_pending", box.CSI.Pending(), "frame_hash", fmt.Sprintf("%08X", statehash.HashBytes(frame.Pix)))
 			}
 		}
-		if count%frameInterval == 0 {
+		if count >= nextFrame {
+			nextFrame = count + frameInterval
 			if err := publishFrame(box, transport); err != nil {
 				return stopHalt, err
 			}
 		}
-		if !ready && count%stateInterval == 0 {
+		if !ready && count >= nextState {
+			nextState = count + stateInterval
 			evidence, err := readBootEvidence(box)
 			if err != nil {
 				return stopHalt, err

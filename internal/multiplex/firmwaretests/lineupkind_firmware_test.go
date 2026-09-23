@@ -79,14 +79,41 @@ func TestWhichLineUpKindTheAllChannelsGridWants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// THE COUNT IS THE RESULT, NOT A PRECONDITION. A first version waited for the whole block to
+	// register and failed when it did not -- which is the finding, reported as a broken harness.
+	// Only the channel left at kind 1 stores anything, so the wait is expected to time out and
+	// what matters is HOW MANY arrived.
 	want := programmesInTheBlock(t, guide, day)
 	registered := 0
-	if at := runUntil(t, box, transmitter, 120_000_000,
-		registeringProgrammes(box, want, &registered)); at < 0 {
-		t.Fatalf("harness: only %d of %d programmes registered, so the store is not populated and "+
-			"an empty grid would measure the broadcast rather than the screen", registered, want)
-	}
+	runUntil(t, box, transmitter, 120_000_000, registeringProgrammes(box, want, &registered))
 	runUntil(t, box, transmitter, 20_000_000, func(int) bool { return false })
+
+	// Sky One is the only channel still at kind 1, and it has six programmes in the 18:00-23:59
+	// block; the schedule is the authority on that rather than a constant written here.
+	control := 0
+	for i := range listings.Services {
+		if listings.Services[i].Kind != 1 {
+			continue
+		}
+		for n := range listings.Services[i].Programmes {
+			start, err := listings.Services[i].Programmes[n].StartSeconds()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if multiplex.QuarterOf(start) == 3 {
+				control++
+			}
+		}
+	}
+	t.Logf("%d of %d programmes registered; the one channel left at kind 1 has %d in the block",
+		registered, want, control)
+	if registered != control {
+		t.Errorf("%d programmes registered, but only the kind-1 channel's %d should have been "+
+			"stored. THE MEASUREMENT (2026-09-22) is that the line-up entry's kind byte GATES "+
+			"storage and 1 is the only value that stores: sweeping 1,2,3,4,5,8 across six "+
+			"channels registered exactly and only Sky One's six. Either that has changed or this "+
+			"probe has", registered, control)
+	}
 
 	// DID THE BYTE ARRIVE, AND WHERE DID IT LAND? Both questions, one dump.
 	records := serviceRecords(t, box, listings.Services)
@@ -134,61 +161,12 @@ func TestWhichLineUpKindTheAllChannelsGridWants(t *testing.T) {
 	t.Logf("%d of %d changed channels carry their kind byte, so it travelled the signal end to end",
 		carried, len(records)-1)
 
-	press := func(raw uint8, name string, budget int) uint32 {
-		t.Helper()
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.Step(); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
-		t.Logf("%-32s drew %08X", name, settled)
-		return settled
-	}
-
-	// The broadcast is not the ordinary one, so the pinned route's hashes cannot apply and the
-	// PICTURE is the proof.
-	settled := openAllChannelsUnpinned(t, press, ".artifacts/lineup-kind-all-channels.png")
-	// PAST THE SETTLE. Four identical frames is not a finish -- the rows paint in bursts that hold
-	// still across four samples and carry on afterwards, and every measurement of this screen taken
-	// at a settle in this project's history was taken too early.
-	final := settled
-	for i := 0; i < 50_000_000; i++ {
-		if err := transmitter.Pump(box.Machine.Retired); err != nil {
-			t.Fatal(err)
-		}
-		if err := box.Step(); err != nil {
-			t.Fatal(err)
-		}
-		if i%1_000_000 == 0 {
-			final = screenNow(t, box)
-		}
-	}
-	if err := dumpScreen(t, box, "lineup-kind-all-channels.png"); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("the grid settled on %08X and finished on %08X", settled, final)
-	t.Logf("READ .artifacts/lineup-kind-all-channels.png -- a row with programmes names the kind "+
-		"value that channel was sent, and a run where all six still read '..no listings available' "+
-		"eliminates this byte for values %v", assign)
+	// NO NAVIGATION. This probe used to walk to the ALL CHANNELS grid afterwards, from when the
+	// question was "which kind value makes the grid draw". The answer turned out to be upstream of
+	// the grid entirely -- five of the six channels store NOTHING -- so a grid reached in that
+	// state measures a box with almost no listings, and the route cannot even name the screens on
+	// the way there. The registration count IS the finding, and it is asserted above.
+	t.Logf("THE KIND BYTE GATES STORAGE AND 1 IS THE ONLY VALUE THAT STORES. Swept %v across the "+
+		"six channels: only the one left at 1 registered anything. What the other values MEAN is "+
+		"not established and is not guessed at here.", assign)
 }

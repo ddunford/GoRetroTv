@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:a686e0b0adfe61a1258e466896baecce93b8b9a89f033830ef3b05c611b87eb8 @ 2026-09-22 -->
+<!-- fingerprint: sha256:37945d626269321b65efd48dddb0fed1704fda71b3fae4779f888b819f3e6a46 @ 2026-09-23 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:a686e0b0adfe61a1258e466896baecce93b8b9a89f033830ef3b05c611b87eb8 @ 2026-09-22 -->
+<!-- fingerprint: sha256:37945d626269321b65efd48dddb0fed1704fda71b3fae4779f888b819f3e6a46 @ 2026-09-23 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -2368,6 +2368,12 @@ service acquisition starts this box asks for:
     table 0x42  mask 0xFB  extension 0x0000     the SDT, transport 0
     table 0x4A  mask 0xFF  extension 0x1000     the BAT, bouquet 4096
     table 0x73  mask 0xFF                       the TOT
+
+**That is the list AT ACQUISITION and it is not the whole list.** The box arms more filters later,
+and which ones depends on what the viewer does: a table `0xC1` filter for the index, a title filter
+per day, and — only once it TUNES — `4e/fe 00/ff 64/ff` on PID `0x0012`, the present/following EIT
+of the service it has just selected. A census taken at acquisition and read as "everything the box
+wants" would miss the one filter this port answered last.
 
 `__siIds()` now takes its ids from there in preference to anything else, because a hardware
 filter is the most direct statement of intent there is. **The bouquet id was wrong: we were
@@ -4697,7 +4703,7 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:600a69e4855affb7f4db425f41c67fe38aab9086bff90abeac7a161b6f942eec @ 2026-09-22 -->
+<!-- fingerprint: sha256:497d57126fe2c8f86b0240ac9387e76182569638f6658f3f2e4884a46812184c @ 2026-09-23 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -6887,7 +6893,7 @@ it waiting for state that was already there, is what made this screen expensive 
 ## The clock table is the TOT, and the listings PID is a day-of-eight rotation
 
 <!-- anchor: internal/broadcast/carousel.go -->
-<!-- fingerprint: sha256:4bc87a9db273da5e898e449862bd29cfc7e88f98bc1c7e6c15f01fb11a18c956 @ 2026-09-22 -->
+<!-- fingerprint: sha256:fef9eb50fb117ef329736a86b8558984179d58d75b1c7b59f4af9f84a1c35954 @ 2026-09-23 -->
 
 *Measured on the Go port, 20 Sep 2026, against the post-acquisition snapshot fixture (a warm box,
 1.1 billion instructions retired). Three findings, two of which correct entries above, and one
@@ -6909,8 +6915,15 @@ At rest the fixture's match units are:
 filter nothing has ever answered.** A match unit skips `section_length`, so byte 0 is the table id
 and bytes 1..2 are the extension -- which is exactly how unit 3 reads as "BAT, bouquet `0x1000`" and
 unit 1 as "NIT, network `0x0020`". So unit 10 asks for a **long-form section with table id `0xC1`
-and an extension whose high byte is `0x00` or `0x01`**. This transmitter has never sent one: the
-builders emit `0x40`, `0x42`, `0x4A`, `0x70`, `0x73` and `0xA0..0xA3`, and nothing else.
+and an extension whose high byte is `0x00` or `0x01`**. At the time this was written the
+transmitter had never sent one: the builders emitted `0x40`, `0x42`, `0x4A`, `0x70`, `0x73` and
+`0xA0..0xA3`, and nothing else.
+
+> **That is no longer true and the change is the point.** The A-Z index ships table `0xC1` on PID
+> `0x52`, and the present/following EIT ships `0x4E` on PID `0x0012`; a PAT builder exists for
+> `0x00`. Unit 10 is answered. The differential numbers below were also re-based in September once
+> the `0xB2` descriptor made the old method stop discriminating — see *The `0xC1` differential,
+> re-based on a delivery the box refuses*, at the end of this file, for the current ones.
 
 **Answered once, and the box did a great deal with it.** `TestWhetherAnythingWantsTableC1` restores
 two boxes from the same snapshot, lets both acquire the same block's listings, and runs both for
@@ -9214,3 +9227,65 @@ executed a single instruction in this project's history.
   what it read.
 - **Which of the 86 runs is the parser and which is the RTOS carrying it.** The set is a starting
   point for a disassembly, not a function.
+
+## The `0xC1` differential, re-based on a delivery the box refuses
+
+<!-- anchor: internal/multiplex/firmwaretests/tablec1_signature_firmware_test.go -->
+<!-- fingerprint: sha256:8bc0524e4b919da57c8cf8e3f44349d9b0ecc9b30715566cf2280c6e1187b732 @ 2026-09-23 -->
+
+**The sweeps above were measured by differencing a box that was delivered a section against a box
+that was delivered NOTHING, and on 2026-09-23 that stopped being a measurement.** Broadcasting the
+`0xB2` guide-row descriptor put more work into the SI path that every delivered section shares, so
+the cost of a section merely ARRIVING — ring drain, dispatcher, table check, allocate, free — rose
+from about twenty exclusive PCs to about eight hundred:
+
+    PID 0x52 ext 0x0100 -> 1362 exclusive PCs   the target
+    PID 0x11 ext 0x0100 ->  808 exclusive PCs   a PID nothing dispatches 0xC1 from
+    PID 0x52 ext 0x0200 ->  826 exclusive PCs   an extension no arm claims
+
+Both probes' own guards fired and both were right: at that margin the addressing is not
+established. **Nothing about the `0xC1` consumer had changed — the instrument had.** This is the
+same shape as the census that assumed a `0xFE` mask and the lookup that built its key with the
+wrong hex casing: an instrument whose subject moved underneath it, reporting confidently.
+
+**The control for a section that is dispatched is a section that is REFUSED, not silence.** So the
+differential is now taken against an acceptance signature:
+
+    signature = (accepted A ∩ accepted B) \ (control ∪ refused A ∪ refused B)
+
+Two accepted extensions from DIFFERENT arms of the dispatcher (`0x0000` and `'A'`), intersected,
+leave what dispatching itself does rather than what either arm does; subtracting two refused
+deliveries removes everything that arriving costs. A third refused extension, which defined nothing,
+then reports how much of the signature a section the box throws away hits by accident — the
+instrument's own noise, measured in the same run rather than assumed.
+
+**The floor is zero, and every verdict is now a cliff rather than a ratio:**
+
+    the acceptance path                       473 addresses
+    a refused delivery hits                     0 of them
+
+    ext 0x0040  outside 'A'..'Z'                0 of 473
+    ext 0x004D  a LETTER                      473 of 473
+    ext 0x005A  a LETTER                      473 of 473
+    ext 0x005B  outside 'A'..'Z'                0 of 473
+    ext 0x0100  the genre family              444 of 473
+    ext 0x00FF  its own arm                   467 of 473
+    ext 0x01CF  the top of the genre range    444 of 473
+    ext 0x01D0  one past the top                0 of 473
+    PID 0x11    the same section, wrong PID     0 of 473
+
+A floor of exactly zero is what this emulator gives any honest differential, and for the same
+reason the EIT probe's control run gives zero: there is no goroutine in the instruction loop, so
+two runs with the same input execute the same addresses. Where a difference appears, it is the
+whole difference.
+
+**Every earlier conclusion survives and is now unambiguous.** `0x01CF` accepted against `0x01D0`
+refused is 444 against 0 where it was 1357 against 826; the letters are whole-path acceptances; the
+wrong PID does nothing at all.
+
+**And a sub-finding falls out.** The letters reproduce the path WHOLE while the genre arm reproduces
+all but about thirty addresses of it. The signature is built from `0x0000` and `'A'` — the first two
+arms — so those thirty belong to work those two share and the genre arm does not. That is the family
+split this file already argues for on other grounds: `0x0000` and the letters are the alphabetical
+index behind A-Z LISTINGS, and `0x0100..0x01CF` is sixteen genres by four six-hour blocks. It is
+logged rather than asserted, because the exact number belongs to this fixture.

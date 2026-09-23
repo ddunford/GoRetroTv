@@ -27,8 +27,11 @@ import (
 // and unit 1 as "NIT, network 0x0020", exactly as the record labels them. Unit
 // 10 therefore asks for a LONG-FORM SECTION WITH TABLE ID 0xC1 and an extension
 // whose high byte is 0x00 or 0x01. We have never transmitted a 0xC1 section:
-// the builders emit 0x40, 0x42, 0x4A, 0x70, 0x73 and 0xA0..0xA3 and nothing
-// else.
+// the builders emitted 0x40, 0x42, 0x4A, 0x70, 0x73 and 0xA0..0xA3 and nothing
+// else WHEN THIS WAS WRITTEN. They no longer do: the A-Z index ships 0xC1 on
+// PID 0x52 and the present/following EIT ships 0x4E on PID 0x0012, so unit 10
+// is answered by the ordinary broadcast and this probe's delivery is no longer
+// the only one the box sees.
 //
 // THE INSTRUMENT IS A DIFFERENTIAL, because it needs no prior knowledge of
 // which guest code would consume this. Two boxes are restored from the same

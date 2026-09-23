@@ -2,10 +2,8 @@ package firmwaretests_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/ddunford/goretrotv/internal/dvb"
-	"github.com/ddunford/goretrotv/internal/multiplex"
 )
 
 // WHICH PID AND WHICH EXTENSION DOES THE 0xC1 CONSUMER ACTUALLY WANT?
@@ -36,94 +34,79 @@ import (
 // because sharing a box couples the case index to the section version, and the
 // first version of this sweep came back alternating exactly with that index.
 func TestWhichPIDAndExtensionTheTableC1ConsumerWants(t *testing.T) {
-	// exclusive counts the guest PCs a delivered section causes that do not run
-	// without it. table 0 means deliver nothing, which is the control.
-	exclusive := func(t *testing.T, table byte, pid, extension uint16, control map[uint32]int) (map[uint32]int, int) {
+	sig := acceptanceSignature(t)
+	t.Logf("the acceptance path is %d addresses; a refused delivery hits %d of them by accident",
+		len(sig.pcs), sig.floor)
+
+	report := func(label string, pid, extension uint16) int {
 		t.Helper()
-		guide := demoGuide(t)
-		dict := demoDictionary(t)
-		box := restoredBox(t)
-		day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
-		transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
-		if err != nil {
-			t.Fatal(err)
-		}
-		want := programmesInTheBlock(t, guide, day)
-		registered := 0
-		if at := runUntil(t, box, transmitter, 15_000_000,
-			registeringProgrammes(box, want, &registered)); at < 0 {
-			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
-		}
-		if table != 0 {
-			marker := []byte{0xDE, 0xAD, 0xC1, 0x05, 0x5E, 0xC7, 0x10, 0x4E}
-			if err := box.Demux.Push(pid, sectionTableVersioned(table, extension, 0, marker)); err != nil {
-				t.Logf("    (not delivered: %v)", err)
-				return nil, -1
-			}
-		}
-		seen := make(map[uint32]int, 8192)
-		runUntil(t, box, transmitter, censusBudget, func(int) bool {
-			seen[box.Machine.Core.State().PC&^1]++
-			return false
-		})
-		if control == nil {
-			return seen, 0
-		}
-		n := 0
-		for pc := range seen {
-			if control[pc] == 0 {
-				n++
-			}
-		}
-		return seen, n
+		n := sig.overlap(indexRun(t, pid, extension, true))
+		t.Logf("  PID %#04x ext %04X -> %4d of %d   %s", pid, extension, n, len(sig.pcs), label)
+		return n
 	}
 
-	// FOUR ACQUISITIONS, NOT FIFTEEN. The exhaustive sweep that established this
-	// is written up in docs/reference/digibox-emulation.md and does not need
-	// re-deriving on every run: at fifteen it put internal/multiplex past the
-	// Makefile's 30-minute ceiling and failed the whole suite. What belongs here
-	// is a regression that ASSERTS the finding -- 0xC1 on PID 0x52 with
-	// extension 0x0100 is special and the two nearest misses are not.
-	control, _ := exclusive(t, 0, 0, 0, nil)
-	t.Logf("control: %d distinct PCs with nothing delivered", len(control))
-
-	// THE EXTENSION IS A LETTER. 0x800C4F94 compares it against 65 and 91 -- 'A'
-	// and one past 'Z' -- and uses (extension + bias) * 4 to index a table of
-	// list heads at 0x800C51A0, freeing the list outright for anything outside
-	// that range. The earlier reading here, "low byte must be 0x00", was an
-	// artefact of which values this sweep happened to sample: 0x0001 and 0x01FF
-	// were tried and the letters never were.
-	for _, ext := range []uint16{0x0040, 0x0041, 0x004D, 0x005A, 0x005B} {
-		_, n := exclusive(t, 0xC1, 0x52, ext, control)
+	// THE EXTENSION IS A LETTER. 0x800C4F94 compares it against 65 and 91 -- 'A' and one past 'Z'
+	// -- and uses (extension + bias) * 4 to index a table of list heads at 0x800C51A0, freeing the
+	// list outright for anything outside that range. The earlier reading here, "low byte must be
+	// 0x00", was an artefact of which values this sweep happened to sample: 0x0001 and 0x01FF were
+	// tried and the letters never were.
+	//
+	// 'A' is left out: it is one of the two deliveries the signature is built from, so its overlap
+	// is a tautology rather than a measurement.
+	for _, c := range []struct {
+		ext    uint16
+		letter bool
+	}{{0x0040, false}, {0x004D, true}, {0x005A, true}, {0x005B, false}} {
 		label := "outside 'A'..'Z'"
-		if ext >= 0x41 && ext <= 0x5A {
-			label = "a LETTER: " + string(rune(ext))
+		if c.letter {
+			label = "a LETTER: " + string(rune(c.ext))
 		}
-		t.Logf("  extension %04X -> %4d exclusive PCs   (%s)", ext, n, label)
+		n := report(label, indexPID, c.ext)
+		if c.letter && n < len(sig.pcs)/2 {
+			t.Errorf("extension %04X is a letter and reproduced only %d of the acceptance path's "+
+				"%d addresses, so the 'A'..'Z' arm is not where the decompiler puts it",
+				c.ext, n, len(sig.pcs))
+		}
+		if !c.letter && n > sig.floor*2 {
+			t.Errorf("extension %04X is outside 'A'..'Z' and still reproduced %d of the "+
+				"acceptance path against a floor of %d, so the letter bound is wrong",
+				c.ext, n, sig.floor)
+		}
 	}
 
-	_, onTarget := exclusive(t, 0xC1, 0x52, 0x0100, control)
-	_, wrongPID := exclusive(t, 0xC1, 0x11, 0x0100, control)
-	_, wrongExt := exclusive(t, 0xC1, 0x52, 0x0200, control)
-	t.Logf("PID 0x52 ext 0x0100 -> %d exclusive PCs", onTarget)
-	t.Logf("PID 0x11 ext 0x0100 -> %d exclusive PCs   (wrong PID)", wrongPID)
-	t.Logf("PID 0x52 ext 0x0200 -> %d exclusive PCs   (extension outside 0x0000/0x0100)", wrongExt)
+	onTarget := report("the target", indexPID, 0x0100)
+	wrongPID := report("a PID nothing dispatches 0xC1 from", 0x11, 0x0100)
+	wrongExt := report("an extension no arm claims", indexPID, 0x0200)
 
-	// Deliberately loose bounds. The exact counts -- 544, 8 and 22 when this was
-	// measured -- are a property of this fixture and this instruction budget,
-	// and pinning them would turn any unrelated change into a false finding.
-	// What must hold is that the addressing DISCRIMINATES.
-	if onTarget < 100 {
-		t.Errorf("0xC1 on PID 0x52 extension 0x0100 woke only %d exclusive PCs; it woke 544 when this was "+
-			"established, so either the consumer is gone or this instrument is broken", onTarget)
+	// A SUB-FINDING WORTH LOGGING RATHER THAN ASSERTING. The letters reproduce the acceptance path
+	// WHOLE and 0x0100 reproduces all but about thirty of it, every time. The signature is built
+	// from 0x0000 and 'A' -- the dispatcher's first two arms -- so those thirty addresses are work
+	// those two share and the genre arm does not, which is exactly the family split the record
+	// already argues for on other grounds: 0x0000 and the letters are the alphabetical index, and
+	// 0x0100..0x01CF is sixteen genres by four blocks. It is not asserted because the exact number
+	// belongs to this fixture, and pinning it would turn an unrelated change into a false finding.
+	t.Logf("the letters reproduce the path whole (%d of %d) and the genre arm reproduces %d, so "+
+		"about %d addresses belong to the alphabetical family rather than to dispatch itself",
+		len(sig.pcs), len(sig.pcs), onTarget, len(sig.pcs)-onTarget)
+
+	// THE VERDICTS ARE STATED AGAINST THE MEASURED FLOOR, not against constants. An accepted
+	// delivery reproduces most of the acceptance path; a refused one reproduces about as much of
+	// it as a refused delivery that helped define nothing. The old form of this test compared
+	// every case against a box that had been delivered NOTHING, which counted the cost of a
+	// section ARRIVING as evidence of acceptance and stopped discriminating the day that cost
+	// went up.
+	if onTarget < len(sig.pcs)/2 {
+		t.Errorf("0xC1 on PID %#04x extension 0x0100 reproduced only %d of the acceptance path's "+
+			"%d addresses, so either the consumer is gone or this instrument is broken",
+			uint16(indexPID), onTarget, len(sig.pcs))
 	}
-	if wrongPID*4 >= onTarget {
-		t.Errorf("the wrong PID woke %d exclusive PCs against the target's %d -- too close to call the "+
-			"addressing established", wrongPID, onTarget)
+	if wrongPID > sig.floor*2 {
+		t.Errorf("the same section on PID 0x11 reproduced %d of the acceptance path against a "+
+			"floor of %d -- the PID does not discriminate", wrongPID, sig.floor)
 	}
-	if wrongExt*4 >= onTarget {
-		t.Errorf("an extension outside 0x0000/0x0100 woke %d against the target's %d -- the extension "+
-			"no longer discriminates", wrongExt, onTarget)
+	if wrongExt > sig.floor*2 {
+		t.Errorf("extension 0x0200 reproduced %d of the acceptance path against a floor of %d -- "+
+			"the extension does not discriminate", wrongExt, sig.floor)
 	}
 }
 

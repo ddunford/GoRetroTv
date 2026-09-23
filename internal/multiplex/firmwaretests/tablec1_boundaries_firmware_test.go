@@ -2,9 +2,6 @@ package firmwaretests_test
 
 import (
 	"testing"
-	"time"
-
-	"github.com/ddunford/goretrotv/internal/multiplex"
 )
 
 // THE DISPATCH BOUNDARIES, HELD AS PREDICTIONS THE BOX CAN FALSIFY.
@@ -35,92 +32,39 @@ import (
 //	        also rejects.
 //	0x01D0  must be REJECTED -- one past the top. Nothing but a real bound produces a cliff here.
 func TestTheIndexDispatchBoundariesAreWhereTheDecompilerSaysTheyAre(t *testing.T) {
-	if testing.Short() {
-		t.Skip("four acquisitions of a real box")
-	}
-	control := indexCensusControl(t)
-	t.Logf("control: %d distinct PCs with nothing delivered", len(control))
+	sig := acceptanceSignature(t)
+	t.Logf("the acceptance path is %d addresses; a refused delivery hits %d of them by accident",
+		len(sig.pcs), sig.floor)
 
-	accepted := func(ext uint16) int {
-		n := indexCensus(t, ext, control)
-		t.Logf("  extension %04X -> %4d exclusive PCs", ext, n)
+	// EVERY CASE IS READ AGAINST THE SAME MEASURED FLOOR. This used to difference each delivery
+	// against a box that had been delivered NOTHING, which counts the whole cost of a section
+	// ARRIVING as though it were the dispatcher running -- and that cost went up by a factor of
+	// forty when the 0xB2 descriptor shipped, taking the cliff at 0x01CF with it. The three
+	// extensions here are the three the decompiled rule can FAIL; the signature they are measured
+	// against is built from extensions no probe is trying to decide.
+	reached := func(ext uint16) int {
+		t.Helper()
+		n := sig.overlap(indexRun(t, indexPID, ext, true))
+		t.Logf("  extension %04X -> %4d of %d addresses of the acceptance path", ext, n, len(sig.pcs))
 		return n
 	}
-	ff := accepted(0x00ff)
-	top := accepted(0x01cf)
-	past := accepted(0x01d0)
+	ff := reached(0x00ff)
+	top := reached(0x01cf)
+	past := reached(0x01d0)
 
-	// The floor a 0xC1 reaches when it passes the table check and fails the extension one was
-	// measured at 22 exclusive PCs; an accepted one reached 492 and 544. The bounds are loose
-	// because the exact counts belong to this fixture and this budget -- what must hold is the
-	// CLIFF, and that it falls between 0x01CF and 0x01D0 rather than somewhere the older rule put it.
-	if ff < 100 {
-		t.Errorf("extension 0x00FF woke only %d exclusive PCs, so the decompiled 0x00FF arm is "+
-			"wrong and the earlier 'low byte must be 0x00' rule stands", ff)
+	if ff < len(sig.pcs)/2 {
+		t.Errorf("extension 0x00FF reproduced only %d of the acceptance path's %d addresses, so "+
+			"the decompiled 0x00FF arm is wrong and the earlier 'low byte must be 0x00' rule "+
+			"stands", ff, len(sig.pcs))
 	}
-	if top < 100 {
-		t.Errorf("extension 0x01CF woke only %d exclusive PCs, so the genre range does not reach "+
-			"the top of 0x0100..0x01CF and the slot arithmetic is not what was decompiled", top)
+	if top < len(sig.pcs)/2 {
+		t.Errorf("extension 0x01CF reproduced only %d of the acceptance path's %d addresses, so "+
+			"the genre range does not reach the top of 0x0100..0x01CF and the slot arithmetic is "+
+			"not what was decompiled", top, len(sig.pcs))
 	}
-	if past*4 >= top {
-		t.Errorf("extension 0x01D0 woke %d exclusive PCs against 0x01CF's %d -- there is no bound "+
-			"at 0x01CF, so the sixteen-by-four reading of the genre range is wrong", past, top)
+	if past > sig.floor*2 {
+		t.Errorf("extension 0x01D0 reproduced %d of the acceptance path against a floor of %d -- "+
+			"there is no bound at 0x01CF, so the sixteen-by-four reading of the genre range is "+
+			"wrong", past, sig.floor)
 	}
-}
-
-// indexCensusControl and indexCensus are the same differential the table 0xC1 sweep uses: a box
-// that is delivered nothing, and a box that is delivered one section, counting the guest PCs the
-// section alone causes. A section that is decoded and thrown away still reaches a floor of a
-// couple of dozen, so the question is never "did anything happen" but "did it do the work".
-func indexCensusControl(t *testing.T) map[uint32]int {
-	t.Helper()
-	seen, _ := indexCensusRun(t, false, 0, nil)
-	return seen
-}
-
-func indexCensus(t *testing.T, extension uint16, control map[uint32]int) int {
-	t.Helper()
-	_, n := indexCensusRun(t, true, extension, control)
-	return n
-}
-
-func indexCensusRun(t *testing.T, deliver bool, extension uint16,
-	control map[uint32]int) (map[uint32]int, int) {
-	t.Helper()
-	guide := demoGuide(t)
-	dict := demoDictionary(t)
-	box := restoredBox(t)
-	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
-	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := programmesInTheBlock(t, guide, day)
-	registered := 0
-	if at := runUntil(t, box, transmitter, 15_000_000,
-		registeringProgrammes(box, want, &registered)); at < 0 {
-		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
-	}
-	if deliver {
-		marker := []byte{0xDE, 0xAD, 0xC1, 0x05, 0x5E, 0xC7, 0x10, 0x4E}
-		if err := box.Demux.Push(0x52, sectionTableVersioned(0xC1, extension, 0, marker)); err != nil {
-			t.Fatalf("harness: extension %04X was not delivered at all (%v), so its count would "+
-				"measure the push and not the consumer", extension, err)
-		}
-	}
-	seen := make(map[uint32]int, 8192)
-	runUntil(t, box, transmitter, censusBudget, func(int) bool {
-		seen[box.Machine.Core.State().PC&^1]++
-		return false
-	})
-	if control == nil {
-		return seen, 0
-	}
-	n := 0
-	for pc := range seen {
-		if control[pc] == 0 {
-			n++
-		}
-	}
-	return seen, n
 }

@@ -129,7 +129,7 @@ func TestTheClockTableChoosesTheDayAndThePIDTheBoxAsksFor(t *testing.T) {
 // the clock.
 func pushAcquisitionBAT(t *testing.T, box *board.Runtime, bouquetID, networkID uint16) {
 	t.Helper()
-	section, err := broadcast.BAT(bouquetID, 1, "Sky", []broadcast.Transport{{
+	sections, err := broadcast.BAT(bouquetID, 1, "Sky", []broadcast.Transport{{
 		ID: networkID, NetworkID: networkID, FrequencyMHz: 11778, OrbitTenths: 282,
 		SymbolRate: 27500, FEC: 2,
 		Services: []broadcast.Service{{ID: 0x0064, Name: "Sky One"}},
@@ -137,9 +137,7 @@ func pushAcquisitionBAT(t *testing.T, box *board.Runtime, bouquetID, networkID u
 			{ServiceID: 0x0064, Kind: 1, Listings: 0x0bb8, Extra: 0x1770, Channel: 101},
 		},
 	}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	section := oneSection(t, sections, err)
 	if err := box.Demux.Push(0x11, section); err != nil {
 		t.Fatal(err)
 	}

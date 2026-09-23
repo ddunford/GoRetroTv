@@ -113,13 +113,11 @@ func TestGuestDecodesTheLineupOnlyThroughTheMeasuredGate(t *testing.T) {
 			box := restoredBox(t)
 			bouquetID, networkID := guestSubscription(t, box)
 
-			section, err := broadcast.BAT(bouquetID, 3, "Sky", []broadcast.Transport{{
+			sections, err := broadcast.BAT(bouquetID, 3, "Sky", []broadcast.Transport{{
 				ID: networkID, NetworkID: networkID, Lineup: lineup,
 				Services: []broadcast.Service{{ID: 0x0064}, {ID: 0x0065}, {ID: 0x0066}, {ID: 0x0067}},
 			}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			section := oneSection(t, sections, err)
 			if tc.mutate != nil {
 				section = tc.mutate(t, section)
 			}
@@ -177,7 +175,7 @@ func TestGuestIgnoresTheLineupWithoutTheDeclaredNamespace(t *testing.T) {
 	box := restoredBox(t)
 	bouquetID, networkID := guestSubscription(t, box)
 
-	section, err := broadcast.BAT(bouquetID, 4, "Sky", []broadcast.Transport{{
+	sections, err := broadcast.BAT(bouquetID, 4, "Sky", []broadcast.Transport{{
 		ID: networkID, NetworkID: networkID,
 		// The service is here for the linkage to name, not for this test: a
 		// BAT whose transport declares nothing has no service to point the
@@ -185,9 +183,7 @@ func TestGuestIgnoresTheLineupWithoutTheDeclaredNamespace(t *testing.T) {
 		Services: []broadcast.Service{{ID: 0x0064}},
 		Lineup:   []broadcast.LineupEntry{{ServiceID: 0x0064, Listings: 0x0bb8, Channel: 101}},
 	}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	section := oneSection(t, sections, err)
 	// Change only the specifier VALUE, from 2 to 9, and repair the CRC. The
 	// descriptor, its gate and its entries are untouched.
 	patched := append([]byte(nil), section...)

@@ -88,13 +88,11 @@ func TestGuideTakesTheAnsweredArmOnlyWithLinkageType91(t *testing.T) {
 			box := restoredBox(t)
 			bouquetID, networkID := guestSubscription(t, box)
 
-			section, err := broadcast.BAT(bouquetID, 5, "Sky", []broadcast.Transport{{
+			sections, err := broadcast.BAT(bouquetID, 5, "Sky", []broadcast.Transport{{
 				ID: networkID, NetworkID: networkID, Lineup: lineup,
 				Services: []broadcast.Service{{ID: 0x0064}, {ID: 0x0065}},
 			}})
-			if err != nil {
-				t.Fatal(err)
-			}
+			section := oneSection(t, sections, err)
 			if tc.linkageType != 0x91 {
 				section = repointLinkage(t, section, tc.linkageType)
 			}

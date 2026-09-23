@@ -331,7 +331,11 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 		return nil, err
 	}
 	m.sent.Lineup++
-	wave := make([]broadcast.Emission, 0, 3)
+	// SDT AND BAT ARE TABLES, AND EVERY SECTION OF THEM GOES OUT. Each is one section while the
+	// demo carries a handful of channels and several once it carries a real line-up; a wave that
+	// emitted only the first would announce the first twenty-five services and silently drop the
+	// rest.
+	wave := make([]broadcast.Emission, 0, 2+len(sdt)+len(bat))
 	// The NIT goes where the standard puts it and where the box is listening --
 	// but only once the box IS listening. A section on an unarmed PID is dropped
 	// by the hardware before any code sees it, so sending it early would not be
@@ -339,10 +343,12 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 	if sub.NITArmed {
 		wave = append(wave, broadcast.Emission{PID: sectionPIDNIT, Section: nit})
 	}
-	wave = append(wave,
-		broadcast.Emission{PID: sectionPIDSI, Section: sdt},
-		broadcast.Emission{PID: sectionPIDSI, Section: bat},
-	)
+	for _, section := range sdt {
+		wave = append(wave, broadcast.Emission{PID: sectionPIDSI, Section: section})
+	}
+	for _, section := range bat {
+		wave = append(wave, broadcast.Emission{PID: sectionPIDSI, Section: section})
+	}
 	return wave, nil
 }
 

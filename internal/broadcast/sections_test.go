@@ -31,10 +31,8 @@ func TestOracleSectionVectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sdt, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sdtSections, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
+	sdt := oneSection(t, sdtSections, err)
 	tdt, err := TDT(jan1998)
 	if err != nil {
 		t.Fatal(err)
@@ -92,10 +90,8 @@ func TestSectionsReachArmedDemuxFilters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sdt, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sdtSections, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
+	sdt := oneSection(t, sdtSections, err)
 	tdt, err := TDT(jan1998)
 	if err != nil {
 		t.Fatal(err)
@@ -177,17 +173,13 @@ func TestIdsAndVersionAreCallersInputs(t *testing.T) {
 	if !bytes.Contains(nit, []byte{0x45, 0x67, 0x89, 0xab}) {
 		t.Fatalf("transport IDs absent from NIT: %x", nit)
 	}
-	sdt, err := SDT(0x4567, 0x89ab, 7, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sdtSections, err := SDT(0x4567, 0x89ab, 7, nil)
+	sdt := oneSection(t, sdtSections, err)
 	if !bytes.Equal(sdt[3:6], []byte{0x45, 0x67, 0xcf}) || !bytes.Equal(sdt[8:10], []byte{0x89, 0xab}) {
 		t.Fatalf("SDT IDs/version = %x", sdt)
 	}
-	noPresent, err := SDT(1, 1, 0, []Service{{ID: 100, Name: "Test", NoEITPresent: true}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	noPresentSections, err := SDT(1, 1, 0, []Service{{ID: 100, Name: "Test", NoEITPresent: true}})
+	noPresent := oneSection(t, noPresentSections, err)
 	if noPresent[13] != 0xfc {
 		t.Fatalf("explicitly disabled present/following flag = %#x", noPresent[13])
 	}
@@ -334,10 +326,8 @@ func TestBATFramesTheBouquetAndItsTransport(t *testing.T) {
 	t.Parallel()
 	transport := sampleTransport()
 	transport.Lineup = sampleLineup()
-	section, err := BAT(0x1000, 3, "Sky", []Transport{transport})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sectionSections, err := BAT(0x1000, 3, "Sky", []Transport{transport})
+	section := oneSection(t, sectionSections, err)
 	if section[0] != 0x4a {
 		t.Fatalf("table id %#x, want 0x4a", section[0])
 	}
@@ -384,10 +374,8 @@ func TestBATCarriesTheLinkageInBothDescriptorLoops(t *testing.T) {
 	t.Parallel()
 	transport := sampleTransport()
 	transport.Lineup = sampleLineup()
-	section, err := BAT(0x1000, 3, "Sky", []Transport{transport})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sectionSections, err := BAT(0x1000, 3, "Sky", []Transport{transport})
+	section := oneSection(t, sectionSections, err)
 	bouquetLen := int(section[8]&0x0f)<<8 | int(section[9])
 	bouquetLoop := section[10 : 10+bouquetLen]
 	transportLoop := section[10+bouquetLen:]
@@ -474,10 +462,8 @@ func TestTheSDTDivergesByExactlyTheSpecifier(t *testing.T) {
 	widen(loopLengthAt)
 	spliced = withCRC(spliced)
 
-	got, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	gotSections, err := SDT(0x20, 0x20, 0, []Service{sampleService()})
+	got := oneSection(t, gotSections, err)
 	if !bytes.Equal(got, spliced) {
 		t.Fatalf("this port's SDT is not the oracle's plus the specifier and nothing else:\n"+
 			"  ours    = %x\n  expected = %x", got, spliced)
@@ -598,4 +584,21 @@ func TestEveryGenreExtensionLandsOnItsOwnSlot(t *testing.T) {
 	if _, err := IndexCategory(0, 4); err == nil {
 		t.Fatal("block 4 was accepted, but a day is four six-hour blocks")
 	}
+}
+
+// oneSection unwraps a table that this fixture expects to be a single section.
+//
+// SDT and BAT return TABLES now -- section_number 0 through last_section_number -- because a real
+// line-up does not fit in 1021 bytes. The fixtures below carry a channel or two and genuinely are
+// one section, so this states that expectation instead of indexing [0] and hoping.
+func oneSection(t *testing.T, sections [][]byte, err error) []byte {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("this fixture was expected to fit one section and built %d; a caller that puts "+
+			"only the first on air would drop the rest", len(sections))
+	}
+	return sections[0]
 }

@@ -190,64 +190,128 @@ func NIT(networkID uint16, version byte, networkName string, transports []Transp
 	return longSection(0x40, networkID, version, payload)
 }
 
-// SDT builds a service description table (actual transport, table 0x42).
-func SDT(transportID, networkID uint16, version byte, services []Service) ([]byte, error) {
-	payload := appendU16(nil, networkID)
-	payload = append(payload, 0xff)
-	for _, svc := range services {
-		providerName := svc.Provider
-		if providerName == "" {
-			providerName = "BSkyB"
-		}
-		provider, err := ascii(providerName)
+// SDT builds the service description table (actual transport, table 0x42), as one or more sections.
+//
+// IT RETURNS A TABLE, NOT A SECTION, and every caller must put all of them on air. A section stops
+// at 1021 bytes, which is twenty-five services with names and a guide row apiece -- so a single
+// section could never have carried Sky's line-up, and the ceiling was this port's rather than the
+// signal's. Services are packed in order and a new section is started when the next one will not
+// fit; section_number and last_section_number say so, and the guest reassembles them.
+func SDT(transportID, networkID uint16, version byte, services []Service) ([][]byte, error) {
+	// network_id and the reserved byte, repeated at the head of every section.
+	const head = 3
+	groups, err := packSections(len(services), head, func(i int) ([]byte, error) {
+		entry, err := sdtServiceEntry(services[i])
 		if err != nil {
-			return nil, fmt.Errorf("broadcast: service %d provider: %w", svc.ID, err)
+			return nil, err
 		}
-		name, err := ascii(svc.Name)
-		if err != nil {
-			return nil, fmt.Errorf("broadcast: service %d name: %w", svc.ID, err)
-		}
-		if len(provider) > 255 || len(name) > 255 || len(provider)+len(name)+9 > 255 {
-			return nil, fmt.Errorf("broadcast: service %d descriptor too long", svc.ID)
-		}
-		// THE PRIVATE DATA SPECIFIER GOES FIRST, AND IT IS WHY THE GUIDE'S LIST SCREENS ARE EMPTY.
-		//
-		// DVB scopes a private_data_specifier to the descriptors that FOLLOW it in the same loop,
-		// and the BAT already carries one ahead of its 0xB1 line-up for exactly that reason. What
-		// no loop carried until now is one per SERVICE -- so a service object in the box had no
-		// specifier at all.
-		//
-		// Measured, not reasoned: the ALL CHANNELS grid's row callback (0x800CB7B8) asks its
-		// object for descriptor tag 0x5F, gets ZERO, and returns -1 without drawing, once per
-		// channel. A census of every tag lookup both screens make found 0x4A and 0x4D answering
-		// non-zero and 0x5F answering ZERO on seven attempts out of seven, across both screens.
-		// Nothing in this box has ever had one.
-		desc := make([]byte, 0, 11+len(provider)+len(name))
-		desc = append(desc, 0x5f, 4, 0x00, 0x00, 0x00, skyPrivateDataSpecifier)
-		desc = append(desc, 0x48, byte(3+len(provider)+len(name)), serviceType(svc), byte(len(provider))) // #nosec G115 -- both lengths checked above
-		desc = append(desc, provider...)
-		desc = append(desc, byte(len(name))) // #nosec G115 -- name length checked above
-		desc = append(desc, name...)
-		// THE 0xB2 GOES INSIDE THE SAME NAMESPACE, after the specifier that opens it. It is what
-		// the grid's row-creating native reads into the row record, and it is only looked at
-		// because the 0x5F above declared the namespace it lives in.
-		row, err := guideRowDescriptor(svc.Row)
-		if err != nil {
-			return nil, fmt.Errorf("broadcast: service %d row descriptor: %w", svc.ID, err)
-		}
-		desc = append(desc, row...)
-		flags := byte(0xfc)
-		if svc.EITSchedule {
-			flags |= 2
-		}
-		if !svc.NoEITPresent {
-			flags |= 1
-		}
-		payload = appendU16(payload, svc.ID)
-		payload = append(payload, flags, 0x80|byte(len(desc)>>8), byte(len(desc))) // #nosec G115 -- descriptor length checked above
-		payload = append(payload, desc...)
+		return entry, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return longSection(0x42, transportID, version, payload)
+	last := byte(len(groups) - 1) // #nosec G115 -- packSections caps the count at 256
+	sections := make([][]byte, 0, len(groups))
+	for i, group := range groups {
+		payload := appendU16(nil, networkID)
+		payload = append(payload, 0xff)
+		for _, entry := range group {
+			payload = append(payload, entry...)
+		}
+		section, err := numberedSection(0x42, transportID, version, byte(i), last, payload) // #nosec G115 -- capped at 256
+		if err != nil {
+			return nil, err
+		}
+		sections = append(sections, section)
+	}
+	return sections, nil
+}
+
+// sdtServiceEntry is one service's loop entry: its id, its flags and its descriptors.
+func sdtServiceEntry(svc Service) ([]byte, error) {
+	providerName := svc.Provider
+	if providerName == "" {
+		providerName = "BSkyB"
+	}
+	provider, err := ascii(providerName)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast: service %d provider: %w", svc.ID, err)
+	}
+	name, err := ascii(svc.Name)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast: service %d name: %w", svc.ID, err)
+	}
+	if len(provider) > 255 || len(name) > 255 || len(provider)+len(name)+9 > 255 {
+		return nil, fmt.Errorf("broadcast: service %d descriptor too long", svc.ID)
+	}
+	// THE PRIVATE DATA SPECIFIER GOES FIRST, AND IT IS WHY THE GUIDE'S LIST SCREENS ARE EMPTY.
+	//
+	// DVB scopes a private_data_specifier to the descriptors that FOLLOW it in the same loop,
+	// and the BAT already carries one ahead of its 0xB1 line-up for exactly that reason. What
+	// no loop carried until now is one per SERVICE -- so a service object in the box had no
+	// specifier at all.
+	//
+	// Measured, not reasoned: the ALL CHANNELS grid's row callback (0x800CB7B8) asks its
+	// object for descriptor tag 0x5F, gets ZERO, and returns -1 without drawing, once per
+	// channel. A census of every tag lookup both screens make found 0x4A and 0x4D answering
+	// non-zero and 0x5F answering ZERO on seven attempts out of seven, across both screens.
+	// Nothing in this box has ever had one.
+	desc := make([]byte, 0, 11+len(provider)+len(name))
+	desc = append(desc, 0x5f, 4, 0x00, 0x00, 0x00, skyPrivateDataSpecifier)
+	desc = append(desc, 0x48, byte(3+len(provider)+len(name)), serviceType(svc), byte(len(provider))) // #nosec G115 -- both lengths checked above
+	desc = append(desc, provider...)
+	desc = append(desc, byte(len(name))) // #nosec G115 -- name length checked above
+	desc = append(desc, name...)
+	// THE 0xB2 GOES INSIDE THE SAME NAMESPACE, after the specifier that opens it. It is what
+	// the grid's row-creating native reads into the row record, and it is only looked at
+	// because the 0x5F above declared the namespace it lives in.
+	row, err := guideRowDescriptor(svc.Row)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast: service %d row descriptor: %w", svc.ID, err)
+	}
+	desc = append(desc, row...)
+	flags := byte(0xfc)
+	if svc.EITSchedule {
+		flags |= 2
+	}
+	if !svc.NoEITPresent {
+		flags |= 1
+	}
+	entry := appendU16(nil, svc.ID)
+	entry = append(entry, flags, 0x80|byte(len(desc)>>8), byte(len(desc))) // #nosec G115 -- descriptor length checked above
+	entry = append(entry, desc...)
+	return entry, nil
+}
+
+// packSections groups n items into sections, each holding as many as fit beside a per-section head.
+//
+// It always returns at least one group, because a table with nothing in it is still a table -- an
+// SDT announcing no services is legal and this package is tested on one.
+func packSections(n, head int, item func(i int) ([]byte, error)) ([][][]byte, error) {
+	var groups [][][]byte
+	var current [][]byte
+	size := head
+	for i := 0; i < n; i++ {
+		body, err := item(i)
+		if err != nil {
+			return nil, err
+		}
+		if head+len(body) > sectionPayloadBudget {
+			return nil, fmt.Errorf("broadcast: item %d needs %d payload bytes and a section holds %d, "+
+				"so it cannot be carried at all", i, head+len(body), sectionPayloadBudget)
+		}
+		if len(current) > 0 && size+len(body) > sectionPayloadBudget {
+			groups = append(groups, current)
+			current, size = nil, head
+		}
+		current = append(current, body)
+		size += len(body)
+	}
+	groups = append(groups, current)
+	if len(groups) > 256 {
+		return nil, fmt.Errorf("broadcast: %d sections exceeds the 256 a table can number", len(groups))
+	}
+	return groups, nil
 }
 
 // BAT builds a bouquet association table (table 0x4A) carrying Sky's channel
@@ -265,7 +329,7 @@ func SDT(transportID, networkID uint16, version byte, services []Service) ([]byt
 // its database exactly ONE question and that is the question. Without an
 // answer it takes its not-answered arm and draws nothing, which is why a box
 // fed a perfectly good line-up still reports no schedule information.
-func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([]byte, error) {
+func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([][]byte, error) {
 	bouquetName, err := ascii(name)
 	if err != nil {
 		return nil, fmt.Errorf("broadcast: bouquet name: %w", err)
@@ -284,39 +348,114 @@ func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([
 		return nil, err
 	}
 	bouquetLoop = append(bouquetLoop, bouquetLinkage...)
-
-	var tsLoop []byte
-	for _, tr := range transports {
-		descriptors, err := lineupDescriptors(tr.Lineup)
-		if err != nil {
-			return nil, err
-		}
-		services, err := serviceListDescriptor(tr.Services)
-		if err != nil {
-			return nil, err
-		}
-		descriptors = append(descriptors, services...)
-		linkage, err := linkageDescriptor(tr)
-		if err != nil {
-			return nil, err
-		}
-		descriptors = append(descriptors, linkage...)
-		if len(descriptors) > 0xfff {
-			return nil, fmt.Errorf("broadcast: transport descriptors exceed twelve bits")
-		}
-		tsLoop = appendU16(tsLoop, tr.ID)
-		tsLoop = appendU16(tsLoop, tr.NetworkID)
-		tsLoop = append(tsLoop, 0xf0|byte(len(descriptors)>>8), byte(len(descriptors))) // #nosec G115 -- length checked above
-		tsLoop = append(tsLoop, descriptors...)
-	}
-	if len(bouquetLoop) > 0xfff || len(tsLoop) > 0xfff {
+	if len(bouquetLoop) > 0xfff {
 		return nil, fmt.Errorf("broadcast: BAT descriptor loop exceeds twelve bits")
 	}
 
-	payload := append([]byte{0xf0 | byte(len(bouquetLoop)>>8), byte(len(bouquetLoop))}, bouquetLoop...) // #nosec G115 -- length checked above
-	payload = append(payload, 0xf0|byte(len(tsLoop)>>8), byte(len(tsLoop)))                             // #nosec G115 -- length checked above
-	payload = append(payload, tsLoop...)
-	return longSection(0x4a, bouquetID, version, payload)
+	// EVERY SECTION CARRIES THE BOUQUET LOOP AND ITS OWN SLICE OF THE TRANSPORTS. A receiver
+	// reassembles the table, so the bouquet's name and linkage are repeated rather than stranded
+	// in section zero, and each transport appears in whichever sections carry its descriptors.
+	//
+	// THE LINE-UP IS WHAT OVERFLOWS, not the transport list: one transport with a hundred and
+	// forty channels is a few 0xB1 descriptors and a few 0x41s, which is kilobytes. So a
+	// transport's descriptors are split across sections and its two-byte header repeated with
+	// them -- which is legal, because the loop announces a transport once per section it appears
+	// in and the guest appends the line-up entries it finds.
+	head := 2 + len(bouquetLoop) + 2 // both loop-length fields plus the bouquet loop itself
+	var pieces [][]byte
+	for _, tr := range transports {
+		descriptors, err := transportDescriptors(tr)
+		if err != nil {
+			return nil, err
+		}
+		budget := sectionPayloadBudget - head - 6 // the transport header, plus room to be useful
+		if budget <= 0 {
+			return nil, fmt.Errorf("broadcast: the bouquet loop leaves no room for a transport")
+		}
+		for start := 0; start < len(descriptors) || start == 0; {
+			end := min(start+budget, len(descriptors))
+			end = descriptorBoundary(descriptors, start, end)
+			if end == start && len(descriptors) > 0 {
+				return nil, fmt.Errorf("broadcast: transport %d has a descriptor too large for a "+
+					"section", tr.ID)
+			}
+			chunk := descriptors[start:end]
+			piece := appendU16(nil, tr.ID)
+			piece = appendU16(piece, tr.NetworkID)
+			piece = append(piece, 0xf0|byte(len(chunk)>>8), byte(len(chunk))) // #nosec G115 -- bounded by budget
+			piece = append(piece, chunk...)
+			pieces = append(pieces, piece)
+			start = end
+			if start >= len(descriptors) {
+				break
+			}
+		}
+	}
+
+	groups, err := packSections(len(pieces), head, func(i int) ([]byte, error) { return pieces[i], nil })
+	if err != nil {
+		return nil, err
+	}
+	last := byte(len(groups) - 1) // #nosec G115 -- packSections caps the count at 256
+	sections := make([][]byte, 0, len(groups))
+	for i, group := range groups {
+		var tsLoop []byte
+		for _, piece := range group {
+			tsLoop = append(tsLoop, piece...)
+		}
+		if len(tsLoop) > 0xfff {
+			return nil, fmt.Errorf("broadcast: BAT descriptor loop exceeds twelve bits")
+		}
+		payload := append([]byte{0xf0 | byte(len(bouquetLoop)>>8), byte(len(bouquetLoop))}, bouquetLoop...) // #nosec G115 -- length checked above
+		payload = append(payload, 0xf0|byte(len(tsLoop)>>8), byte(len(tsLoop)))                             // #nosec G115 -- length checked above
+		payload = append(payload, tsLoop...)
+		section, err := numberedSection(0x4a, bouquetID, version, byte(i), last, payload) // #nosec G115 -- capped at 256
+		if err != nil {
+			return nil, err
+		}
+		sections = append(sections, section)
+	}
+	return sections, nil
+}
+
+// transportDescriptors is everything a BAT says about one transport: its line-up, its service list
+// and its linkage.
+func transportDescriptors(tr Transport) ([]byte, error) {
+	descriptors, err := lineupDescriptors(tr.Lineup)
+	if err != nil {
+		return nil, err
+	}
+	services, err := serviceListDescriptor(tr.Services)
+	if err != nil {
+		return nil, err
+	}
+	descriptors = append(descriptors, services...)
+	linkage, err := linkageDescriptor(tr)
+	if err != nil {
+		return nil, err
+	}
+	return append(descriptors, linkage...), nil
+}
+
+// descriptorBoundary walks the descriptor loop from start and returns the last complete descriptor
+// boundary at or before limit.
+//
+// A LOOP MUST NOT BE CUT MID-DESCRIPTOR. Splitting a transport's descriptors between sections is
+// only legal on a descriptor boundary; half a 0xB1 is a length field promising bytes that are not
+// there, and the guest would read whatever followed as line-up entries.
+func descriptorBoundary(descriptors []byte, start, limit int) int {
+	at := start
+	for at < limit {
+		if at+2 > len(descriptors) {
+			break
+		}
+		next := at + 2 + int(descriptors[at+1])
+		if next > limit {
+			break
+		}
+		at = next
+	}
+	return at
 }
 
 // linkageDescriptor builds the one thing the TV guide asks for. A guide press
@@ -467,8 +606,23 @@ func TOT(utc time.Time, offset TimeOffset) ([]byte, error) {
 }
 
 func longSection(table byte, extension uint16, version byte, payload []byte) ([]byte, error) {
+	return numberedSection(table, extension, version, 0, 0, payload)
+}
+
+// numberedSection is longSection for a table that spans more than one section.
+//
+// A DVB TABLE IS NOT A SECTION. The section is the transport unit and stops at 1021 bytes; the
+// table is section_number 0 through last_section_number, and a receiver reassembles them. Sky's
+// own line-up could not have worked any other way -- a hundred and forty services do not fit in a
+// kilobyte -- so carrying one section per table was this port's limit and never the signal's.
+func numberedSection(table byte, extension uint16, version, sectionNumber, lastSectionNumber byte,
+	payload []byte) ([]byte, error) {
 	if version > 31 {
 		return nil, fmt.Errorf("broadcast: version exceeds five bits")
+	}
+	if sectionNumber > lastSectionNumber {
+		return nil, fmt.Errorf("broadcast: section %d of a table whose last is %d",
+			sectionNumber, lastSectionNumber)
 	}
 	length := 5 + len(payload) + 4
 	if length > maxSectionLength {
@@ -476,10 +630,14 @@ func longSection(table byte, extension uint16, version byte, payload []byte) ([]
 	}
 	section := []byte{table, 0xb0 | byte(length>>8), byte(length)} // #nosec G115 -- section length checked above
 	section = appendU16(section, extension)
-	section = append(section, 0xc1|(version<<1), 0, 0)
+	section = append(section, 0xc1|(version<<1), sectionNumber, lastSectionNumber)
 	section = append(section, payload...)
 	return withCRC(section), nil
 }
+
+// sectionPayloadBudget is how many payload bytes one section has room for, once the five bytes of
+// long-section header after the length field and the four-byte CRC are taken out.
+const sectionPayloadBudget = maxSectionLength - 5 - 4
 
 func withCRC(section []byte) []byte {
 	crc := dvb.MPEGCRC32(section)
@@ -552,16 +710,28 @@ func satelliteDescriptor(tr Transport) ([]byte, error) {
 	return append(append(append([]byte{0x43, 11}, freq...), orbit...), append([]byte{flags}, sym...)...), nil
 }
 
+// maxServiceListEntries is what fits one 0x41 descriptor: a byte of length, three bytes an entry.
+const maxServiceListEntries = 255 / 3
+
+// serviceListDescriptor lists the services on a transport, across as many 0x41 descriptors as it
+// takes.
+//
+// ONE DESCRIPTOR CANNOT HOLD A LINE-UP. Its length is a byte and an entry is three, so eighty-five
+// services fill it -- and DVB's answer is more descriptors in the same loop, which is what the
+// 0xB1 line-up beside it has always done. Refusing past eighty-five was a ceiling on how many
+// channels this transmitter could announce, and nothing about the signal required it.
 func serviceListDescriptor(services []Service) ([]byte, error) {
-	if len(services)*3 > 255 {
-		return nil, fmt.Errorf("broadcast: service list descriptor too long")
+	var out []byte
+	for start := 0; start < len(services); start += maxServiceListEntries {
+		end := min(start+maxServiceListEntries, len(services))
+		chunk := services[start:end]
+		out = append(out, 0x41, byte(len(chunk)*3)) // #nosec G115 -- at most 85 entries of three bytes
+		for _, svc := range chunk {
+			out = appendU16(out, svc.ID)
+			out = append(out, serviceType(svc))
+		}
 	}
-	desc := []byte{0x41, byte(len(services) * 3)} // #nosec G115 -- descriptor length checked above
-	for _, svc := range services {
-		desc = appendU16(desc, svc.ID)
-		desc = append(desc, serviceType(svc))
-	}
-	return desc, nil
+	return out, nil
 }
 
 func serviceType(svc Service) byte {

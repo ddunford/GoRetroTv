@@ -87,12 +87,28 @@ func atAllChannels(screen uint32) bool {
 	return screen == allChannelsOpening || screen == allChannelsFilled
 }
 
+// attempts and pressBudget are the merged contract of the two routes this file used to be half of.
+//
+// EIGHT ATTEMPTS RATHER THAN FOUR, because the box LOSES ITS FIRST KEY after it has been left
+// idling -- measured, and the delivery happens, so a retry is the only thing that recovers it
+// (TestWhyIdlingBeforeAKeyPressLosesTheKey). Retrying a press that landed costs nothing: the loop
+// stops the moment the screen it wants appears.
+//
+// THE BUDGET IS A CAP, NOT A DURATION. pressAndLetItFinish returns as soon as the screen settles
+// and runs its tail, so a larger budget never makes a press take longer -- it only stops a slow
+// screen being reported as swallowed. That is why merging 60M and 80M could take the larger
+// without changing what any existing caller measures.
+const (
+	attempts    = 8
+	pressBudget = 80_000_000
+)
+
 func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange bool) uint32 {
 	t.Helper()
 	seen := []uint32{}
 	menu := uint32(0)
-	for attempt := 1; attempt <= 4 && menu != boxOfficeMenu; attempt++ {
-		menu = press(keyBoxOffice, "box office", 80_000_000)
+	for attempt := 1; attempt <= attempts && menu != boxOfficeMenu; attempt++ {
+		menu = press(keyBoxOffice, "box office", pressBudget)
 		seen = append(seen, menu)
 	}
 	if menu != boxOfficeMenu {
@@ -101,8 +117,8 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 			menu, uint32(boxOfficeMenu), seen)
 	}
 	tab := uint32(0)
-	for attempt := 1; attempt <= 4 && tab != tvGuideMenuScreen; attempt++ {
-		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
+	for attempt := 1; attempt <= attempts && tab != tvGuideMenuScreen; attempt++ {
+		tab = press(keyLeft, fmt.Sprintf("left to the tv guide tab (%d)", attempt), pressBudget)
 		seen = append(seen, tab)
 	}
 	if tab != tvGuideMenuScreen {
@@ -112,10 +128,12 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 	}
 
 	grid := uint32(0)
-	for attempt := 1; attempt <= 4; attempt++ {
-		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
+	for attempt := 1; attempt <= attempts; attempt++ {
+		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (%d)", attempt), pressBudget)
 		seen = append(seen, grid)
 		if atAllChannels(grid) {
+			t.Logf("ALL CHANNELS opened on %08X -- READ %s, it is the only thing that says what "+
+				"it drew", grid, artefact)
 			return grid
 		}
 		if wantChange && grid != 0 && grid != tvGuideMenuScreen && grid != boxOfficeMenu {
@@ -156,8 +174,8 @@ func openAllChannelsUnpinned(t *testing.T, press pressFunc, artefact string) uin
 	t.Helper()
 	menu := uint32(0)
 	seen := []uint32{}
-	for attempt := 1; attempt <= 4 && menu != boxOfficeMenu; attempt++ {
-		menu = press(keyBoxOffice, "box office", 80_000_000)
+	for attempt := 1; attempt <= attempts && menu != boxOfficeMenu; attempt++ {
+		menu = press(keyBoxOffice, "box office", pressBudget)
 		seen = append(seen, menu)
 	}
 	if menu != boxOfficeMenu {
@@ -165,15 +183,15 @@ func openAllChannelsUnpinned(t *testing.T, press pressFunc, artefact string) uin
 			"cannot name, and everything after it would be guesswork. Screens seen: %08X",
 			menu, uint32(boxOfficeMenu), seen)
 	}
-	tab := press(keyLeft, "left to the tv guide tab", 80_000_000)
+	tab := press(keyLeft, "left to the tv guide tab", pressBudget)
 	seen = append(seen, tab)
 	if tab == 0 || tab == menu {
 		t.Fatalf("harness: LEFT from box office drew %08X, so the tab was not reached. Screens "+
 			"seen: %08X", tab, seen)
 	}
 	grid := uint32(0)
-	for attempt := 1; attempt <= 4; attempt++ {
-		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (try %d)", attempt), 60_000_000)
+	for attempt := 1; attempt <= attempts; attempt++ {
+		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (%d)", attempt), pressBudget)
 		seen = append(seen, grid)
 		if grid != 0 && grid != tab && grid != menu {
 			t.Logf("the grid settled on %08X -- READ %s, there is no hash to check it against",

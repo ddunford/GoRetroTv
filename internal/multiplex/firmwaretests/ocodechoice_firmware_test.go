@@ -146,7 +146,7 @@ func TestWhatOCodeChoosesNoListingsAvailable(t *testing.T) {
 		t.Logf("%-42s %08X -> %08X", name, before, drew)
 		return drew
 	}
-	settled := openAllChannelsFinished(t, press, ".artifacts/ocode-choice.png")
+	settled := openAllChannels(t, press, ".artifacts/ocode-choice.png", true)
 	for i := 0; i < 60_000_000 && !caught; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

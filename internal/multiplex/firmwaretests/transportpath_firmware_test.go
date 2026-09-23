@@ -56,7 +56,7 @@ func TestWhetherTheBoxEnablesTheTransportPath(t *testing.T) {
 	// leaves the guide and views the channel, which is the moment the box would want a stream.
 	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
 	press := azPressFunc(t, box, pump)
-	openAllChannelsFinished(t, press, ".artifacts/transportpath-grid.png")
+	openAllChannels(t, press, ".artifacts/transportpath-grid.png", true)
 	for i := 0; i < 40_000_000; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

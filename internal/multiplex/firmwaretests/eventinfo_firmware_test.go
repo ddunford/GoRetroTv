@@ -62,7 +62,7 @@ func TestWhatTheBoxDoesWithThePresentFollowingEIT(t *testing.T) {
 
 		pump := func() error { return transmitter.Pump(box.Machine.Retired) }
 		press := azPressFunc(t, box, pump)
-		openAllChannelsFinished(t, press, fmt.Sprintf(".artifacts/eit-%s-grid.png", name))
+		openAllChannels(t, press, fmt.Sprintf(".artifacts/eit-%s-grid.png", name), true)
 
 		// THE GRID MUST FILL BEFORE SELECT MEANS ANYTHING. It opens on "Searching for listings"
 		// and fills a few tens of millions of instructions later, and a SELECT pressed at the

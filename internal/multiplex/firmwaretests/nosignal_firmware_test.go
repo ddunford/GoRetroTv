@@ -134,7 +134,7 @@ func TestWhatDecidesNoSatelliteSignal(t *testing.T) {
 		return drew
 	}
 	watching = true
-	openAllChannelsFinished(t, press, ".artifacts/nosignal-grid.png")
+	openAllChannels(t, press, ".artifacts/nosignal-grid.png", true)
 	for i := 0; i < 40_000_000 && !caught; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

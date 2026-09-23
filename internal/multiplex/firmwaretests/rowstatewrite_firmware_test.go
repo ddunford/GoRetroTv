@@ -136,7 +136,7 @@ func TestWhatWritesTheGridsRowState(t *testing.T) {
 		t.Logf("%-42s %08X -> %08X", name, before, drew)
 		return drew
 	}
-	settled := openAllChannelsFinished(t, press, ".artifacts/rowstatewrite-grid.png")
+	settled := openAllChannels(t, press, ".artifacts/rowstatewrite-grid.png", true)
 	for i := 0; i < 60_000_000; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

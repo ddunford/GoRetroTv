@@ -100,7 +100,7 @@ func TestWhichDMAChannelsTheBoxProgramsWhenViewing(t *testing.T) {
 		return drew
 	}
 	phase = "opening the guide"
-	openAllChannelsFinished(t, press, ".artifacts/mediadma-grid.png")
+	openAllChannels(t, press, ".artifacts/mediadma-grid.png", true)
 	for i := 0; i < 40_000_000; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

@@ -95,7 +95,7 @@ func TestWhatTheRowsFirstScalarMeans(t *testing.T) {
 		t.Logf("%-42s %08X -> %08X", name, before, drew)
 		return drew
 	}
-	settled := openAllChannelsFinished(t, press, ".artifacts/rowat8-grid.png")
+	settled := openAllChannels(t, press, ".artifacts/rowat8-grid.png", true)
 	for i := 0; i < 50_000_000; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

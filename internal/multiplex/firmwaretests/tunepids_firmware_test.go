@@ -78,7 +78,7 @@ func TestWhatPIDsTheBoxArmsWhenItTunes(t *testing.T) {
 
 	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
 	press := azPressFunc(t, box, pump)
-	openAllChannelsFinished(t, press, ".artifacts/tunepids-grid.png")
+	openAllChannels(t, press, ".artifacts/tunepids-grid.png", true)
 	for i := 0; i < 40_000_000; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

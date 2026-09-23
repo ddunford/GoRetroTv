@@ -144,7 +144,7 @@ func TestWhichIndexSlotTheAllChannelsGridReads(t *testing.T) {
 		return drew
 	}
 
-	settled := openAllChannelsFinished(t, press, ".artifacts/gridslot-grid.png")
+	settled := openAllChannels(t, press, ".artifacts/gridslot-grid.png", true)
 	// PAST THE SETTLE: the rows paint in bursts that hold still across four samples and carry on
 	// afterwards, and anything they ask for arrives here too.
 	final := settled

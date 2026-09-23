@@ -58,7 +58,7 @@ func TestWhatIsBehindSelectOnTheGrid(t *testing.T) {
 
 	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
 	press := azPressFunc(t, box, pump)
-	grid := openAllChannelsFinished(t, press, ".artifacts/griddetail-grid.png")
+	grid := openAllChannels(t, press, ".artifacts/griddetail-grid.png", true)
 	// PAST THE SETTLE before selecting: the rows paint in bursts that hold still across four
 	// samples and carry on afterwards, and a SELECT sent mid-paint is swallowed.
 	for i := 0; i < 40_000_000; i++ {

@@ -92,7 +92,7 @@ func TestWhatWouldMakeTheBoxAskForATransportStream(t *testing.T) {
 		return drew
 	}
 	phase = "opening the guide"
-	openAllChannelsFinished(t, press, ".artifacts/transportenable-grid.png")
+	openAllChannels(t, press, ".artifacts/transportenable-grid.png", true)
 	for i := 0; i < 40_000_000; i++ {
 		if err := pump(); err != nil {
 			t.Fatal(err)

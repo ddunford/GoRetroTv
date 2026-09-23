@@ -9,30 +9,19 @@ import (
 
 // THE ONE ROUTE TO ALL PROGRAMMES A-Z, PINNED AT EVERY STAGE.
 //
-// Reaching this screen is box office, two LEFTs, nine DOWNs and two SELECTs, and counting those
-// presses does not work. A press that lands while a menu is painting is swallowed, so the first
-// version counted screen CHANGES instead -- and how many changes a press produces depends on how
-// busy the box is. Shortening the delivery that ran before the walk was enough to move the
-// highlight: one run opened PERSONAL PLANNER and drew "There are no programmes in your Personal
-// Planner", which is exactly what an index that failed would look like. Another reached a menu
-// nobody has named.
+// Reaching this screen is a handful of presses and counting them does not work. A press that lands
+// while a menu is painting is swallowed, so the first version counted screen CHANGES instead --
+// and how many changes a press produces depends on how busy the box is. Shortening the delivery
+// that ran before the walk was enough to move the highlight: one run opened PERSONAL PLANNER and
+// drew "There are no programmes in your Personal Planner", which is exactly what an index that
+// failed would look like. Another reached a menu nobody has named.
 //
 // So nothing here counts anything. Every stage is driven to a HASH THAT HAS BEEN SEEN, and the
 // walk refuses to continue from a screen it cannot name -- the same rule, and for the same reason,
 // as the ALL CHANNELS route in route_test.go, which exists because that grid was measured wrong
-// five times.
-//
-// EVERY HASH HERE IS A FINISHED SCREEN, which is the other half of why the older pins failed.
-// 0xDDBC18E9 is this same menu MID-PAINT, with its tab icon still sheared, and 0x43779DC8 is the
-// finished article; the pictures say so. A route that waits for the mid-paint frame presses SELECT
-// into a screen that is still drawing, which is exactly when a press is swallowed, and then reads
-// the finished menu as a failure.
-//
-// ROUTE_TEST.GO AGREES NOW. It was re-measured on 2026-09-23 and pins the finished frames too, so
-// the two routes have converged and only one of them should survive -- gort-qxl.route-dedupe owns
-// the merge. Until then this file is the A-Z half and route_test.go is the ALL CHANNELS half, and
-// neither invents its own press: both go through pressAndLetItFinish, which conformance rule
-// ARCH-PRESS-1 now requires of every probe in the package.
+// six times. The two files share the screens they both pass through: the box office menu and the
+// ten-entry TV GUIDE menu are named once, in route_test.go, and this walk turns off at A-Z
+// LISTINGS where that route carries on to ALL CHANNELS.
 //
 // THE DESTINATION IS THE ONE THING NOT PINNED, and deliberately. ALL PROGRAMMES A-Z opens EMPTY
 // when no index has been delivered and opens ALREADY FILLED when one resolved, so its hash is the
@@ -41,10 +30,7 @@ import (
 // whatever was delivered -- and ALL PROGRAMMES is its highlighted first entry, so one SELECT from
 // there lands where we mean. The artefact is always dumped, because the picture is the only proof.
 const (
-	// The menu this walk starts from is the one route_test.go pins, and it is named there once:
-	// two constants for one measured screen is how two files come to disagree about it.
-	azTVGuideMenu  = tvGuideMenuScreen
-	azHighlighted  = 0xF77F97B8 // the same menu with A-Z LISTINGS highlighted
+	azHighlighted  = 0xF77F97B8 // the TV GUIDE menu with A-Z LISTINGS highlighted
 	azCategoryMenu = 0x63270B3D // ALL PROGRAMMES / ENTERTAINMENT / MOVIES / ... eight entries
 
 	// keyDown is the handset's DOWN. It is proved rather than assumed: lessons.md records that
@@ -59,22 +45,26 @@ func openAllProgrammesAtoZ(t *testing.T, press pressFunc, artefact string) uint3
 	seen := []uint32{}
 	note := func(s uint32) uint32 { seen = append(seen, s); return s }
 
-	menu := note(press(keyBoxOffice, "box office", 80_000_000))
+	menu := note(press(keyBoxOffice, "box office", pressBudget))
 	tab := menu
-	for attempt := 1; attempt <= 6 && tab != azTVGuideMenu; attempt++ {
-		if drew := press(keyLeft, fmt.Sprintf("left to the tv guide tab (%d)", attempt), 80_000_000); drew != 0 {
+	for attempt := 1; attempt <= attempts && tab != tvGuideMenuScreen; attempt++ {
+		if drew := press(keyLeft, fmt.Sprintf("left to the tv guide tab (%d)", attempt), pressBudget); drew != 0 {
 			tab = note(drew)
 		}
 	}
-	if tab != azTVGuideMenu {
+	if tab != tvGuideMenuScreen {
 		t.Fatalf("harness: never reached the TV GUIDE menu (%08X); screens seen: %08X",
-			uint32(azTVGuideMenu), seen)
+			uint32(tvGuideMenuScreen), seen)
 	}
 
 	// DOWN UNTIL A-Z LISTINGS IS HIGHLIGHTED, not down nine times. A swallowed press costs an
 	// iteration and nothing else, where a miscounted one changes which screen is measured.
 	row := tab
 	for attempt := 1; attempt <= 30 && row != azHighlighted; attempt++ {
+		// A SMALLER CAP THAN THE REST OF THE WALK, on purpose: a DOWN moves a highlight and
+		// nothing else, so it settles in a fraction of what a menu change needs -- and this loop
+		// runs up to thirty times, so a swallowed press burning the full budget thirty times over
+		// would dominate the probe.
 		if moved := press(keyDown, fmt.Sprintf("down to A-Z LISTINGS (%d)", attempt), 20_000_000); moved != 0 {
 			row = note(moved)
 		}
@@ -93,8 +83,8 @@ func openAllProgrammesAtoZ(t *testing.T, press pressFunc, artefact string) uint3
 	// press that is swallowed returns zero and costs a retry; a press that lands must be trusted,
 	// because the thing that guarantees it is the pin behind it.
 	categories := uint32(0)
-	for attempt := 1; attempt <= 6 && categories == 0; attempt++ {
-		categories = press(keySelect, fmt.Sprintf("select A-Z LISTINGS (%d)", attempt), 80_000_000)
+	for attempt := 1; attempt <= attempts && categories == 0; attempt++ {
+		categories = press(keySelect, fmt.Sprintf("select A-Z LISTINGS (%d)", attempt), pressBudget)
 	}
 	if categories == 0 || categories == azHighlighted {
 		t.Fatalf("harness: SELECT never left the TV GUIDE menu; screens seen: %08X", seen)
@@ -107,8 +97,8 @@ func openAllProgrammesAtoZ(t *testing.T, press pressFunc, artefact string) uint3
 	note(categories)
 
 	inner := uint32(0)
-	for attempt := 1; attempt <= 6 && inner == 0; attempt++ {
-		inner = press(keySelect, fmt.Sprintf("select ALL PROGRAMMES (%d)", attempt), 80_000_000)
+	for attempt := 1; attempt <= attempts && inner == 0; attempt++ {
+		inner = press(keySelect, fmt.Sprintf("select ALL PROGRAMMES (%d)", attempt), pressBudget)
 	}
 	if inner == 0 || inner == categories {
 		t.Fatalf("harness: SELECT never left the A-Z category menu (%08X); screens seen: %08X",
@@ -133,49 +123,4 @@ func azPressFunc(t *testing.T, box *board.Runtime, pump func() error) pressFunc 
 		t.Logf("%-42s %08X -> %08X", name, before, drew)
 		return drew
 	}
-}
-
-// openAllChannelsFinished is the route to the ALL CHANNELS grid, pinned on a FINISHED frame.
-//
-// IT IS A DUPLICATE NOW AND SHOULD NOT SURVIVE. It was written because route_test.go pinned the TV
-// GUIDE menu to 0xDDBC18E9 -- that menu MID-PAINT -- and the box office menu to a hash a finished
-// paint does not produce either, which is why SELECT "kept not landing" there: the route pressed
-// into a screen that was still drawing. Both files were re-measured on 2026-09-23 and now pin the
-// same finished frames and take the same one LEFT, so gort-qxl.route-dedupe owns the merge.
-//
-// This one pins the single screen that has been verified by picture -- the ten-entry TV GUIDE menu,
-// finished, with ALL CHANNELS highlighted as entry 1 -- and takes ONE select from it. The
-// destination is deliberately not pinned: the grid filling is the thing under test, so its hash is
-// exactly what must be allowed to change. The artefact is the proof, as it has been for all five
-// wrong measurements this project has made of this screen.
-func openAllChannelsFinished(t *testing.T, press pressFunc, artefact string) uint32 {
-	t.Helper()
-	var seen []uint32
-	note := func(s uint32) uint32 { seen = append(seen, s); return s }
-
-	if drew := press(keyBoxOffice, "box office", 80_000_000); drew != 0 {
-		note(drew)
-	}
-	tab := uint32(0)
-	for attempt := 1; attempt <= 8 && tab != azTVGuideMenu; attempt++ {
-		if drew := press(keyLeft, fmt.Sprintf("left to the tv guide tab (%d)", attempt), 80_000_000); drew != 0 {
-			tab = note(drew)
-		}
-	}
-	if tab != azTVGuideMenu {
-		t.Fatalf("harness: never reached the finished TV GUIDE menu (%08X); screens seen: %08X. "+
-			"Every hash here is a FINISHED frame -- if the menu has genuinely changed, re-derive "+
-			"it with TestDumpEveryScreenOnTheAtoZWalk and look at the pictures",
-			uint32(azTVGuideMenu), seen)
-	}
-	grid := uint32(0)
-	for attempt := 1; attempt <= 6 && grid == 0; attempt++ {
-		grid = press(keySelect, fmt.Sprintf("select ALL CHANNELS (%d)", attempt), 80_000_000)
-	}
-	if grid == 0 || grid == tab {
-		t.Fatalf("harness: SELECT never left the TV GUIDE menu (%08X); screens seen: %08X", tab, seen)
-	}
-	t.Logf("ALL CHANNELS opened on %08X -- READ %s, it is the only thing that says what it drew",
-		grid, artefact)
-	return grid
 }

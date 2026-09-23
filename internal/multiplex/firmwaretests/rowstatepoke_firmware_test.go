@@ -124,7 +124,7 @@ func gridWithRowState(t *testing.T, poke bool, artefact string) uint32 {
 		t.Logf("%-42s %08X -> %08X", name, before, drew)
 		return drew
 	}
-	settled := openAllChannelsFinished(t, pressHooked, ".artifacts/"+artefact)
+	settled := openAllChannels(t, pressHooked, ".artifacts/"+artefact, true)
 	final := settled
 	for i := 0; i < 60_000_000; i++ {
 		if err := pump(); err != nil {

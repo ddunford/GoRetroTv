@@ -134,7 +134,7 @@ func gridWithTomorrow(t *testing.T, deliver bool, artefact string) uint32 {
 
 	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
 	press := azPressFunc(t, box, pump)
-	settled := openAllChannelsFinished(t, press, ".artifacts/"+artefact)
+	settled := openAllChannels(t, press, ".artifacts/"+artefact, true)
 	final := settled
 	for i := 0; i < 60_000_000; i++ {
 		if err := pump(); err != nil {

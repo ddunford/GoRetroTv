@@ -9289,3 +9289,56 @@ arms — so those thirty belong to work those two share and the genre arm does n
 split this file already argues for on other grounds: `0x0000` and the letters are the alphabetical
 index behind A-Z LISTINGS, and `0x0100..0x01CF` is sixteen genres by four six-hour blocks. It is
 logged rather than asserted, because the exact number belongs to this fixture.
+
+## Idling before a key press loses exactly one key, and it is the firmware
+
+<!-- anchor: internal/device/csi/link.go -->
+<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-23 -->
+
+**Measured 2026-09-23.** A probe that ran eight million instructions of nothing between a settled
+screen and the next press had every LEFT swallowed — four in a row, from a box office menu that
+stayed on screen throughout. Delete the idle and the same press lands first time. The *from* hash
+is what proves it is the key rather than the settle detector: the screen before the second press
+was still the box office menu, so the first had not moved it either.
+
+    immediate   FE8D1CCC -> 43779DC8   landed
+    idle  1M    FE8D1CCC -> 43779DC8   landed
+    idle  4M    FE8D1CCC -> 43779DC8   landed
+    idle  8M    FE8D1CCC -> 00000000   SWALLOWED
+    press again FE8D1CCC -> 43779DC8   landed
+
+**The threshold is between four and eight million instructions**, and the box loses ONE key rather
+than going deaf.
+
+### The model is exonerated, and that was the half worth settling
+
+`internal/device/csi` is a CLOCKED link: `Pump` hands a queued byte to the guest only once the
+guest has written the transmit register since the last one (`txSeen`), while the idle path presents
+its zero byte with no such condition. That asymmetry is a real candidate — a box that has gone
+quiet writes nothing, so nothing would be clocked and a key would sit in the queue for ever — and
+it is **not** what happens here:
+
+    the key queued   8 wire bytes
+    left afterwards  0
+    guest reads of the data register during the press   678 (125 on the press that landed)
+
+Every byte left the wire and the guest read the register. The box was told. It did not redraw.
+
+> The read counts are NOT evidence on their own and no claim here rests on them: the press that
+> landed stops at its settle plus tail, the swallowed one runs its whole eighty-million budget, so
+> the larger number is a longer run. The queue depth is the measurement.
+
+### What is not established
+
+**Why the firmware declines that one key.** The obvious theory — a quiescent menu task not waiting
+on its event queue — is a theory, and this file exists partly because plausible mechanisms have
+survived next to real measurements here as though they had been measured too. What is established
+is where NOT to look.
+
+### The consequence for every probe in the package
+
+**The retries in the route helpers are load-bearing.** Every press is attempted up to four times,
+which reads as belt and braces and is not: a route that sent each key once would fail
+intermittently on exactly the probes that pause to measure something before pressing. That is why
+most of the suite never noticed this, and why it surfaced in `rowcount`, which idled eight million
+instructions between presses as a hand-rolled substitute for the paint tail.

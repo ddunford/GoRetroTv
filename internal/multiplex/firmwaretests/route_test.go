@@ -55,6 +55,14 @@ import (
 // IT ALWAYS DUMPS THE SCREENSHOT. Every one of the six was caught by opening the picture and by
 // nothing else -- not by the hash, not by the read counts, not by the verdict text, all of which
 // were internally consistent and wrong.
+//
+// THE RETRIES ARE LOAD-BEARING AND MUST NOT BE TIDIED AWAY. Every press here is attempted up to
+// four times, which looks like belt and braces and is not: the box LOSES THE FIRST KEY after it
+// has been left idling, delivers nothing to the screen, and answers the next one normally.
+// TestWhyIdlingBeforeAKeyPressLosesTheKey has the measurement -- the key reaches the guest, eight
+// wire bytes queued and none left, and the screen does not move until it is pressed again. A route
+// that sent each key once would fail intermittently on exactly the probes that pause to measure
+// something before pressing.
 const (
 	// All three verified by eye against .artifacts/route-*.png on 2026-09-23, from presses that
 	// let the paint finish.

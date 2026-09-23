@@ -155,3 +155,34 @@ something with `ok`** — dropping it on the floor turns "I could not ask" into 
 Also, from the same run: printing a `[]uint16` with `%v` gives decimal. The box "armed 82", which
 is `0x52` — a PID this project already knows well — and it read for a moment as a new discovery.
 Format identifiers the way the rest of the record writes them.
+
+### The settle is not a finish, and two of this project's screen pins are the same screen
+
+`screenNow` + "four identical samples 65,536 instructions apart" calls a screen done after about a
+quarter of a million instructions of stillness. A menu painting under a busy carousel holds a
+HALF-DRAWN frame still for longer than that, so the detector returns a real framebuffer of a screen
+that has not finished drawing — and every pin taken that way is a pin on whichever frame that run
+happened to catch.
+
+Measured 2026-09-23, by picture: **`0xDDBC18E9` is the TV GUIDE menu MID-PAINT**, its tab icon still
+sheared, and **`0x43779DC8` is the same menu FINISHED**. `route_test.go` names the second one
+`tvGuideMenuRedrawn` and reads it as evidence that a SELECT failed to land. It did fail — because
+the route waited for the mid-paint frame and pressed SELECT into a screen that was still drawing,
+which is exactly when a press is swallowed.
+
+**Use `pressAndLetItFinish`** (`rununtil_test.go`): settle, then run a ten-million-instruction tail
+and re-read. With it the whole box-office → TV GUIDE → A-Z walk runs with no swallowed press at all.
+Three other things wear this same hat and are not separate bugs:
+
+- **Do not wait for transport state ≥ 6 before pressing keys.** It leaves the box mid-animation, so
+  nothing ever settles and every press reports `00000000` — which reads exactly like a box that has
+  stopped taking input, and was chased as one.
+- **Do not crop the tab strip out of the screen hash** to dodge the animation. The strip is the only
+  thing that distinguishes one tab from another, so a body-only hash makes navigation *worse*.
+- **Pin the screen you select FROM, not the one you land on**, whenever the destination is the thing
+  under test. ALL PROGRAMMES A-Z opens empty when no index has been delivered and already filled when
+  one resolved, so pinning it cost a run; the category menu before it is eight fixed entries the box
+  draws from its own resources and is stable.
+
+And the rule that catches all of it: **a route that cannot find a screen it has always found is
+usually a route reading the wrong frame, not a broken box.** Open the picture.

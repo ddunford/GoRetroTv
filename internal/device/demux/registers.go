@@ -186,6 +186,15 @@ func (d *Demux) ArmedFilters() []ArmedFilter {
 	return out
 }
 
+// TransportEnabled reports whether the guest has switched on the 188-byte transport packet path.
+//
+// It is here because PushTransport SILENTLY DOES NOTHING when it is off -- the ROM's self-test uses
+// that path before the application's section rings exist, so a no-op is the correct behaviour and
+// an error would be wrong. The cost is that a caller feeding a transport stream at a box that has
+// not enabled it gets no signal at all that its packets went nowhere, which is exactly the kind of
+// confident silence this project keeps having to unpick.
+func (d *Demux) TransportEnabled() bool { return d.control140&1 != 0 }
+
 // ArmedPIDs returns the PIDs in enabled, programmed channels. The channel index is a
 // section filter index; the independent 16 match units do not select a PID channel.
 func (d *Demux) ArmedPIDs() []uint16 {

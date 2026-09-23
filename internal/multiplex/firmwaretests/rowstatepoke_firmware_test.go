@@ -1,6 +1,7 @@
 package firmwaretests_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -155,5 +156,30 @@ func gridWithRowState(t *testing.T, poke bool, artefact string) uint32 {
 		t.Logf("%d row states were forced from 1 to %d at the moment the native created them",
 			poked, wantState)
 	}
+
+	// THE REST OF THE RECORD, because the state is only its first halfword and the cells drew
+	// EMPTY. Whatever a populated row looks like, this is what an unpopulated one looks like, and
+	// the next question is which of these 336 bytes a programme would occupy. Printed for row 0
+	// only: six identical dumps would say nothing the first does not.
+	var line string
+	for off := uint32(0); off < rowStride; off++ {
+		if off%32 == 0 {
+			if line != "" {
+				t.Logf("    %s", line)
+			}
+			line = fmt.Sprintf("+%03d ", off)
+		}
+		line += fmt.Sprintf("%02X", box.RAM.Read((expectedBase+off)&0x1fffffff, bus.Byte))
+	}
+	if line != "" {
+		t.Logf("    %s", line)
+	}
+	nonZero := 0
+	for off := uint32(0); off < rowStride; off++ {
+		if box.RAM.Read((expectedBase+off)&0x1fffffff, bus.Byte) != 0 {
+			nonZero++
+		}
+	}
+	t.Logf("row 0's record: %d of %d bytes are non-zero", nonZero, rowStride)
 	return final
 }

@@ -26,7 +26,7 @@ rule for this phase: **do not guess a format** — let the box name what it want
   measurement and not to be re-run: the box holds six service records matching the broadcast, the
   grid reads none of them, and it never handles our channel numbers at all → `/go-engineer` [TC-7.1]
 - [ ] `TASK-7.2` Determine whether the loop runs and draws nothing, or never runs. Different faults, same blank screen; the widget count per iteration separates them → `/go-engineer` [TC-7.1]
-- [ ] `TASK-7.3` **Premise corrected 2026-09-21 — do not "feed PID `0x52`".** The record already
+- [x] `TASK-7.3` **Premise corrected 2026-09-21 — do not "feed PID `0x52`".** The record already
   settles it: `0x52` is transient, opens in response to our own NIT and closes again, and is the
   box's OWN subtable registration for network `0x20`; the earlier "nothing feeds PID `0x52`"
   reading is named in the record as an artefact of a join. The live question is instead: **signal
@@ -48,6 +48,13 @@ rule for this phase: **do not guess a format** — let the box name what it want
   and the broadcast line-up do NOT disagree and the twelve-against-six hypothesis is dead. "Twelve"
   is the oracle's number in the oracle's address space. The grid does not iterate them in any case:
   zero reads of those records in 488,551 during the draw → `/go-engineer` [TC-7.7]
+- [ ] `TASK-7.11` Broadcast the genre index so the TV GUIDE's eight category screens fill. The A-Z
+  index ships and works; the SAME table feeds the genre screens and they are unfed. Table `0xC1` on
+  PID `0x52`, fourth dispatch arm `0x0100..0x01CF`, slot `(ext & 0x0F) * 4 + ((ext & 0xC0) >> 6)` —
+  sixteen categories by four six-hour blocks, boundaries measured on the box. **Which number is
+  which genre is NOT established and must not be guessed from the menu's order**: open a genre
+  screen and watch which slot it READS, the way the A-Z screen was solved in one run rather than
+  ninety-two sweeps → `/go-engineer` [no-test: the acceptance IS a firmware probe + screenshot]
 - [ ] `TASK-7.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Closing gates

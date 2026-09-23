@@ -57,6 +57,22 @@ type ListedService struct {
 	// being able to test rather than argue about. What the o-code's three branches (1, 2 and 0x10)
 	// mean is not established.
 	Type byte `json:"serviceType,omitempty"`
+	// RowAt8 overrides the 0xB2 descriptor's first scalar, the byte that lands at the grid row
+	// record's +8 and that the row's o-code branches on at 0x9FC73961. Left unset it is 1, which
+	// is the smallest non-zero value and is what makes the grid draw at all.
+	//
+	// It is transmittable because WHAT THE VALUE MEANS IS NOT ESTABLISHED -- only that zero leaves
+	// the row drawing "..no listings available". The path it unlocks does a bounds check and then
+	// runs a layout loop, so a count is as plausible as a flag, and that is a sweep rather than an
+	// argument.
+	RowAt8 byte `json:"rowAt8,omitempty"`
+	// RowAt10, RowAt9 and RowAt11 are the 0xB2 descriptor's other scalars, which the parser puts
+	// at the row record's +10, +9 (three bits) and +11 (one bit). NOTHING IS KNOWN ABOUT ANY OF
+	// THEM -- the grid draws correctly with all three at zero -- and they are transmittable for
+	// the same reason RowAt8 is: an unknown that can be varied is an unknown that can be measured.
+	RowAt10 byte `json:"rowAt10,omitempty"`
+	RowAt9  byte `json:"rowAt9,omitempty"`
+	RowAt11 byte `json:"rowAt11,omitempty"`
 	// Kind is the byte the line-up entry carries at +2, between the service id
 	// and the listings id.
 	//

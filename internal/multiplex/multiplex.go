@@ -393,7 +393,12 @@ func (m *Multiplex) guideRow(service *ListedService) (*broadcast.GuideRow, error
 	// and record+8 is exactly where the 0xB2 parser puts the descriptor's first scalar
 	// (rec[8] = d[2]). Left at zero it falls through to "..no listings available" every time.
 	// WHAT THE VALUE MEANS is not established; 1 is the smallest thing that is not zero.
-	return &broadcast.GuideRow{At8: 1, Text: text}, nil
+	at8 := service.RowAt8
+	if at8 == 0 {
+		at8 = 1
+	}
+	return &broadcast.GuideRow{At8: at8, At10: service.RowAt10, At9: service.RowAt9,
+		At11: service.RowAt11, Text: text}, nil
 }
 
 // secondsOfDay is the in-world clock's time as seconds since midnight.

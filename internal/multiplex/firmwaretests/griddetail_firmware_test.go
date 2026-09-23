@@ -38,10 +38,10 @@ func TestWhatIsBehindSelectOnTheGrid(t *testing.T) {
 	for i := range listings.Services {
 		// Distinct and small: +9 is three bits and +11 is one, so nothing here may exceed them.
 		listings.Services[i].RowAt10 = byte(0x10 + i) // #nosec G115 -- six services
-		listings.Services[i].RowAt9 = byte(i % 8)     // #nosec G115 -- three bits
+		listings.Services[i].Genre = byte(i % 8)      // #nosec G115 -- three bits
 		listings.Services[i].RowAt11 = byte(i % 2)    // #nosec G115 -- one bit
 		t.Logf("%-14s  +10=%#02x  +9=%d  +11=%d", listings.Services[i].Name,
-			listings.Services[i].RowAt10, listings.Services[i].RowAt9, listings.Services[i].RowAt11)
+			listings.Services[i].RowAt10, listings.Services[i].Genre, listings.Services[i].RowAt11)
 	}
 
 	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())

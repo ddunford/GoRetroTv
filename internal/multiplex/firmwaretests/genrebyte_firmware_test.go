@@ -57,11 +57,11 @@ func TestWhichByteOfTheGuideRowIsTheGenre(t *testing.T) {
 		s.RowAt8 = 1 // the flag that makes a row draw at all; measured, and not under test here
 		switch s.Name {
 		case "Sky One":
-			s.RowAt9, carriers[s.Name] = entertainment, "At9"
+			s.Genre, carriers[s.Name] = entertainment, "At9"
 		case "Sky Travel":
 			s.RowAt10, carriers[s.Name] = entertainment, "At10"
 		case "Sky Movies":
-			s.RowAt9, carriers[s.Name] = movies, "At9"
+			s.Genre, carriers[s.Name] = movies, "At9"
 		case "Sky Sports 1":
 			s.RowAt10, carriers[s.Name] = movies, "At10"
 		}

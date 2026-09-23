@@ -381,8 +381,21 @@ func (m *Multiplex) transport(sub Subscription, listings *Listings) (broadcast.T
 // TEXT is the part that is understood: the parser hands it to 0x800BECF0, the Huffman decompressor,
 // exactly as a title record's text is handed to it.
 func (m *Multiplex) guideRow(service *ListedService) (*broadcast.GuideRow, error) {
-	if m.dict == nil || len(service.Programmes) == 0 {
+	if m.dict == nil {
 		return nil, nil
+	}
+	// A CHANNEL WITH NOTHING ON AIR STILL CARRIES ITS GENRE, and that is not a nicety. At9 is the
+	// only place the guide's genre screens look, so a service whose descriptor is omitted has no
+	// genre and vanishes from its own screen -- measured: Sky Soap carries ENTERTAINMENT and did
+	// not appear on it, because it has nothing on at seven o'clock. It stays in ALL CHANNELS,
+	// which has no filter, so the fault is invisible on the one screen anyone checks.
+	//
+	// At8 stays ZERO for that row on purpose: zero is what draws "..no listings available", which
+	// is exactly what a channel between programmes should say.
+	offAir := &broadcast.GuideRow{At8: 0, At9: service.Genre, At10: service.RowAt10,
+		At11: service.RowAt11}
+	if len(service.Programmes) == 0 {
+		return offAir, nil
 	}
 	now := secondsOfDay(m.clock.Now())
 	var on *ListedProgramme
@@ -397,7 +410,7 @@ func (m *Multiplex) guideRow(service *ListedService) (*broadcast.GuideRow, error
 		}
 	}
 	if on == nil {
-		return nil, nil
+		return offAir, nil
 	}
 	text, err := m.dict.Encode(on.Title)
 	if err != nil {
@@ -418,7 +431,12 @@ func (m *Multiplex) guideRow(service *ListedService) (*broadcast.GuideRow, error
 	if at8 == 0 {
 		at8 = 1
 	}
-	return &broadcast.GuideRow{At8: at8, At10: service.RowAt10, At9: service.RowAt9,
+	// At9 IS THE GENRE, and it is the whole of what the TV GUIDE's genre screens filter on. Every
+	// channel sent 0 here from the day this descriptor shipped, which is why ENTERTAINMENT,
+	// MOVIES, SPORTS, NEWS & DOCUMENTARIES, KIDS, MUSIC & RADIO and SPECIALIST all drew the grid's
+	// chrome with no rows in it: they were asking for 3, 6, 7, 5, 2, 4 and 1 and every channel was
+	// answering 0.
+	return &broadcast.GuideRow{At8: at8, At10: service.RowAt10, At9: service.Genre,
 		At11: service.RowAt11, Text: text}, nil
 }
 

@@ -66,12 +66,27 @@ type ListedService struct {
 	// runs a layout loop, so a count is as plausible as a flag, and that is a sweep rather than an
 	// argument.
 	RowAt8 byte `json:"rowAt8,omitempty"`
-	// RowAt10, RowAt9 and RowAt11 are the 0xB2 descriptor's other scalars, which the parser puts
-	// at the row record's +10, +9 (three bits) and +11 (one bit). NOTHING IS KNOWN ABOUT ANY OF
-	// THEM -- the grid draws correctly with all three at zero -- and they are transmittable for
-	// the same reason RowAt8 is: an unknown that can be varied is an unknown that can be measured.
+	// Genre is the channel's genre, and it is the 0xB2 descriptor's three-bit scalar -- the one
+	// the parser stores at the row record's +9, which this file used to call RowAt9 because
+	// nothing was known about it.
+	//
+	// IT IS WHAT THE TV GUIDE'S GENRE SCREENS FILTER ON. Each of them carries a four-byte filter
+	// whose +2 is the genre it wants, and FUN_800cb7b8 accepts a channel when that byte equals the
+	// value it finds by searching the SI for this descriptor. Measured by reading each screen's
+	// filter and confirmed by putting values in this field and watching the right channels appear:
+	//
+	//	1 SPECIALIST   2 KIDS   3 ENTERTAINMENT   4 MUSIC & RADIO
+	//	5 NEWS & DOCUMENTARIES   6 MOVIES   7 SPORTS
+	//
+	// Zero is no genre, which is what every channel answered before this field existed and why
+	// every genre screen was empty. ALL CHANNELS has no filter at all -- its mask half reads 0000
+	// -- so a channel appears there whatever its genre.
+	Genre byte `json:"genre,omitempty"`
+	// RowAt10 and RowAt11 are the 0xB2's remaining scalars, at the row record's +10 and +11 (one
+	// bit). NOTHING IS KNOWN ABOUT EITHER -- the grid draws correctly with both at zero -- and
+	// they stay transmittable for the same reason RowAt8 is: an unknown that can be varied is an
+	// unknown that can be measured.
 	RowAt10 byte `json:"rowAt10,omitempty"`
-	RowAt9  byte `json:"rowAt9,omitempty"`
 	RowAt11 byte `json:"rowAt11,omitempty"`
 	// Kind is the byte the line-up entry carries at +2, between the service id
 	// and the listings id.
@@ -351,6 +366,15 @@ func (l *Listings) validate() error {
 			return fmt.Errorf("%q has no listingsId, so its programmes could never be addressed", service.Name)
 		case service.Flags > 0x0f:
 			return fmt.Errorf("%q has flags %#x, and the line-up entry carries four bits", service.Name, service.Flags)
+		case service.Genre > 7:
+			// REFUSED AT LOAD RATHER THAN AT TRANSMIT. guideRowDescriptor would reject it too,
+			// but by then the schedule is on air and the failure arrives as a carousel error in
+			// the middle of a wave -- which is how a validation narrower than its builders let a
+			// valid-looking schedule halt the box before (gort-sgc).
+			return fmt.Errorf("%q has genre %d, and the 0xB2 descriptor carries three bits: the "+
+				"guide's screens are 1 SPECIALIST, 2 KIDS, 3 ENTERTAINMENT, 4 MUSIC & RADIO, "+
+				"5 NEWS & DOCUMENTARIES, 6 MOVIES, 7 SPORTS, and 0 is no genre",
+				service.Name, service.Genre)
 		}
 		// Duplicates are the failure this catches: two channels sharing a
 		// listingsId would have their programmes filed under one another, and

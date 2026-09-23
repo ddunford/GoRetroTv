@@ -97,7 +97,8 @@
           "minutes": 60,
           "title": "Midnight Mass"
         }
-      ]
+      ],
+      "genre": 3
     },
     {
       "name": "Sky News",
@@ -155,7 +156,8 @@
           "minutes": 360,
           "title": "Sky News Overnight"
         }
-      ]
+      ],
+      "genre": 5
     },
     {
       "name": "Sky Sports 1",
@@ -223,7 +225,8 @@
           "minutes": 60,
           "title": "Darts"
         }
-      ]
+      ],
+      "genre": 7
     },
     {
       "name": "Sky Movies",
@@ -286,7 +289,8 @@
           "minutes": 240,
           "title": "Night Movie Double Bill"
         }
-      ]
+      ],
+      "genre": 6
     },
     {
       "name": "Sky Travel",
@@ -334,7 +338,8 @@
           "minutes": 120,
           "title": "Travel Guide Asia"
         }
-      ]
+      ],
+      "genre": 1
     },
     {
       "name": "Sky Soap",
@@ -382,7 +387,8 @@
           "minutes": 60,
           "title": "Guiding Light"
         }
-      ]
+      ],
+      "genre": 3
     }
   ]
 }

@@ -92,10 +92,19 @@ type Counters struct {
 	Clock  int
 	Lineup int
 	Titles int
-	// TitlesUnaddressed counts title waves that could not be sent at all
-	// because the box had armed no listings PID. It is the single most useful
-	// number here: a box that never asks is a different fault from a box that
-	// asks and is answered wrongly, and without this they read the same.
+	// TitlesUnaddressed counts DAYS whose title sections could not be sent at
+	// all, because the box had not armed that day's listings PID. It is the
+	// single most useful number here: a box that never asks is a different
+	// fault from a box that asks and is answered wrongly, and without this they
+	// read the same.
+	//
+	// IT COUNTS DAYS RATHER THAN WAVES, and that distinction is load-bearing
+	// now that a wave carries today AND tomorrow. A pass that broadcasts today
+	// and is refused tomorrow increments Titles once and this once, and those
+	// two numbers together are the only thing that separates "both days went
+	// out" from "the box is not asking for the second one yet" -- which is
+	// exactly what an empty midnight column in the grid looks like from the
+	// outside. cmd/goretrotv prints it for that reason.
 	TitlesUnaddressed int
 	// TitlesDerived counts waves addressed from the in-world clock rather than
 	// from a match unit the box programmed. It is a HOST INTERVENTION and is

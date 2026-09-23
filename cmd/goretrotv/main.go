@@ -316,9 +316,17 @@ func transmitterFor(air *broadcastConfig, box *board.Runtime, logger *slog.Logge
 			// carried on both because the second line is where they mean something: on the
 			// first, index_waves is 0 by construction (the index waits for the titles to
 			// settle) and event_sections is 0 by definition.
+			// unaddressed_days IS ON THIS LINE BECAUSE ITS ABSENCE MISLED A READING. The
+			// live box reported title_waves=2 while the grid's midnight column was empty on
+			// every channel, and 2 was taken to mean today and tomorrow had both gone out. It
+			// does not mean that: Titles counts PASSES of the wave, one per cadence, after
+			// today and tomorrow have been concatenated. A day the box has not armed is
+			// dropped silently by titlesFor and counted only here -- so without this field the
+			// log cannot tell a broadcast that went out from one that was refused.
 			logger.Info("programmes on air",
 				"clock_waves", counts.Clock, "lineup_waves", counts.Lineup,
 				"title_waves", counts.Titles, "derived_waves", counts.TitlesDerived,
+				"unaddressed_days", counts.TitlesUnaddressed,
 				"index_waves", counts.Index, "event_sections", counts.Events,
 				"filters", filters)
 		})

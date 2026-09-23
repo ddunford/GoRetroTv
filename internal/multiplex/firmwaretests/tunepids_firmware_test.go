@@ -133,4 +133,51 @@ func TestWhatPIDsTheBoxArmsWhenItTunes(t *testing.T) {
 		t.Logf("    PID %#04x on filter %d -- this is the box asking, and it names what to send",
 			pid, afterTune[pid])
 	}
+
+	// AND WHICH TABLE IT WANTS THERE. A PID says where, a match unit says what: the first byte a
+	// unit compares is the table_id, because a match unit skips section_length. All sixteen are
+	// dumped UNCONDITIONALLY -- this project's own rule, written after a census that assumed a
+	// mask and reported a box as asking for nothing while unit 7 sat there asking for a3/ff.
+	t.Logf("=== all sixteen match units while viewing ===")
+	for unit := uint8(0); unit < 16; unit++ {
+		var line string
+		empty := true
+		for b := uint8(0); b < 6; b++ {
+			m, ok := box.Demux.Match(unit, b)
+			if !ok {
+				break
+			}
+			if m.Value != 0 || m.Mask != 0 {
+				empty = false
+			}
+			line += fmt.Sprintf(" %02x/%02x", m.Value, m.Mask)
+		}
+		if empty {
+			continue
+		}
+		note := ""
+		if m, ok := box.Demux.Match(unit, 0); ok {
+			switch {
+			case m.Value == 0x4e:
+				note = "   <- EIT present/following, THIS TRANSPORT"
+			case m.Value == 0x4f:
+				note = "   <- EIT present/following, another transport"
+			case m.Value >= 0x50 && m.Value <= 0x6f:
+				note = "   <- EIT schedule"
+			case m.Value == 0x42:
+				note = "   <- SDT"
+			case m.Value == 0x4a:
+				note = "   <- BAT"
+			case m.Value == 0x40:
+				note = "   <- NIT"
+			case m.Value == 0x73:
+				note = "   <- TOT"
+			case m.Value == 0xc1:
+				note = "   <- the Sky index"
+			case m.Value >= 0xa0 && m.Value <= 0xa4:
+				note = "   <- a Sky title table"
+			}
+		}
+		t.Logf("    unit %2d %s%s", unit, line, note)
+	}
 }

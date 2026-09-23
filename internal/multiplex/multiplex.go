@@ -71,8 +71,14 @@ type Multiplex struct {
 	// sections are being dropped look identical from outside otherwise.
 	sent Counters
 
-	onAir       func(Counters, []TitleRequest)
-	onAirCalled bool
+	// onAir reports a MILESTONE rather than a tally, and fires once per milestone. The titles
+	// starting is one; the event information starting is the other, and it is separate because
+	// the box arms PID 0x0012 only when a viewer tunes -- which may be hours after the guide
+	// filled, or never. Reporting both on one line at the first title wave would print
+	// event_sections: 0 for ever and read as "the EIT never goes out".
+	onAir        func(Counters, []TitleRequest)
+	onAirCalled  bool
+	onEventsSent bool
 
 	onReload func(changed bool, err error)
 	// lastReloadErr keeps a malformed schedule from being reported on every
@@ -869,6 +875,10 @@ func (m *Multiplex) eventWave(uint64) ([]broadcast.Emission, error) {
 	// following move with the clock, so a version that never changed would freeze the banner on
 	// whatever was on when the box first tuned.
 	m.eventVersion = (m.eventVersion + 1) & 0x1f
+	if !m.onEventsSent && m.sent.Events > 0 && m.onAir != nil {
+		m.onEventsSent = true
+		m.onAir(m.sent, sub.Titles)
+	}
 	return wave, nil
 }
 

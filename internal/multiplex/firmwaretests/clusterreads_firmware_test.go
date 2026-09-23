@@ -107,10 +107,6 @@ func (p *screenProbe) reset() {
 
 func (p *screenProbe) press(raw uint8, name string, budget int) uint32 {
 	p.t.Helper()
-	before := screenNow(p.t, p.box)
-	if err := p.box.CSI.Key(raw, 0); err != nil {
-		p.t.Fatal(err)
-	}
 	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
 		if !p.watching || a.Fetch || a.Write {
 			return
@@ -140,28 +136,8 @@ func (p *screenProbe) press(raw uint8, name string, budget int) uint32 {
 			p.hits[i][r]++
 		}
 	}}
-	stable, last, settled := 0, before, uint32(0)
-	for i := 0; i < budget; i++ {
-		if err := p.transmitter.Pump(p.box.Machine.Retired); err != nil {
-			p.t.Fatal(err)
-		}
-		if err := p.box.StepWithHooks(hooks); err != nil {
-			p.t.Fatal(err)
-		}
-		if i%65536 != 0 {
-			continue
-		}
-		now := screenNow(p.t, p.box)
-		if now == last && now != before {
-			stable++
-			settled = now
-			if stable >= 4 {
-				break
-			}
-			continue
-		}
-		stable, last = 0, now
-	}
+	settled := pressAndLetItFinishHooked(p.t, p.box,
+		func() error { return p.transmitter.Pump(p.box.Machine.Retired) }, hooks, raw, budget)
 	p.t.Logf("%-32s drew %08X", name, settled)
 	return settled
 }

@@ -17,6 +17,7 @@ due to exist.
 | `ARCH-FW-1` | Firmware bytes are absent from git and built images | Deployment and access | IMAGE | ARMED | **enforced** |
 | `ARCH-PLATFORM-1` | The shared platform layer does not import domain packages | The shared / platform layer | STATIC | ARMED | **enforced** |
 | `ARCH-MODULE-1` | The Go module declares only the approved WebSocket module and version | Phase 5 transport decision | STATIC | ARMED | **enforced** |
+| `ARCH-PRESS-1` | Firmware probes press the handset through the one helper that lets the paint finish | Non-Obvious Domain Patterns | STATIC | ARMED | **enforced** |
 
 ## Rule definitions
 
@@ -63,6 +64,26 @@ The phase 5 WebSocket transport requires exactly `github.com/coder/websocket@v1.
 ADR 0001. A different module or version, a replacement, or removal of that requirement violates
 the decision. The checker parses `go.mod` with Go's modfile editor; separate probes prove each
 rejection and the missing-file refusal.
+
+### `ARCH-PRESS-1`
+
+Every firmware probe that reads a screen after a key press must go through
+`pressAndLetItFinish`, and only `internal/multiplex/firmwaretests/rununtil_test.go` may contain a
+settle loop. A probe that counts identical screen samples itself is the deliberate violation.
+
+The settle detector calls a screen finished after four identical samples 65,536 instructions apart.
+A menu painting under a busy carousel holds a half-drawn frame still for longer than that, so a
+loop without the paint tail returns a screen that has not finished drawing; the next press lands in
+a painting menu and is swallowed, and the probe reports that the box drew nothing. On 2026-09-23
+broadcasting the `0xB2` guide-row descriptor gave every menu more to paint and thirty-one probes
+stopped reaching the TV GUIDE tab in one run, all reporting `drew 00000000` for screens that were
+drawing perfectly well. Forty-eight of them carried their own copy of the loop, and the rule
+against it had been written in prose twice by then.
+
+The checker is structural: a screen read with a counter incremented and compared against the
+stability threshold inside the same window is a settle loop, whatever the counter is called. It
+asks no semantic question, needs no build, and its coverage detector refuses a corpus that has lost
+the helper.
 
 ## Decision ledger
 

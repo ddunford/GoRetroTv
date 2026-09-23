@@ -110,3 +110,7 @@ digest: e776396462ef27fa28ea166a53dff947b13235c805d7e35b896866318916a904
   when: 2026-09-22T20:50:20Z
    why: Add ghidra:import and ghidra:decompile verbs. The Ghidra workflow (gort-2zp) could never run: ROOT resolved to tools/ rather than the repo root, the two Java scripts it referenced did not exist anywhere in the tree, and ctl.sh had no verb, so the decompile script told the user to run a command that was not there. The scripts now live in tools/ghidra/scripts/ because /ghidra/ is gitignored, and the import maps FLASH_U202.bin at 0x9FC00000 beside the application image so pool words and strings resolve.
 
+digest: 4f8078be22c23ca8384d1bbd5f9e3bd7365246fe420174ef27673ff9aefa937c
+  when: 2026-09-23T09:48:33Z
+   why: Add ARCH-PRESS-1. Broadcasting the 0xB2 guide-row descriptor on 2026-09-23 made every menu take longer to paint, and thirty-one firmware probes stopped reaching the TV GUIDE tab in one suite run -- not because the box stopped drawing, which was measured, but because forty-eight of them carried their own screen-settle loop with no paint tail and read the menu half-drawn. The rule that presses go through one helper existed in prose in two places already and was broken forty-eight times anyway, so it becomes a check: a screen read with a counter incremented and compared against the stability threshold in the same window may exist only in rununtil_test.go. Additive and structural; no existing rule weakened.
+

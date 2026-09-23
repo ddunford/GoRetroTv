@@ -43,31 +43,8 @@ func TestDumpEveryScreenOnTheAtoZWalk(t *testing.T) {
 	press := func(raw uint8, name string, budget int) uint32 {
 		t.Helper()
 		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.Step(); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinish(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, raw, budget)
 		// LET IT ACTUALLY FINISH. Four identical samples is ~260k instructions of stillness, and a
 		// menu painting under a busier carousel holds a HALF-DRAWN frame still for longer than
 		// that -- the TV GUIDE menu was being read mid-paint, with its tab icon still sheared,

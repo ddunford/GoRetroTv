@@ -138,29 +138,15 @@ func TestTheGridsRowLoopEitherRunsOrItDoesNot(t *testing.T) {
 			delete(region, k)
 		}
 		before := screenNow(t, box)
-		if err := box.CSI.Key(keySelect, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last := 0, before
-		settled := uint32(0)
-		runUntil(t, box, transmitter, 60_000_000, func(i int) bool {
-			pc := box.Machine.Core.State().PC &^ 1
-			region[pc>>24]++
-			if pc >= gridWindowLo && pc < gridWindowHi {
-				hits[pc]++
-			}
-			if i%65536 != 0 {
-				return false
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				return stable >= 4
-			}
-			stable, last = 0, now
-			return false
-		})
+		settled := pressAndLetItFinishWatching(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) },
+			board.StepHooks{}, keySelect, 60_000_000, func(int) {
+				pc := box.Machine.Core.State().PC &^ 1
+				region[pc>>24]++
+				if pc >= gridWindowLo && pc < gridWindowHi {
+					hits[pc]++
+				}
+			})
 		t.Logf("select attempt %d: screen %08X -> %08X", attempt, before, settled)
 		// NOT "different from the menu" -- ALL CHANNELS by its own hash. A select that merely
 		// moves the highlight also produces a screen different from the menu, and that is

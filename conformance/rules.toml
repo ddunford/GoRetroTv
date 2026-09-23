@@ -171,3 +171,23 @@ halves = [
   { half = "other modules are absent", held_by = "probe", probe = "dependency-added", detectors = ["external-module"] },
   { half = "the approved module is not replaced", held_by = "probe", probe = "module-replaced", detectors = ["module-replaced"] },
 ]
+
+[[rule]]
+id = "ARCH-PRESS-1"
+invariant = "Firmware probes press the handset through the one helper that lets the paint finish"
+source = "CLAUDE.md § Non-Obvious Domain Patterns; internal/multiplex/firmwaretests/rununtil_test.go"
+classification = "STATIC"
+arming = "ARMED"
+state = "enforced"
+command = ["conformance/checkers/press_helper.py"]
+tooling = "A structural scan of tracked probe sources: a screen read with a counter incremented and compared against the stability threshold inside the same window IS a settle loop, whatever the counter is called. It asks no semantic question, so it needs no build and cannot be argued with."
+subjects = ["internal/multiplex/firmwaretests", "internal/multiplex/firmwaretests/rununtil_test.go"]
+coverage_detector = "press-subject-missing"
+probes = [
+  { name = "hand-rolled-press", detectors = ["press-loop-outside-helper"] },
+  { name = "helper-removed", detectors = ["press-subject-missing"] },
+]
+halves = [
+  { half = "the probe corpus and the shared press helper both exist", held_by = "probe", probe = "helper-removed", detectors = ["press-subject-missing"] },
+  { half = "no probe carries its own screen-settle loop", held_by = "probe", probe = "hand-rolled-press", detectors = ["press-loop-outside-helper"] },
+]

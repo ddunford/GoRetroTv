@@ -69,36 +69,12 @@ func TestWhichIndexSlotTheSearchingScreenReads(t *testing.T) {
 	press := func(raw uint8, name string, budget int) uint32 {
 		t.Helper()
 		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.Step(); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinish(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, raw, budget)
 		t.Logf("%-32s %08X -> %08X", name, before, settled)
 		return settled
 	}
 
-	const boxOfficeMenu = 0xFE8D1CCC
 	menu := press(0x7D, "box office", 80_000_000)
 	tab := menu
 	for attempt := 1; attempt <= 4 && (tab == menu || tab == boxOfficeMenu || tab == 0); attempt++ {

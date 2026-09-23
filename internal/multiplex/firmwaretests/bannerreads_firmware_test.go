@@ -100,32 +100,10 @@ func TestWhetherTheNowAndNextBannerReadsTheLineUp(t *testing.T) {
 	}}
 
 	before := screenNow(t, box)
-	if err := box.CSI.Key(0x80, 0); err != nil { // tv guide: the now-and-next banner
-		t.Fatal(err)
-	}
 	watching = true
-	stable, last, banner := 0, before, uint32(0)
-	for i := 0; i < 80_000_000; i++ {
-		if err := transmitter.Pump(box.Machine.Retired); err != nil {
-			t.Fatal(err)
-		}
-		if err := box.StepWithHooks(hooks); err != nil {
-			t.Fatal(err)
-		}
-		if i%65536 != 0 {
-			continue
-		}
-		now := screenNow(t, box)
-		if now == last && now != before {
-			stable++
-			banner = now
-			if stable >= 4 {
-				break
-			}
-			continue
-		}
-		stable, last = 0, now
-	}
+	// 0x80 is the tv guide key: the now-and-next banner.
+	banner := pressAndLetItFinishHooked(t, box,
+		func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, 0x80, 80_000_000)
 	watching = false
 	if banner == 0 || banner == before {
 		t.Fatalf("harness: the tv guide key drew nothing new (%08X), so this measured no banner",

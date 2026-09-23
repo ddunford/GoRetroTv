@@ -2,6 +2,7 @@ package firmwaretests_test
 
 import (
 	"fmt"
+	"github.com/ddunford/goretrotv/internal/board"
 	"sort"
 	"testing"
 	"time"
@@ -80,35 +81,13 @@ func TestEveryPIDTheBoxEverArms(t *testing.T) {
 
 	press := func(raw uint8, name string) uint32 {
 		t.Helper()
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < 80_000_000; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.Step(); err != nil {
-				t.Fatal(err)
-			}
-			if i%20000 == 0 {
-				note()
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
+		settled := pressAndLetItFinishWatching(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) },
+			board.StepHooks{}, raw, 80_000_000, func(i int) {
+				if i%20000 == 0 {
+					note()
 				}
-				continue
-			}
-			stable, last = 0, now
-		}
+			})
 		t.Logf("%-28s drew %08X", name, settled)
 		return settled
 	}

@@ -148,45 +148,51 @@ func screenBodyNow(t *testing.T, box *board.Runtime) uint32 {
 	return statehash.HashBytes(picture.Pix[start:])
 }
 
-// pressAndLetItFinish sends a key, waits for the screen to settle, and THEN LETS THE PAINT FINISH.
+// pressAndLetItFinishWatching sends a key, waits for the screen to settle, and THEN LETS THE PAINT
+// FINISH. Every press in this package goes through it, and the three thin wrappers below are the
+// only shapes a probe should need.
 //
-// THIS IS THE SETTLE TRAP IN ITS THIRD COSTUME, and it has now bitten this project at every level.
-// The settle detector calls a screen finished after four identical samples 65,536 instructions
-// apart -- about a quarter of a million instructions of stillness. A menu painting under a busy
-// carousel holds a HALF-DRAWN frame still for longer than that, so the detector returns a real
-// framebuffer of a screen that has not finished drawing.
+// THIS IS THE SETTLE TRAP, and it has now bitten this project at every level. The settle detector
+// calls a screen finished after four identical samples 65,536 instructions apart -- about a quarter
+// of a million instructions of stillness. A menu painting under a busy carousel holds a HALF-DRAWN
+// frame still for longer than that, so the detector returns a real framebuffer of a screen that has
+// not finished drawing, and the NEXT press lands in a painting menu, which is exactly when a press
+// is swallowed.
 //
-// That is where this package's screen pins came from, and two of them are the same screen:
+// THE COST IS MEASURED, not hypothetical. Forty-eight probes carried their own copy of the settle
+// loop without the tail. On 2026-09-23 broadcasting the 0xB2 guide-row descriptor made every menu
+// paint longer -- correctly, because the box now has more to draw -- and thirty-one of those probes
+// stopped reaching the TV GUIDE tab in the same run, all reporting the same "drew 00000000". The
+// screen was drawing perfectly (TestWhyTheTVGuideTabStoppedSettling watched it draw nine pictures
+// and hold the last for 77 million instructions); the instruments were reading it mid-paint. The
+// rule had been written down twice by then. A rule competes for attention; a single helper that is
+// less work than a bare loop does not, so the loop lives HERE ONLY and conformance enforces it.
 //
-//	0xDDBC18E9  the TV GUIDE menu MID-PAINT, its tab icon still sheared
-//	0x43779DC8  the same menu FINISHED, which route_test.go names "tvGuideMenuRedrawn" and treats
-//	            as evidence that a SELECT failed to land
-//
-// Both are the ten-entry menu with ALL CHANNELS highlighted; the pictures say so. So a route that
-// waits for 0xDDBC18E9 presses SELECT into a menu that is still painting -- which is exactly when a
-// press is swallowed -- then sees 0x43779DC8 and concludes the select did not land. It did not, and
-// the reason was the route.
-//
-// Running a tail after the settle costs ten million instructions a press and removes the whole
-// class. A screen that was already finished reports the same hash twice and nothing changes.
-func pressAndLetItFinish(t *testing.T, box *board.Runtime, pump func() error,
-	raw uint8, budget int) uint32 {
+// each runs before every step, for a probe that must sample something the hooks cannot see -- the
+// armed PID set, the PC about to execute. It may be nil.
+func pressAndLetItFinishWatching(t *testing.T, box *board.Runtime, pump func() error,
+	hooks board.StepHooks, raw uint8, budget int, each func(i int)) uint32 {
 	t.Helper()
 	before := screenNow(t, box)
 	if err := box.CSI.Key(raw, 0); err != nil {
 		t.Fatal(err)
 	}
-	step := func() {
-		if err := pump(); err != nil {
-			t.Fatal(err)
+	step := func(i int) {
+		if pump != nil {
+			if err := pump(); err != nil {
+				t.Fatal(err)
+			}
 		}
-		if err := box.Step(); err != nil {
+		if each != nil {
+			each(i)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
 			t.Fatal(err)
 		}
 	}
 	stable, last, settled := 0, before, uint32(0)
 	for i := 0; i < budget; i++ {
-		step()
+		step(i)
 		if i%65536 != 0 {
 			continue
 		}
@@ -205,9 +211,25 @@ func pressAndLetItFinish(t *testing.T, box *board.Runtime, pump func() error,
 		return 0
 	}
 	for i := 0; i < paintTail; i++ {
-		step()
+		step(budget + i)
 	}
 	return screenNow(t, box)
+}
+
+// pressAndLetItFinish is the plain press: no observer, no sampler.
+func pressAndLetItFinish(t *testing.T, box *board.Runtime, pump func() error,
+	raw uint8, budget int) uint32 {
+	t.Helper()
+	return pressAndLetItFinishWatching(t, box, pump, board.StepHooks{}, raw, budget, nil)
+}
+
+// pressAndLetItFinishHooked is the press with an observer attached, so a census can watch what a
+// press causes without reimplementing the press. The observer stays attached through the paint
+// tail, because the tail is part of the draw it is counting.
+func pressAndLetItFinishHooked(t *testing.T, box *board.Runtime, pump func() error,
+	hooks board.StepHooks, raw uint8, budget int) uint32 {
+	t.Helper()
+	return pressAndLetItFinishWatching(t, box, pump, hooks, raw, budget, nil)
 }
 
 // paintTail is how long a settled screen is given to finish painting. Ten million instructions is

@@ -211,32 +211,8 @@ func measureGridBlits(t *testing.T, waitForTransport bool) map[uint32]int {
 		if raw == keySelect {
 			pages, watching = map[uint32]int{}, true
 		}
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-32s drew %08X", name, settled)
 		return settled
@@ -309,32 +285,8 @@ func TestWhereADrawnRowActuallyLands(t *testing.T) {
 	press := func(raw uint8, name string, budget int) uint32 {
 		t.Helper()
 		pages, watching = map[uint32]int{}, true
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-32s drew %08X", name, settled)
 		return settled

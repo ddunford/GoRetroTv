@@ -191,32 +191,8 @@ func paintersFor(t *testing.T, wantGrid bool) map[painterSite]int {
 	press := func(raw uint8, name string, budget int) uint32 {
 		t.Helper()
 		sites, watching = map[painterSite]int{}, true
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-32s drew %08X", name, settled)
 		return settled
@@ -358,32 +334,8 @@ func TestWhetherAnythingReadsTheListTheRowBodyBuilds(t *testing.T) {
 			watching, inLoop, finished, iterations = true, false, false, 0
 			built, readers, readWords = map[uint32]bool{}, map[painterSite]int{}, 0
 		}
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-32s drew %08X", name, settled)
 		return settled
@@ -496,32 +448,8 @@ func TestWhetherTheRowLoopIsTheGridsOrEveryScreens(t *testing.T) {
 	press := func(raw uint8, name string, budget int) (uint32, int) {
 		t.Helper()
 		hits, watching = 0, true
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-32s drew %08X, loop head reached %d times", name, settled, hits)
 		return settled, hits

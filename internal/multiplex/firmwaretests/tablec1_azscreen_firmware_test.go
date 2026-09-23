@@ -95,31 +95,8 @@ func TestWhetherAtoZListingsReadsATableC1SentUnderItsLetter(t *testing.T) {
 	press := func(raw uint8, name string, budget int) uint32 {
 		t.Helper()
 		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		t.Logf("%-22s %08X -> %08X", name, before, settled)
 		return settled
 	}
@@ -132,7 +109,6 @@ func TestWhetherAtoZListingsReadsATableC1SentUnderItsLetter(t *testing.T) {
 	// The tab is now also CHECKED rather than assumed: the tv guide menu is the
 	// one with ten entries, and FE8D1CCC is box office (lessons.md), so landing
 	// there means LEFT has not moved yet and it is pressed again.
-	const boxOfficeMenu = 0xFE8D1CCC
 	menu := press(0x7D, "box office", 80_000_000)
 	tab := menu
 	for attempt := 1; attempt <= 4 && (tab == menu || tab == boxOfficeMenu || tab == 0); attempt++ {

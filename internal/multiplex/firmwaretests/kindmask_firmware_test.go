@@ -97,32 +97,8 @@ func TestWhetherTheLineUpKindIntersectsTheGridsMask(t *testing.T) {
 		if raw == keySelect {
 			masks, watching = map[uint32]int{}, true
 		}
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, drew := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				drew = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		drew := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-32s drew %08X", label, drew)
 		return drew
@@ -740,32 +716,8 @@ func gridWithFlags(t *testing.T, uniform byte) {
 
 	press := func(raw uint8, label string, budget int) uint32 {
 		t.Helper()
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
-		stable, last, drew := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.Step(); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				drew = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		drew := pressAndLetItFinish(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, raw, budget)
 		t.Logf("%-32s drew %08X", label, drew)
 		return drew
 	}

@@ -168,47 +168,4 @@ func nativeCensusAtoZ(t *testing.T) map[uint32]int {
 	return calls
 }
 
-// pressAndLetItFinishHooked is pressAndLetItFinish with an observer attached, so a census can watch
-// what a press causes without reimplementing the press.
-func pressAndLetItFinishHooked(t *testing.T, box *board.Runtime, pump func() error,
-	hooks board.StepHooks, raw uint8, budget int) uint32 {
-	t.Helper()
-	before := screenNow(t, box)
-	if err := box.CSI.Key(raw, 0); err != nil {
-		t.Fatal(err)
-	}
-	step := func() {
-		if err := pump(); err != nil {
-			t.Fatal(err)
-		}
-		if err := box.StepWithHooks(hooks); err != nil {
-			t.Fatal(err)
-		}
-	}
-	stable, last, settled := 0, before, uint32(0)
-	for i := 0; i < budget; i++ {
-		step()
-		if i%65536 != 0 {
-			continue
-		}
-		now := screenNow(t, box)
-		if now == last && now != before {
-			stable++
-			settled = now
-			if stable >= 4 {
-				break
-			}
-			continue
-		}
-		stable, last = 0, now
-	}
-	if settled == 0 {
-		return 0
-	}
-	for i := 0; i < paintTail; i++ {
-		step()
-	}
-	return screenNow(t, box)
-}
-
 var _ = fmt.Sprint

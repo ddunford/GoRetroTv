@@ -33,9 +33,8 @@ import (
 // because three instruments in this project have measured the wrong screen while reporting
 // confidently about this one.
 func TestWhatHoldsTheRowCountOnAListScreen(t *testing.T) {
-	const boxOfficeMenu = 0xFE8D1CCC // six entries, verified by eye
-	const tvGuideMenu = 0xDDBC18E9   // ten entries, verified by eye
-	const allChannels = 0x42DBD889   // the grid, no rows, verified by eye
+	const tvGuideMenu = 0xDDBC18E9 // ten entries, verified by eye
+	const allChannels = 0x42DBD889 // the grid, no rows, verified by eye
 	const boxOfficeRows, tvGuideRows = 6, 10
 
 	guide := demoGuide(t)
@@ -76,34 +75,10 @@ func TestWhatHoldsTheRowCountOnAListScreen(t *testing.T) {
 
 	press := func(raw uint8, name string, budget int) (uint32, valueSet) {
 		t.Helper()
-		before := screenNow(t, box)
-		if err := box.CSI.Key(raw, 0); err != nil {
-			t.Fatal(err)
-		}
 		record = valueSet{}
 		watching = true
-		stable, last, settled := 0, before, uint32(0)
-		for i := 0; i < budget; i++ {
-			if err := transmitter.Pump(box.Machine.Retired); err != nil {
-				t.Fatal(err)
-			}
-			if err := box.StepWithHooks(hooks); err != nil {
-				t.Fatal(err)
-			}
-			if i%65536 != 0 {
-				continue
-			}
-			now := screenNow(t, box)
-			if now == last && now != before {
-				stable++
-				settled = now
-				if stable >= 4 {
-					break
-				}
-				continue
-			}
-			stable, last = 0, now
-		}
+		settled := pressAndLetItFinishHooked(t, box,
+			func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, raw, budget)
 		watching = false
 		t.Logf("%-30s drew %08X over %d addresses", name, settled, len(record))
 		return settled, record

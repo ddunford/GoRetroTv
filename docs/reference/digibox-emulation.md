@@ -9375,3 +9375,52 @@ workaround that is indistinguishable from robustness until somebody uses the pro
 The retries remain, because a slow screen is a real thing, but they are no longer what makes a press
 land. `TestAFirstPressLandsAfterTheBoxHasBeenIdle` presses ONCE at five idle lengths and is the gate
 that would catch this returning.
+
+## The ALL CHANNELS grid puts a blank row between genre groups
+
+<!-- anchor: internal/multiplex/firmwaretests/gridgaps_firmware_test.go -->
+<!-- fingerprint: sha256:7e0aac0664bbbc538a9fea462f01e5c94996fe64563fbd931794af7135b9a993 @ 2026-09-23 -->
+
+**Measured 2026-09-23.** The grid draws a BLANK ROW SLOT wherever the genre changes between one
+drawn channel and the next. With the demo's six channels — 101 g3, 121 g3, 251 g1, 301 g6, 401 g7,
+501 g5 — that is four separators among six rows, and the screen reads as broken.
+
+### Two explanations fitted the data exactly, and only an experiment separated them
+
+Four genre changes and four large channel-number jumps (101→121 is +20; then +130, +50, +100,
++100) fall in the same four places. This project has lost a week to that shape before, so neither
+was believed until one of them moved the gaps. Row plates were measured down the grid's left
+column, one variable at a time, from the same fixture:
+
+    stock                                  pitches 32 64 64 64 64   4 gaps
+    every genre 3, channel numbers as they are      32 32 32 32 32   0 gaps
+    channels 101..106, genres as they are           64 64 64 64      4 gaps
+    three genre pairs, PREDICTED 2 before measuring 32 64 32 64 32   2 gaps
+
+The third run holds genre and flattens nothing. The fourth predicted its own answer: six channels
+sharing three genres in adjacent pairs must show exactly two separators, and did. **The genre
+groups the rows.**
+
+### It is faithful, and the demo's line-up is what made it look wrong
+
+Sky's 1998 EPG numbered its channels BY SECTION — 100s entertainment, 200s lifestyle and culture,
+300–339 movies, 340–399 music, 400s sport, 500–519 news with 520–599 documentaries, 600s kids —
+established when the digital service launched, with the analogue channels placed at the top of
+their categories. Those seven sections are the same seven this project measured the guide filtering
+on, which is independent confirmation of the genre map rather than a coincidence.
+
+A real line-up therefore clusters dozens of channels per genre range and shows a handful of
+separators among two hundred rows. Ours is six channels across five genres, so nearly every row
+gets one. Measured with forty channels clustered into the EPG's own ranges: 101–106 sit together
+with NO separator and one blank precedes 201, and the grid gains Page Up, Page Down and a scroll
+arrow. Nothing in the emulator needed changing.
+
+Source for the section ranges: <https://www.satandpcguy.com/sky-tv/sky-tv-channel-numbers/>.
+
+### The instrument was wrong first, and that is the reusable part
+
+`countGaps` took the row unit to be the smallest pitch on screen, which is right only when at least
+one pair is drawn together. On the contiguous-numbers run EVERY pair was separated, so the smallest
+pitch WAS the gapped one and it reported a flat grid — the exact opposite of the truth. Only the
+raw pitches printed beside the verdict caught it. A plate's own height is the row unit whether or
+not any two rows touch, and that is what it measures now.

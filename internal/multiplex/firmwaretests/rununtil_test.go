@@ -214,3 +214,29 @@ func pressAndLetItFinish(t *testing.T, box *board.Runtime, pump func() error,
 // forty times the stillness the settle detector asks for, and was measured to be enough for the
 // slowest menu in the guide under a carousel carrying clock, line-up, titles and index.
 const paintTail = 10_000_000
+
+// runUntilHooked is runUntil with an observer attached, for probes that must watch from BOOT
+// rather than from the first key press.
+//
+// It exists because the interesting write is often the one that happens before anything is on
+// screen: the grid's row state and the type its rows inherit are both set long before the grid is
+// opened, and a probe that starts observing at the first press sees neither and reports a
+// confident nothing.
+func runUntilHooked(t *testing.T, box *board.Runtime, transmitter *multiplex.Multiplex,
+	hooks board.StepHooks, budget int, observe func(i int) bool) int {
+	t.Helper()
+	for i := 0; i < budget; i++ {
+		if transmitter != nil {
+			if err := transmitter.Pump(box.Machine.Retired); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if observe(i) {
+			return i
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return -1
+}

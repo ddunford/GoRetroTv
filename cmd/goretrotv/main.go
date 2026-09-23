@@ -310,9 +310,15 @@ func transmitterFor(air *broadcastConfig, box *board.Runtime, logger *slog.Logge
 			if filters == "" {
 				filters = "none (addressed from the clock)"
 			}
+			// The index and the event sections are named here for the same reason as the
+			// filters: they are the two rungs that transmit NOTHING until something else has
+			// happened -- the index waits for the titles to settle, the EIT waits for the
+			// viewer to tune -- so a zero is a state of the box rather than a fault, and a
+			// line that omitted them would leave somebody guessing which.
 			logger.Info("programmes on air",
 				"clock_waves", counts.Clock, "lineup_waves", counts.Lineup,
 				"title_waves", counts.Titles, "derived_waves", counts.TitlesDerived,
+				"index_waves", counts.Index, "event_sections", counts.Events,
 				"filters", filters)
 		})
 	}

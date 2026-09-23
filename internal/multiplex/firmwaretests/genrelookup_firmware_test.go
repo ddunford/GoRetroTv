@@ -41,6 +41,13 @@ import (
 func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
 
+	// SIX-BYTE RECORDS, READ FROM THE BOX THAT PRODUCED THE POINTER. 0x800CBA16 yields a pointer
+	// per channel and 0x800CBA1A reads +4 of it, so the record is six bytes; dumping it names the
+	// structure instead of leaving "a six-byte record" as a shape. It is captured inside the walk
+	// because that is where the machine is, and a pointer read out of a box that has moved on is
+	// a number rather than a record.
+	const recordAt = 0x800CBA16
+	var shapes map[uint32][]byte
 	walk := func(t *testing.T, key uint8, name string,
 		watch func(a bus.ObservedAccess, pc uint32), each func(pc uint32)) uint32 {
 		t.Helper()
@@ -77,8 +84,18 @@ func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 			t.Fatalf("harness: never reached the TV GUIDE menu; drew %08X", tab)
 		}
 		hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+			pc := box.Machine.Core.State().PC &^ 1
+			if shapes != nil && pc == recordAt && !a.Fetch && !a.Write {
+				if at := a.Value; at >= 0x80000000 && at < 0x80800000 {
+					row := make([]byte, 6)
+					for i := range row {
+						row[i] = byte(box.RAM.Read((at&0x1fffffff)+uint32(i), bus.Byte)) // #nosec G115
+					}
+					shapes[at] = row
+				}
+			}
 			if watch != nil {
-				watch(a, box.Machine.Core.State().PC&^1)
+				watch(a, pc)
 			}
 		}}
 		screen := uint32(0)
@@ -128,23 +145,31 @@ func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 			"differential found no reject path and there is nothing to read")
 	}
 
-	type load struct {
-		pc, at, value uint32
-		size          bus.Size
-	}
-	var loads []load
-	again := walk(t, 0x02, "ENTERTAINMENT again", func(a bus.ObservedAccess, pc uint32) {
-		if a.Fetch || a.Write || !exclusive[pc] {
-			return
+	record := func(t *testing.T, key uint8, name string, want uint32) []load {
+		t.Helper()
+		var loads []load
+		drew := walk(t, key, name, func(a bus.ObservedAccess, pc uint32) {
+			if a.Fetch || a.Write || !exclusive[pc] {
+				return
+			}
+			loads = append(loads, load{pc: pc, at: a.Virtual, value: a.Value, size: a.Size})
+		}, func(uint32) {})
+		if want != 0 && drew != want {
+			t.Fatalf("harness: %s drew %08X where the first run drew %08X, so the two are not the "+
+				"same experiment and these reads belong to neither", name, drew, want)
 		}
-		loads = append(loads, load{pc: pc, at: a.Virtual, value: a.Value, size: a.Size})
-	}, func(uint32) {})
-	if again != genreScreen {
-		t.Fatalf("harness: the second ENTERTAINMENT run drew %08X where the first drew %08X, so "+
-			"the two are not the same experiment and the reads below belong to neither",
-			again, genreScreen)
+		t.Logf("%-20s %d reads by the reject path", name, len(loads))
+		return loads
 	}
-	t.Logf("%d reads made by those addresses", len(loads))
+	shapes = map[uint32][]byte{}
+	loads := record(t, 0x02, "ENTERTAINMENT again", genreScreen)
+
+	// AND A SECOND GENRE, which is the whole point of having found the sites. The reject path
+	// compares against something loaded from 0x80494904, the same four bytes for every channel --
+	// so if that is the GENRE the screen is looking for, MOVIES must read a different value there
+	// and every other site must stay put. If nothing moves, the selector is somewhere this probe
+	// has not looked and saying so is the result.
+	movies := record(t, 0x03, "MOVIES", 0)
 
 	// WHAT THOSE INSTRUCTIONS READ, grouped by the instruction, with the values they saw.
 	type site struct {
@@ -195,6 +220,94 @@ func TestWhatTheGenreScreenLooksUp(t *testing.T) {
 	}
 	t.Log("a value that is 0xFFFFFFFF or 0 across every channel is the lookup coming back empty; " +
 		"the ADDRESS it read is the field, and that is what the broadcast has to fill")
+
+	// WHICH OF THOSE SITES DEPENDS ON WHICH GENRE WAS OPENED.
+	byPC := func(ls []load) map[uint32]map[uint32]bool {
+		out := map[uint32]map[uint32]bool{}
+		for _, l := range ls {
+			if out[l.pc] == nil {
+				out[l.pc] = map[uint32]bool{}
+			}
+			out[l.pc][l.value] = true
+		}
+		return out
+	}
+	ent, mov := byPC(loads), byPC(movies)
+	var moved, fixed []uint32
+	for pc := range ent {
+		if mov[pc] == nil {
+			continue
+		}
+		same := len(ent[pc]) == len(mov[pc])
+		if same {
+			for v := range ent[pc] {
+				if !mov[pc][v] {
+					same = false
+					break
+				}
+			}
+		}
+		if same {
+			fixed = append(fixed, pc)
+			continue
+		}
+		moved = append(moved, pc)
+	}
+	sort.Slice(moved, func(i, j int) bool { return moved[i] < moved[j] })
+	sort.Slice(fixed, func(i, j int) bool { return fixed[i] < fixed[j] })
+	t.Logf("=== WHICH SITES DEPEND ON WHICH GENRE WAS OPENED ===")
+	if len(moved) == 0 {
+		t.Logf("    NONE. Every site reads the same values for ENTERTAINMENT and MOVIES, so the "+
+			"thing that distinguishes one genre from another is NOT read by the %d addresses "+
+			"unique to the reject path. It is loaded earlier, by an instruction both screens "+
+			"execute, and finding it is a different hunt -- do not read this as 'the screens are "+
+			"identical', because they draw different titles.", len(exclusive))
+		return
+	}
+	for _, pc := range moved {
+		t.Logf("    %08X  ENTERTAINMENT %s", pc, tally(countOf(loads, pc)))
+		t.Logf("              MOVIES        %s", tally(countOf(movies, pc)))
+	}
+	t.Logf("    %d sites read the same values for both genres", len(fixed))
+
+	// AND WHAT THE PER-CHANNEL RECORD ACTUALLY IS. 0x800CBA16 yields six pointers six bytes apart
+	// and 0x800CBA1A reads +4 of each, so there are six six-byte records -- one per channel. Their
+	// bytes are dumped against what this broadcast sends, because "a six-byte record" is a shape
+	// and the field names are the finding.
+	if len(shapes) == 0 {
+		t.Log("no per-channel record pointers were seen at 800CBA16, so the shape below is skipped")
+		return
+	}
+	records := make([]uint32, 0, len(shapes))
+	for at := range shapes {
+		records = append(records, at)
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i] < records[j] })
+	t.Logf("=== THE %d PER-CHANNEL RECORDS THE SEARCH WALKS ===", len(records))
+	for _, at := range records {
+		t.Logf("    %08X  % 02X", at, shapes[at])
+	}
+	t.Log("match these against the broadcast: service ids 100..105, channel numbers 101 121 251 " +
+		"301 401 501, listings ids 0065 0079 00FB 012D 0191 01F5 -- whichever byte is 01 for every " +
+		"channel is the one the genre screen wants to equal its own number")
+	t.Log("a site that MOVES with the genre is the selector the screen is searching for, and the " +
+		"value it holds is that genre's number -- which is the mapping this task needs")
+}
+
+func countOf(ls []load, pc uint32) map[uint32]int {
+	out := map[uint32]int{}
+	for _, l := range ls {
+		if l.pc == pc {
+			out[l.value]++
+		}
+	}
+	return out
+}
+
+// load is one read made by an instruction on the reject path.
+type load struct {
+	pc, at, value uint32
+	size          bus.Size
 }
 
 // tally renders a small value histogram, commonest first, without pulling in a dependency.

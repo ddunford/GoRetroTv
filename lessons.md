@@ -156,36 +156,58 @@ Also, from the same run: printing a `[]uint16` with `%v` gives decimal. The box 
 is `0x52` — a PID this project already knows well — and it read for a moment as a new discovery.
 Format identifiers the way the rest of the record writes them.
 
-### The settle returns mid-paint frames — but two screens that photograph alike are not therefore one
+### The settle detector returns mid-paint frames, and everything downstream of it was wrong
 
 `screenNow` + "four identical samples 65,536 instructions apart" calls a screen done after about a
 quarter of a million instructions of stillness. A menu painting under a busy carousel holds a
-HALF-DRAWN frame still for longer than that, so the detector can return a real framebuffer of a
-screen that has not finished drawing. That part is measured and it is worth knowing.
+HALF-DRAWN frame still for longer than that, so the detector returns a real framebuffer of a screen
+that has not finished drawing — and the next press lands in a painting menu, which is exactly when
+a press is swallowed.
 
-**What was then inferred from it was wrong, and the inference is the lesson.** `0xDDBC18E9` and
-`0x43779DC8` both photograph as the ten-entry TV GUIDE menu with ALL CHANNELS highlighted, so
-`route_test.go` was changed to accept either, on the reading that one was mid-paint and the other
-finished. Then the suite said otherwise: **SELECT from `0xDDBC18E9` opens the grid, and SELECT from
-`0x43779DC8` moves to the next TAB.** Two screens that behave differently under the same key are not
-the same state, whatever they look like. The change was reverted and the claim withdrawn; what
-actually distinguishes them is unmeasured, and "focus on the tab row versus focus in the menu" is
-another guess, which is exactly what produced the wrong one.
+**Every screen pin in the firmware suite was therefore a photograph of a menu mid-draw.** Re-taken
+on 2026-09-23 with a press that runs a ten-million-instruction tail after the settle, and verified
+by eye against `.artifacts/route-*.png`:
 
-So: **the picture is necessary and it is not sufficient.** This project's rule has always been that
-only the artefact proves which screen you measured — the corollary it did not say out loud is that
-two identical artefacts do not prove you are in the same STATE. Where a hash is load-bearing, prove
-the equivalence by BEHAVIOUR (press the key and see where it goes), not by eye.
+    box office        0x1CBD8D51 -> 0xFE8D1CCC   six entries, MOVIES BY START TIME highlighted
+    the TV GUIDE menu 0xDDBC18E9 -> 0x43779DC8   ten entries, ALL CHANNELS highlighted
+    ALL CHANNELS                  0x144CF59D     "Searching for listings", filling to 0x71A6DFE8
 
-`pressAndLetItFinish` (`rununtil_test.go`) — settle, then run a ten-million-instruction tail and
-re-read — is still the right tool for a route of your own, and the A-Z walk runs with no swallowed
-press using it. Three other things wear the same hat and are real:
+and the route is **ONE LEFT from box office, not two** — the second LEFT was compensating for the
+first press being read mid-paint, and with the tail it walks past the menu to SERVICES.
+
+**`0xDDBC18E9` and `0x43779DC8` are one menu at two moments of its paint**, and how that was
+established is the part worth keeping. Both photograph as the ten-entry TV GUIDE menu, so the route
+was changed to accept either — and the suite appeared to refute it: *SELECT from `0xDDBC18E9` opens
+the grid, SELECT from `0x43779DC8` moves to the next TAB*. The change was reverted and the claim
+withdrawn on the strength of that. It was the right call on the evidence and the evidence was bad:
+both of those presses were themselves reading mid-paint, so what differed was WHEN in the paint the
+key landed, not WHICH screen it landed on. With the tail, SELECT from `0x43779DC8` opens ALL
+CHANNELS, photographed.
+
+So the rule survives its own example, which is the useful shape of it:
+
+- **The picture is necessary and not sufficient.** Two identical artefacts do not prove two
+  identical states; where a hash is load-bearing, prove the equivalence by BEHAVIOUR.
+- **And a behavioural difference is only as good as the instrument that pressed the key.** A
+  difference measured through a broken press is a fact about the press. Before concluding that two
+  states differ, check that the thing distinguishing them is not the harness.
+
+**It is now a conformance rule rather than a paragraph.** `ARCH-PRESS-1` holds that a screen read
+with a counter incremented and compared against the stability threshold in the same window may
+exist only in `rununtil_test.go`. It exists because the rule had been written in prose twice and
+was broken in forty-eight places anyway: broadcasting the `0xB2` guide-row descriptor made every
+menu take longer to paint, and thirty-one probes stopped reaching the TV GUIDE tab in a single
+suite run, all reporting `drew 00000000` for screens that were drawing perfectly well.
+
+Three other things wear the same hat and are real:
 
 - **Do not wait for transport state ≥ 6 before pressing keys.** It leaves the box mid-animation, so
   nothing settles and every press reports `00000000` — which reads exactly like a box that has
   stopped taking input, and was chased as one.
-- **Do not crop the tab strip out of the screen hash** to dodge the animation. The strip is the only
-  thing that distinguishes one tab from another, so a body-only hash makes navigation *worse*.
+- **Do not crop the tab strip out of the screen hash** to dodge the animation. Measured: below the
+  strip the picture churns as hard as the whole frame, because what keeps changing is the menu's
+  own content — and the strip is the only thing that distinguishes one tab from another, so a
+  body-only hash makes navigation *worse* while fixing nothing.
 - **Pin the screen you select FROM, not the one you land on**, whenever the destination is the thing
   under test. ALL PROGRAMMES A-Z opens empty with no index and already filled with one, so pinning
   it cost a run; the category menu before it is stable.

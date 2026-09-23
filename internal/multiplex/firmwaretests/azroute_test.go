@@ -23,13 +23,16 @@ import (
 // five times.
 //
 // EVERY HASH HERE IS A FINISHED SCREEN, which is the other half of why the older pins failed.
-// 0xDDBC18E9 -- what route_test.go pins as this menu -- is the SAME menu MID-PAINT, with its tab
-// icon still sheared; 0x43779DC8, which that file names "tvGuideMenuRedrawn" and reads as evidence
-// that a SELECT did not land, is the finished article. The pictures say so. A route that waits for
-// the mid-paint frame presses SELECT into a screen that is still drawing, which is exactly when a
-// press is swallowed, and then reads the finished menu as a failure. Every press here goes through
-// pressAndLetItFinish for that reason, and with it the whole walk runs with no swallowed press at
-// all.
+// 0xDDBC18E9 is this same menu MID-PAINT, with its tab icon still sheared, and 0x43779DC8 is the
+// finished article; the pictures say so. A route that waits for the mid-paint frame presses SELECT
+// into a screen that is still drawing, which is exactly when a press is swallowed, and then reads
+// the finished menu as a failure.
+//
+// ROUTE_TEST.GO AGREES NOW. It was re-measured on 2026-09-23 and pins the finished frames too, so
+// the two routes have converged and only one of them should survive -- gort-qxl.route-dedupe owns
+// the merge. Until then this file is the A-Z half and route_test.go is the ALL CHANNELS half, and
+// neither invents its own press: both go through pressAndLetItFinish, which conformance rule
+// ARCH-PRESS-1 now requires of every probe in the package.
 //
 // THE DESTINATION IS THE ONE THING NOT PINNED, and deliberately. ALL PROGRAMMES A-Z opens EMPTY
 // when no index has been delivered and opens ALREADY FILLED when one resolved, so its hash is the
@@ -38,8 +41,9 @@ import (
 // whatever was delivered -- and ALL PROGRAMMES is its highlighted first entry, so one SELECT from
 // there lands where we mean. The artefact is always dumped, because the picture is the only proof.
 const (
-	azBoxOffice    = 0xFE8D1CCC // the box office menu, FINISHED
-	azTVGuideMenu  = 0x43779DC8 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted, FINISHED
+	// The menu this walk starts from is the one route_test.go pins, and it is named there once:
+	// two constants for one measured screen is how two files come to disagree about it.
+	azTVGuideMenu  = tvGuideMenuScreen
 	azHighlighted  = 0xF77F97B8 // the same menu with A-Z LISTINGS highlighted
 	azCategoryMenu = 0x63270B3D // ALL PROGRAMMES / ENTERTAINMENT / MOVIES / ... eight entries
 
@@ -133,11 +137,11 @@ func azPressFunc(t *testing.T, box *board.Runtime, pump func() error) pressFunc 
 
 // openAllChannelsFinished is the route to the ALL CHANNELS grid, pinned on a FINISHED frame.
 //
-// route_test.go's version pins the TV GUIDE menu to 0xDDBC18E9, which is that menu MID-PAINT, and
-// pins the box office menu to a hash a finished paint does not produce either. Both were taken with
-// the settle detector, which calls a screen done after about a quarter of a million instructions of
-// stillness -- less than a menu painting under a busy carousel holds a half-drawn frame. That is
-// why SELECT "kept not landing" there: the route pressed into a screen that was still drawing.
+// IT IS A DUPLICATE NOW AND SHOULD NOT SURVIVE. It was written because route_test.go pinned the TV
+// GUIDE menu to 0xDDBC18E9 -- that menu MID-PAINT -- and the box office menu to a hash a finished
+// paint does not produce either, which is why SELECT "kept not landing" there: the route pressed
+// into a screen that was still drawing. Both files were re-measured on 2026-09-23 and now pin the
+// same finished frames and take the same one LEFT, so gort-qxl.route-dedupe owns the merge.
 //
 // This one pins the single screen that has been verified by picture -- the ten-entry TV GUIDE menu,
 // finished, with ALL CHANNELS highlighted as entry 1 -- and takes ONE select from it. The

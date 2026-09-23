@@ -145,12 +145,21 @@ func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 		return nil, fmt.Errorf("multiplex: no in-world clock, so the broadcast has no date to claim")
 	}
 	m := &Multiplex{box: box, guide: guide, dict: dict, clock: clock, version: 1}
-	carousel, err := broadcast.NewCarousel(schedule, broadcast.Source{
+	source := broadcast.Source{
 		Clock:  m.clockWave,
 		Lineup: m.lineupWave,
 		Titles: m.titleWave,
-		Index:  m.indexWave,
-	})
+	}
+	// THE INDEX RUNG IS OPT-IN BY PERIOD, and the carousel's refusal of a zero period stays strict
+	// because of it. A schedule that does not name an IndexPeriod is one that does not want the
+	// A-Z index -- which is a supported way to run, and is how the probes pinned to screen hashes
+	// taken under a lighter load keep the broadcast they were calibrated against. Wiring the
+	// source unconditionally instead turned "you forgot the period" into an error every caller
+	// without one had to work around.
+	if schedule.IndexPeriod != 0 {
+		source.Index = m.indexWave
+	}
+	carousel, err := broadcast.NewCarousel(schedule, source)
 	if err != nil {
 		return nil, err
 	}

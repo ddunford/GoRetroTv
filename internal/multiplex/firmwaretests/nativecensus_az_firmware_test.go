@@ -97,7 +97,7 @@ func nativeCensusAtoZ(t *testing.T) map[uint32]int {
 	dict := demoDictionary(t)
 	box := restoredBox(t)
 	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
-	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoSchedule())
+	transmitter, err := multiplex.New(box, guide, dict, multiplex.FixedClock{At: day}, demoScheduleWithIndex())
 	if err != nil {
 		t.Fatal(err)
 	}

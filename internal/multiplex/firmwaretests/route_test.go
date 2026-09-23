@@ -65,14 +65,21 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 		// re-pin the grid route on hashes nobody has looked at.
 		tvGuideMenuRedrawn = 0x43779DC8
 	)
+	// STOP AT EITHER HASH, BECAUSE THEY ARE THE SAME SCREEN. The loop used to run until it saw
+	// the mid-paint frame specifically, and would press straight past the finished menu looking
+	// for it -- so the moment the carousel got busy enough that the paint completed inside the
+	// press budget, this route walked off the tv guide tab entirely and reported it unreachable.
+	// Which of the two frames a run happens to catch is a property of how loaded the box is, and
+	// no route should depend on that.
+	arrived := func(s uint32) bool { return s == tvGuideMenuScreen || s == tvGuideMenuRedrawn }
 	menu := press(keyBoxOffice, "box office", 80_000_000)
 	tab := menu
 	seen := []uint32{menu}
-	for attempt := 1; attempt <= 6 && tab != tvGuideMenuScreen; attempt++ {
+	for attempt := 1; attempt <= 6 && !arrived(tab); attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
 		seen = append(seen, tab)
 	}
-	if tab == tvGuideMenuRedrawn {
+	if arrived(tab) {
 		tab = tvGuideMenuScreen
 	}
 	if tab != tvGuideMenuScreen {

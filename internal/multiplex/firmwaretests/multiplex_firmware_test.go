@@ -28,11 +28,24 @@ func demoSchedule() broadcast.Schedule {
 		ClockPeriod:  20_000_000,
 		LineupPeriod: 60_000_000,
 		TitlePeriod:  60_000_000,
-		IndexPeriod:  2_000_000,
 		ClockSettle:  8_000_000,
 		LineupSettle: 4_000_000,
-		TitleSettle:  4_000_000,
 	}
+}
+
+// demoScheduleWithIndex is demoSchedule plus the A-Z index rung, for the probes that exercise it.
+//
+// IT IS SEPARATE ON PURPOSE. A section every two million instructions is real extra work for the
+// box, and this package's probes are pinned to screen hashes taken under a particular load: adding
+// the index to the shared fixture moved the TV GUIDE menu from the frame those pins name to the
+// NEXT one, and a dozen routes stopped finding a screen they had always found. The shipped
+// carousel (cmd/goretrotv) carries the index; the probes that do not test it keep the broadcast
+// they were calibrated against, and the ones that do say so here.
+func demoScheduleWithIndex() broadcast.Schedule {
+	schedule := demoSchedule()
+	schedule.IndexPeriod = 2_000_000
+	schedule.TitleSettle = 4_000_000
+	return schedule
 }
 
 // The flash images and the snapshot, read once for the whole package.

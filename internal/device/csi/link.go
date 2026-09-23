@@ -76,13 +76,14 @@ type Link struct {
 	frame                     []byte
 	escaped                   bool
 	// inFrame and sendingReply say that a frame has begun leaving for the guest and which queue it
-	// came from. THE SOURCE MUST NOT CHANGE UNTIL THE TERMINATOR HAS GONE: card replies and
-	// handset frames share this wire and share its framing, so a frame interrupted half way
-	// through is not a delayed frame, it is two corrupt ones, and the guest's de-framer cannot
-	// tell. See Pump.
-	inFrame, sendingReply bool
-	ack                   [4]uint64
-	interrupt             *irq.Controller
+	// came from; outEscaped says the byte just presented was an 0x1b, so whatever follows is
+	// payload. THE SOURCE MUST NOT CHANGE UNTIL THE TERMINATOR HAS GONE: card replies and handset
+	// frames share this wire and share its framing, so a frame interrupted half way through is not
+	// a delayed frame, it is two corrupt ones, and the guest's de-framer cannot tell. See Pump and
+	// advanceFrame.
+	inFrame, sendingReply, outEscaped bool
+	ack                               [4]uint64
+	interrupt                         *irq.Controller
 }
 
 // New binds the link to the board interrupt controller.
@@ -230,13 +231,15 @@ func (l *Link) Pump(now, boardTicks uint64) {
 			return
 		}
 		l.data, l.reply = l.reply[0], l.reply[1:]
-		l.txSeen, l.sendingReply, l.inFrame = false, true, l.data != 0
+		l.txSeen, l.sendingReply = false, true
+		l.advanceFrame(l.data)
 	case fromQueue:
 		if !l.cardLive || !l.txSeen || now-l.lastByteAt < TrafficInstructions {
 			return
 		}
 		l.data, l.queue = l.queue[0], l.queue[1:]
-		l.txSeen, l.sendingReply, l.inFrame = false, false, l.data != 0
+		l.txSeen, l.sendingReply = false, false
+		l.advanceFrame(l.data)
 	default:
 		period := uint64(IdleInstructions)
 		if l.boxBusy {
@@ -245,10 +248,37 @@ func (l *Link) Pump(now, boardTicks uint64) {
 		if !l.cardLive || now-l.lastByteAt < period {
 			return
 		}
-		l.data, l.inFrame = 0, false
+		l.data, l.inFrame, l.outEscaped = 0, false, false
 	}
 	l.ready, l.lastByteAt = true, now
 	l.updateLine()
+}
+
+// advanceFrame updates the outbound framing state after b has been presented to the guest.
+//
+// A ZERO ONLY ENDS A FRAME WHEN IT IS NOT PAYLOAD, and that distinction is the whole of this
+// function. Encode escapes a data zero as `1b 00`, so a frame carrying one -- which every handset
+// key frame does, in its fourth payload byte -- contains a zero in the middle of itself. Testing
+// the byte alone declares the frame over at that point, Pump's source guard falls open, and a card
+// reply waiting in l.reply cuts straight in:
+//
+//	05 80 02 1b 00 | 02 2b 18 00 | 05 a0 00
+//
+// which the guest de-frames as two corrupt messages and no key at all. That is the lost first
+// press (gort-4sx.firstkey): it needs only a reply to be pending at the moment the frame reaches
+// its escape, which is why a box left idling -- long enough to have exchanged a heartbeat -- loses
+// the press a busy one keeps. The inbound de-framer in peripheral.go has always tracked the escape;
+// this is the same rule in the direction that lacked it.
+func (l *Link) advanceFrame(b byte) {
+	switch {
+	case l.outEscaped:
+		// Whatever follows 0x1b is payload, including 0x00 and 0x1b themselves.
+		l.outEscaped, l.inFrame = false, true
+	case b == 0x1b:
+		l.outEscaped, l.inFrame = true, true
+	default:
+		l.inFrame = b != 0
+	}
 }
 
 // Pending reports bytes waiting to enter the guest receive register.
@@ -263,16 +293,20 @@ func (l *Link) Reset() {
 	l.queue, l.transmitted, l.lastByteAt, l.now = nil, nil, 0, 0
 	l.reply, l.frame, l.powerAtTick, l.timerTicks = nil, nil, 0, 0
 	l.cardLive, l.boxBusy, l.txSeen, l.escaped = false, false, false, false
-	l.inFrame, l.sendingReply = false, false
+	l.inFrame, l.sendingReply, l.outEscaped = false, false, false
 	l.SetAckPolicy(DefaultAckPolicy)
 	l.updateLine()
 }
 
 // Snapshot captures all device-owned register, queue and timing state.
 func (l *Link) Snapshot() ([]byte, error) {
+	// v5 ADDED THE OUTBOUND ESCAPE FLAG, without which a link snapshotted between an 0x1b and the
+	// byte it escapes restores believing that byte ends the frame -- the very splice advanceFrame
+	// exists to stop, reintroduced by the restore rather than by the model.
+	//
 	// v4 DROPPED THE ACK POLICY, which is model configuration rather than machine state -- see
 	// Restore. v3 blobs still load; they simply carry four words this build discards.
-	w := snapcodec.NewWriter(l.Name(), 4)
+	w := snapcodec.NewWriter(l.Name(), 5)
 	w.Words([]uint32{l.control, l.interruptEnable})
 	w.Uint8(l.data)
 	w.Bool(l.ready)
@@ -290,6 +324,7 @@ func (l *Link) Snapshot() ([]byte, error) {
 	w.Bytes(l.frame)
 	w.Bool(l.inFrame)
 	w.Bool(l.sendingReply)
+	w.Bool(l.outEscaped)
 	return w.Blob()
 }
 
@@ -299,7 +334,7 @@ func (l *Link) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
 	}
-	if err := r.Expect(l.Name(), 3, 4); err != nil {
+	if err := r.Expect(l.Name(), 3, 5); err != nil {
 		return fmt.Errorf("csi: restore: %w", err)
 	}
 	regs, data, ready := r.Words(), r.Uint8(), r.Bool()
@@ -309,9 +344,15 @@ func (l *Link) Restore(blob []byte) error {
 	frame := r.Bytes()
 	// v4 added the two flags that keep a frame from being cut in half; a v3 blob predates them and
 	// restores to a link that is not mid-frame, which is what it was.
-	var inFrame, sendingReply bool
+	var inFrame, sendingReply, outEscaped bool
 	if r.Version() >= 4 {
 		inFrame, sendingReply = r.Bool(), r.Bool()
+	}
+	// v5 added the outbound escape flag. A v4 blob carries no record of it -- that build did not
+	// track the escape at all -- so it restores to false, which is not a guess about what the link
+	// was doing but an exact reproduction of what that build would have done next.
+	if r.Version() >= 5 {
+		outEscaped = r.Bool()
 	}
 	// THE ACK POLICY IS NOT MACHINE STATE AND IS DELIBERATELY NOT RESTORED. It describes what the
 	// modelled peripheral ANSWERS, which belongs to the model the way the link's baud rate does --
@@ -339,7 +380,7 @@ func (l *Link) Restore(blob []byte) error {
 	l.lastByteAt, l.now, l.powerAtTick, l.timerTicks = lastByteAt, now, powerAtTick, timerTicks
 	l.cardLive, l.boxBusy, l.txSeen, l.escaped = cardLive, boxBusy, txSeen, escaped
 	l.frame = frame
-	l.inFrame, l.sendingReply = inFrame, sendingReply
+	l.inFrame, l.sendingReply, l.outEscaped = inFrame, sendingReply, outEscaped
 	l.SetAckPolicy(DefaultAckPolicy)
 	l.updateLine()
 	return nil

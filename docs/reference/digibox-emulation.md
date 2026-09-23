@@ -9290,16 +9290,17 @@ split this file already argues for on other grounds: `0x0000` and the letters ar
 index behind A-Z LISTINGS, and `0x0100..0x01CF` is sixteen genres by four six-hour blocks. It is
 logged rather than asserted, because the exact number belongs to this fixture.
 
-## Idling before a key press loses exactly one key, and it is the firmware
+## Idling loses a key because a card reply splices into the key frame at its escaped zero
 
 <!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-23 -->
+<!-- fingerprint: sha256:43db4f837a55b7ce39bf344f0f2c01abcef8caa62ff8e0b2fd07118a9ccd221b @ 2026-09-23 -->
 
-**Measured 2026-09-23.** A probe that ran eight million instructions of nothing between a settled
-screen and the next press had every LEFT swallowed — four in a row, from a box office menu that
-stayed on screen throughout. Delete the idle and the same press lands first time. The *from* hash
-is what proves it is the key rather than the settle detector: the screen before the second press
-was still the box office menu, so the first had not moved it either.
+**Measured 2026-09-23, concluded wrongly the same day, and settled 2026-09-23.** A probe that ran
+eight million instructions of nothing between a settled screen and the next press had every LEFT
+swallowed — four in a row, from a box office menu that stayed on screen throughout. Delete the idle
+and the same press lands first time. The *from* hash is what proves it is the key rather than the
+settle detector: the screen before the second press was still the box office menu, so the first had
+not moved it either.
 
     immediate   FE8D1CCC -> 43779DC8   landed
     idle  1M    FE8D1CCC -> 43779DC8   landed
@@ -9307,38 +9308,70 @@ was still the box office menu, so the first had not moved it either.
     idle  8M    FE8D1CCC -> 00000000   SWALLOWED
     press again FE8D1CCC -> 43779DC8   landed
 
-**The threshold is between four and eight million instructions**, and the box loses ONE key rather
-than going deaf.
+Those readings stand. **The conclusion drawn from them does not.**
 
-### The model is exonerated, and that was the half worth settling
+### WITHDRAWN: "the model is exonerated, and it is the firmware"
 
-`internal/device/csi` is a CLOCKED link: `Pump` hands a queued byte to the guest only once the
-guest has written the transmit register since the last one (`txSeen`), while the idle path presents
-its zero byte with no such condition. That asymmetry is a real candidate — a box that has gone
-quiet writes nothing, so nothing would be clocked and a key would sit in the queue for ever — and
-it is **not** what happens here:
+This file said the key reached the guest and the firmware declined it, and pointed the next reader
+away from `internal/device/csi`. That was wrong, and it was wrong in a way worth keeping on the
+page, because the measurement that produced it was sound and only the inference was not:
 
     the key queued   8 wire bytes
     left afterwards  0
-    guest reads of the data register during the press   678 (125 on the press that landed)
+    guest reads of the data register during the press   678
 
-Every byte left the wire and the guest read the register. The box was told. It did not redraw.
+**A drained queue says our bytes left the wire. It does not say they arrived as one frame.** Every
+byte did reach the guest — and so did four bytes of a card reply, in the middle of them:
 
-> The read counts are NOT evidence on their own and no claim here rests on them: the press that
-> landed stops at its settle plus tail, the swallowed one runs its whole eighty-million budget, so
-> the larger number is a longer run. The queue depth is the measurement.
+    immediate   in  05 80 02 1b 00 05 a0 00                   the key frame, intact
+    after idle  in  05 80 02 1b 00 | 02 2b 18 00 | 05 a0 00   a heartbeat ack, spliced in
 
-### What is not established
+The guest's de-framer accumulates bytes until a terminator and cannot tell that what it is
+accumulating stopped being one message. It received two corrupt frames and no key. The box was
+never told; it was told something else.
 
-**Why the firmware declines that one key.** The obvious theory — a quiescent menu task not waiting
-on its event queue — is a theory, and this file exists partly because plausible mechanisms have
-survived next to real measurements here as though they had been measured too. What is established
-is where NOT to look.
+**The counts were the trap.** Reads of the link were 47 against 22 between a press that landed and
+one that was lost — a ratio that invited, and got, a story about the conversation being shorter.
+Only the VALUES answer the question that matters, which is whether `05 80 02 1b 00 xx yy 00` is in
+the stream. Counting how often a thing happened is not reading what happened.
+
+### The cause, in this port
+
+`Encode` escapes a payload zero as `1b 00`, and **every handset key frame carries one** — the
+fourth byte of a type-2 frame is zero. `Pump`'s guard against splicing tracked "a frame is under
+way" as "the last byte presented was not zero", so at the fifth byte of every key frame the guard
+fell open, and a reply sitting in `l.reply` was taken next.
+
+A reply only had to be PENDING at that instant. A busy box has answered its heartbeat already; a
+box left idling has one outstanding, which is the whole of the correlation with idling and the
+reason the threshold looked like a timer between four and eight million instructions. It was not a
+timer. It was the phase of the card's heartbeat against the press.
+
+The fix is `advanceFrame` in `internal/device/csi/link.go`: an escaped byte is payload whatever its
+value, so a frame ends only at an unescaped zero — the same rule the inbound de-framer in
+`peripheral.go` has always applied, in the direction that lacked it. The snapshot carries the
+escape state (v5) so a restore cannot reintroduce the splice.
+
+### This was the same bug twice, in the same place
+
+Card replies once took the reply queue unconditionally, so ANY reply generated mid-frame cut in.
+That was found and fixed. The fix then chose `b != 0` for "mid-frame" and reopened the hole for
+exactly the frames that contain an escaped zero — which is every key press. The first fix's unit
+test picked one moment to release the reply, that moment fell after the escape, and the case that
+mattered was never exercised while the test looked like coverage.
+
+`TestACardReplyDoesNotSpliceItselfIntoAHandsetFrame` now sweeps the release point across every byte
+of the frame, and fails at two of them without the fix. **A splice test that picks a moment tests
+that moment.**
 
 ### The consequence for every probe in the package
 
-**The retries in the route helpers are load-bearing.** Every press is attempted up to four times,
-which reads as belt and braces and is not: a route that sent each key once would fail
-intermittently on exactly the probes that pause to measure something before pressing. That is why
-most of the suite never noticed this, and why it surfaced in `rowcount`, which idled eight million
-instructions between presses as a hand-rolled substitute for the paint tail.
+**The retries in the route helpers were compensating for a real product defect.** Every press is
+attempted up to eight times, which reads as belt and braces and was not: the routes recovered the
+lost key by pressing again, exactly as a viewer did, so the suite stayed green while the demo shipped
+a box that ignored the first key of every visit. That is the shape to watch for — a harness
+workaround that is indistinguishable from robustness until somebody uses the product.
+
+The retries remain, because a slow screen is a real thing, but they are no longer what makes a press
+land. `TestAFirstPressLandsAfterTheBoxHasBeenIdle` presses ONCE at five idle lengths and is the gate
+that would catch this returning.

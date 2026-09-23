@@ -56,13 +56,17 @@ import (
 // nothing else -- not by the hash, not by the read counts, not by the verdict text, all of which
 // were internally consistent and wrong.
 //
-// THE RETRIES ARE LOAD-BEARING AND MUST NOT BE TIDIED AWAY. Every press here is attempted up to
-// four times, which looks like belt and braces and is not: the box LOSES THE FIRST KEY after it
-// has been left idling, delivers nothing to the screen, and answers the next one normally.
-// TestWhyIdlingBeforeAKeyPressLosesTheKey has the measurement -- the key reaches the guest, eight
-// wire bytes queued and none left, and the screen does not move until it is pressed again. A route
-// that sent each key once would fail intermittently on exactly the probes that pause to measure
-// something before pressing.
+// THE RETRIES USED TO HIDE A REAL DEFECT, which is a better reason to understand them than to
+// tidy them away. The box lost the first key after it had been left idling, and these routes
+// recovered it by pressing again -- exactly as a viewer did on the demo -- so the suite stayed
+// green while the product ignored the first press of every visit. The cause was this port cutting
+// the key frame in half, not the firmware declining it, and it is fixed in csi's advanceFrame.
+//
+// They stay because a slow screen is a real thing and a retry costs nothing when the press landed:
+// the loop stops the moment the screen it wants appears. But they are no longer what makes a press
+// land, and nothing here should be read as evidence that one does.
+// TestAFirstPressLandsAfterTheBoxHasBeenIdle presses ONCE, at five idle lengths, and is the gate
+// that would catch the splice returning.
 const (
 	// All three verified by eye against .artifacts/route-*.png on 2026-09-23, from presses that
 	// let the paint finish.
@@ -89,10 +93,12 @@ func atAllChannels(screen uint32) bool {
 
 // attempts and pressBudget are the merged contract of the two routes this file used to be half of.
 //
-// EIGHT ATTEMPTS RATHER THAN FOUR, because the box LOSES ITS FIRST KEY after it has been left
-// idling -- measured, and the delivery happens, so a retry is the only thing that recovers it
-// (TestWhyIdlingBeforeAKeyPressLosesTheKey). Retrying a press that landed costs nothing: the loop
-// stops the moment the screen it wants appears.
+// EIGHT ATTEMPTS RATHER THAN FOUR. This was raised when the box appeared to lose its first key
+// after idling; that defect is fixed (csi advanceFrame -- a card reply was splicing into the key
+// frame at its escaped zero), so the headroom now covers only a screen slower than its budget.
+// Retrying a press that landed costs nothing: the loop stops the moment the screen it wants
+// appears. It is deliberately NOT lowered back to four: a retry count is a poor instrument for
+// proving a key lands, and TestAFirstPressLandsAfterTheBoxHasBeenIdle is the good one.
 //
 // THE BUDGET IS A CAP, NOT A DURATION. pressAndLetItFinish returns as soon as the screen settles
 // and runs its tail, so a larger budget never makes a press take longer -- it only stops a slow

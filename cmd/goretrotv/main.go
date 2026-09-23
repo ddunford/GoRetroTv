@@ -195,11 +195,18 @@ type broadcastConfig struct {
 // index section goes to the same PID and therefore the same section filter, and a wave is pushed
 // inside a single Pump with no guest instructions between the pushes. Nineteen at once filled
 // eight of twenty-six list heads and lost the rest, silently.
+//
+// THE EVENT RUNG COSTS NOTHING UNTIL SOMEONE WATCHES A CHANNEL. It transmits only while PID 0x0012
+// is armed, and the box arms that when it TUNES -- not at acquisition, not with the guide open. It
+// is here because the box asks for it by name and this port answered nothing on that filter for
+// its whole life: eight million instructions is about a section pair per service every quarter of
+// a second of guest time, which is the order a real multiplex repeats present/following at.
 var airSchedule = bcast.Schedule{
 	ClockPeriod:  20_000_000,
 	LineupPeriod: 60_000_000,
 	TitlePeriod:  60_000_000,
 	IndexPeriod:  2_000_000,
+	EventPeriod:  8_000_000,
 	ClockSettle:  8_000_000,
 	LineupSettle: 4_000_000,
 	TitleSettle:  4_000_000,

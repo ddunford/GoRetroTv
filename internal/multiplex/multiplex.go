@@ -58,6 +58,9 @@ type Multiplex struct {
 	// indexVersion is bumped once per full pass of the alphabet so each pass is a fresh delivery
 	// rather than a repeat the guest deduplicates away.
 	indexVersion byte
+	// eventVersion is bumped every present/following wave. Unlike the line-up, what is on now
+	// changes with the clock, so a frozen version would freeze the box's idea of what is on.
+	eventVersion byte
 
 	// lastSubscriptionErr is remembered so the driver can report a box that
 	// stopped asking, without logging the same line thousands of times.
@@ -98,6 +101,14 @@ type Counters struct {
 	// index is only a set of references into them, so an index sent without titles is a screen
 	// full of unresolvable rows rather than a screen with fewer of them.
 	Index int
+	// Events counts present/following EIT sections put on air. It counts SECTIONS rather than
+	// waves because a wave is two per service and a service with nothing on now still sends both,
+	// so waves would say less than the number they are made of.
+	//
+	// IT IS NOT A MEASURE OF THE BOX READING THEM. The demux accepting a section and a guest task
+	// draining the ring are different events, and a number that conflated them would read as
+	// success in exactly the case this port has been wrong about four times.
+	Events int
 }
 
 // InWorldClock is the time the broadcast claims it is. It is an interface
@@ -158,6 +169,10 @@ func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 	// without one had to work around.
 	if schedule.IndexPeriod != 0 {
 		source.Index = m.indexWave
+	}
+	// The event rung is opt-in by period for the same reason.
+	if schedule.EventPeriod != 0 {
+		source.Events = m.eventWave
 	}
 	carousel, err := broadcast.NewCarousel(schedule, source)
 	if err != nil {
@@ -791,4 +806,112 @@ func indexInitial(title string) (byte, bool) {
 		}
 	}
 	return 0, false
+}
+
+// eventWave is the present/following EIT: for every service on the transport, what is on now and
+// what is on next.
+//
+// THE BOX ASKED FOR THIS BY NAME, which is why it exists at all and why nothing about its
+// addressing is a choice. The moment it tunes it arms filter 18 on PID 0x0012 with match unit 4
+// carrying 4e/fe 00/ff 64/ff -- table 0x4E or 0x4F, table_id_extension 0x0064, service_id 100,
+// which is the channel it has just selected. Measured 2026-09-23 by dumping all sixteen match
+// units either side of a tune; before that, this port sent nothing on that PID at all.
+//
+// EVERY SERVICE, NOT THE TUNED ONE. Which service the viewer is on is the box's business and the
+// filter's: it accepts the extension it armed and the hardware drops the rest, exactly as a real
+// multiplex works. Transmitting only the service we believe is tuned would mean tracking the
+// tuning in the transmitter, which is a second source of truth for something the box already
+// knows.
+//
+// A SERVICE WITH NO PROGRAMME ON AIR STILL SENDS ITS SECTIONS, with an empty event loop. "I have
+// nothing on now" and "you have never heard from me" are different statements and the box may
+// treat them differently; sending nothing would make them the same.
+func (m *Multiplex) eventWave(uint64) ([]broadcast.Emission, error) {
+	listings := m.listings()
+	if listings == nil || len(listings.Services) == 0 {
+		return nil, nil
+	}
+	sub, asking := m.subscription()
+	if !asking {
+		return nil, nil
+	}
+	// THE BOX MUST HAVE ARMED THE PID, and this is not politeness. The demux refuses a section
+	// nobody asked for, and Pump turns that refusal into a transmitter error, so a wave sent
+	// before the box tunes would bring the server down over a television schedule. It arms PID
+	// 0x0012 when it TUNES and not before -- measured: six filters after acquisition and with the
+	// guide open, seven while viewing a channel.
+	if !sub.EITArmed {
+		return nil, nil
+	}
+	now := m.clock.Now()
+	var wave []broadcast.Emission
+	for i := range listings.Services {
+		service := &listings.Services[i]
+		present, following, err := m.onAirAndNext(service, now)
+		if err != nil {
+			return nil, err
+		}
+		for _, pair := range []struct {
+			number byte
+			event  *broadcast.Event
+		}{{broadcast.EventPresent, present}, {broadcast.EventFollowing, following}} {
+			section, err := broadcast.EITPresentFollowing(service.ServiceID, sub.NetworkID,
+				sub.NetworkID, m.eventVersion, pair.number, pair.event)
+			if err != nil {
+				return nil, err
+			}
+			wave = append(wave, broadcast.Emission{PID: broadcast.EventPID, Section: section})
+			m.sent.Events++
+		}
+	}
+	// A NEW VERSION EACH WAVE, because the guest drops a section whose table, extension and
+	// version it has already parsed -- the finding that made the A-Z index work. Present and
+	// following move with the clock, so a version that never changed would freeze the banner on
+	// whatever was on when the box first tuned.
+	m.eventVersion = (m.eventVersion + 1) & 0x1f
+	return wave, nil
+}
+
+// onAirAndNext is the programme running at now and the one after it, as EIT events.
+//
+// IT WORKS IN THE BOX'S OWN DAY and returns nil for either half rather than inventing one. A
+// schedule that ends at midnight has no following event on its last programme, and saying so is
+// the truth; borrowing tomorrow's first programme would be a guess about a day the transmitter has
+// not been asked for.
+func (m *Multiplex) onAirAndNext(service *ListedService, now time.Time) (*broadcast.Event, *broadcast.Event, error) {
+	seconds := secondsOfDay(now)
+	// Midnight of the box's own day, written out rather than truncated: Truncate rounds against
+	// the zero time in UTC, so it is only midnight by coincidence of the demo's clock being UTC.
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	var present, following *broadcast.Event
+	for n := range service.Programmes {
+		programme := &service.Programmes[n]
+		start, err := programme.StartSeconds()
+		if err != nil {
+			return nil, nil, err
+		}
+		event := &broadcast.Event{
+			ID:       uint16(n + 1), //#nosec G115 -- a day's programmes, bounded by the section length
+			Start:    midnight.Add(time.Duration(start) * time.Second),
+			Duration: time.Duration(programme.Minutes) * time.Minute,
+			Name:     programme.Title,
+			Running:  broadcast.RunningNotRunning,
+		}
+		switch {
+		case start <= seconds && seconds < start+programme.Minutes*60:
+			event.Running = broadcast.RunningRunning
+			present = event
+		case start > seconds && following == nil:
+			// THE NEXT ONE TO START, WHETHER OR NOT ANYTHING IS ON NOW. A channel with a gap in
+			// its schedule still has a following programme, and tying "following" to the presence
+			// of a "present" would make the gap look like the end of the day. The list is in
+			// start order, so the first one past the clock is the one.
+			event.Running = broadcast.RunningStartsShortly
+			following = event
+		}
+		if present != nil && following != nil {
+			break
+		}
+	}
+	return present, following, nil
 }

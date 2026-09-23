@@ -787,3 +787,142 @@ func IndexSection(extension uint16, version, sectionNumber, lastSectionNumber by
 	section[6], section[7] = sectionNumber, lastSectionNumber
 	return withCRC(section[:len(section)-4]), nil
 }
+
+// EventPresent and EventFollowing are the two sections of a present/following EIT: what is on now
+// and what is on next. DVB fixes both the numbers and the count, so they are named rather than
+// written as literals at each call site.
+const (
+	EventPresent   = 0
+	EventFollowing = 1
+
+	eitPresentFollowing = 0x4e // present/following, THIS transport stream
+	eitLastSection      = EventFollowing
+)
+
+// The DVB running_status of an event. The box is told what an event is DOING as well as when it
+// runs, and a following event that claims to be running reads as two programmes on air at once.
+const (
+	RunningNotRunning    = 1
+	RunningStartsShortly = 2
+	RunningPausing       = 3
+	RunningRunning       = 4
+)
+
+// EventPID is where a DVB receiver expects event information, and it is not a choice this project
+// made: the box arms filter 18 on PID 0x0012 the moment it tunes, with match unit 4 carrying
+// 4e/fe 00/ff 64/ff -- table 0x4E or 0x4F, table_id_extension 0x0064, which is service_id 100,
+// the service it has just tuned to. Measured 2026-09-23.
+const EventPID = 0x0012
+
+// Event is one programme as the EIT describes it: an identifier, when it runs, what it is called
+// and what it is doing.
+//
+// IT IS NOT A ListedProgramme AND MUST NOT BECOME ONE. The listings store is fed by Sky's private
+// title tables, whose text is Huffman-coded against a downloaded dictionary and whose times are
+// quarter-hour offsets into a six-hour block. An EIT event is standard DVB: an absolute MJD start,
+// a BCD duration and text in a short event descriptor. Two formats for the same programme is the
+// honest description of the hardware, and collapsing them would mean guessing which one the box
+// reads from where.
+type Event struct {
+	ID       uint16
+	Start    time.Time
+	Duration time.Duration
+	Name     string
+	Text     string
+	Running  byte
+}
+
+// EITPresentFollowing builds one section of a service's present/following event information.
+//
+// event may be nil, and that is a real thing to broadcast rather than an omission: a service with
+// nothing following it sends a section with an empty event loop, which says "I have no next
+// programme" -- a different statement from never sending the section at all, which says only that
+// the box has not heard from this service.
+func EITPresentFollowing(serviceID, transportStreamID, networkID uint16, version,
+	sectionNumber byte, event *Event) ([]byte, error) {
+	if sectionNumber > eitLastSection {
+		return nil, fmt.Errorf("broadcast: present/following EIT has sections %d and %d only, "+
+			"not %d", EventPresent, EventFollowing, sectionNumber)
+	}
+	payload := appendU16(nil, transportStreamID)
+	payload = appendU16(payload, networkID)
+	// segment_last_section_number and last_table_id. A present/following table is one segment of
+	// one table, so both are the values this section already carries; a receiver walking segments
+	// uses them to know it has the whole thing.
+	payload = append(payload, eitLastSection, eitPresentFollowing)
+	if event != nil {
+		record, err := eventRecord(*event)
+		if err != nil {
+			return nil, err
+		}
+		payload = append(payload, record...)
+	}
+	section, err := longSection(eitPresentFollowing, serviceID, version, payload)
+	if err != nil {
+		return nil, err
+	}
+	// longSection writes zeros for the section and last-section numbers because every other table
+	// this port sends is a single section. Here they are the whole difference between the
+	// programme on air and the one after it.
+	section[6], section[7] = sectionNumber, eitLastSection
+	return withCRC(section[:len(section)-4]), nil
+}
+
+func eventRecord(event Event) ([]byte, error) {
+	start, err := dvbTime(event.Start)
+	if err != nil {
+		return nil, err
+	}
+	seconds := int(event.Duration / time.Second)
+	if seconds < 0 || seconds >= 100*3600 {
+		return nil, fmt.Errorf("broadcast: event duration %s does not fit six BCD digits",
+			event.Duration)
+	}
+	hours, _ := bcd(seconds / 3600)
+	minutes, _ := bcd(seconds % 3600 / 60)
+	remainder, _ := bcd(seconds % 60)
+	if event.Running > RunningRunning {
+		return nil, fmt.Errorf("broadcast: running status %d exceeds three bits", event.Running)
+	}
+	descriptors, err := shortEventDescriptor(event.Name, event.Text)
+	if err != nil {
+		return nil, err
+	}
+	record := appendU16(nil, event.ID)
+	record = append(record, start...)
+	record = append(record, hours, minutes, remainder)
+	// running_status, then free_CA_mode clear -- nothing this port broadcasts is scrambled -- then
+	// the twelve-bit descriptor loop length.
+	record = append(record, event.Running<<5|byte(len(descriptors)>>8), byte(len(descriptors)))
+	return append(record, descriptors...), nil
+}
+
+// shortEventDescriptor is DVB's 0x4D: a language, a name and a description.
+//
+// THE TEXT IS PLAIN AND THAT IS A MEASUREMENT WAITING TO HAPPEN. DVB reads the first byte of a
+// string as a character-table selector when it is below 0x20 and as ISO 6937 text otherwise, so
+// printable ASCII is a well-formed default. Whether THIS firmware reads a short event descriptor
+// at all, and whether it expects Sky's Huffman coding here as it does in the private title tables,
+// is not established -- so the port sends what the standard says and watches what the box does
+// with it, rather than guessing a fifth section format.
+func shortEventDescriptor(name, text string) ([]byte, error) {
+	title, err := ascii(name)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast: event name: %w", err)
+	}
+	body, err := ascii(text)
+	if err != nil {
+		return nil, fmt.Errorf("broadcast: event text: %w", err)
+	}
+	if len(title) > 255 || len(body) > 255 {
+		return nil, fmt.Errorf("broadcast: event name and text are single-byte-counted")
+	}
+	length := 3 + 1 + len(title) + 1 + len(body)
+	if length > 255 {
+		return nil, fmt.Errorf("broadcast: short event descriptor is %d bytes, over 255", length)
+	}
+	out := []byte{0x4d, byte(length), 'e', 'n', 'g', byte(len(title))} // #nosec G115 -- checked above
+	out = append(out, title...)
+	out = append(out, byte(len(body))) // #nosec G115 -- checked above
+	return append(out, body...), nil
+}

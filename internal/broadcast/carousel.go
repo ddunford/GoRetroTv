@@ -62,6 +62,12 @@ type Source struct {
 	Lineup func(now uint64) ([]Emission, error)
 	// Titles supplies the OpenTV title sections.
 	Titles func(now uint64) ([]Emission, error)
+	// Events supplies the present/following EIT -- what is on now and next, per service.
+	//
+	// It is OPTIONAL, and it is the one source the BOX asked for by name: it arms filter 18 on
+	// PID 0x0012 the moment it tunes, with a match unit carrying table 0x4E and the tuned
+	// service's id. Nothing else in this port answers that filter.
+	Events func(now uint64) ([]Emission, error)
 	// Index supplies the table 0xC1 index sections -- the A-Z LISTINGS screens.
 	//
 	// It is OPTIONAL, and a carousel without one is a carousel whose A-Z screens say
@@ -80,6 +86,9 @@ type Schedule struct {
 	LineupPeriod uint64
 	// TitlePeriod is the gap between title waves.
 	TitlePeriod uint64
+	// EventPeriod is the gap between present/following EIT waves. It is ignored when
+	// Source.Events is nil.
+	EventPeriod uint64
 	// IndexPeriod is the gap between index waves. It is ignored when Source.Index is nil.
 	IndexPeriod uint64
 	// ClockSettle is how long after the FIRST clock wave the line-up is held
@@ -115,6 +124,7 @@ type Carousel struct {
 	nextClock  uint64
 	nextLineup uint64
 	nextTitles uint64
+	nextEvents uint64
 	nextIndex  uint64
 
 	clockedAt  uint64 // instruction of the first clock wave
@@ -153,6 +163,9 @@ func NewCarousel(schedule Schedule, source Source) (*Carousel, error) {
 	}
 	if source.Titles == nil {
 		return nil, fmt.Errorf("broadcast: a carousel with no title source carries no programmes")
+	}
+	if source.Events != nil && schedule.EventPeriod == 0 {
+		return nil, fmt.Errorf("broadcast: carousel EventPeriod is zero with an event source set; a wave due every zero instructions never stops firing")
 	}
 	if source.Index != nil && schedule.IndexPeriod == 0 {
 		return nil, fmt.Errorf("broadcast: carousel IndexPeriod is zero with an index source set; a wave due every zero instructions never stops firing")
@@ -213,6 +226,22 @@ func (c *Carousel) Wave(now uint64) ([]Emission, error) {
 		if !c.sentTitles && len(sections) > 0 {
 			c.sentTitles, c.titledAt = true, now
 		}
+	}
+
+	// THE EVENT INFORMATION RIDES WITH THE TITLES RATHER THAN BEHIND THEM. It is gated on the
+	// line-up because the box arms its EIT filter when it TUNES, and it cannot tune to a service
+	// it has not been told about; it is not gated on the titles because it does not depend on
+	// them. The two carry the same programmes in two formats on purpose, which is what the
+	// hardware does -- Sky's private tables feed the guide, the EIT feeds anything that reads
+	// standard DVB.
+	if c.source.Events != nil && c.sentLineup &&
+		now >= c.lineupAt+c.schedule.LineupSettle && now >= c.nextEvents {
+		sections, err := c.source.Events(now)
+		if err != nil {
+			return nil, fmt.Errorf("broadcast: carousel event wave at %d: %w", now, err)
+		}
+		wave = append(wave, sections...)
+		c.nextEvents = now + c.schedule.EventPeriod
 	}
 
 	// THE INDEX REPEATS FOR EVER AND THAT IS THE POINT, not a cost to be trimmed. The 0xC1 parser

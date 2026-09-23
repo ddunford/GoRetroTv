@@ -9138,3 +9138,79 @@ Two smaller facts fall out and are worth keeping:
   port has never answered, and the format is already decoded here: nine-byte records,
   `count = (section_length - 9) / 9`, a ten-byte in-memory record, and an extension that must be a
   letter `'A'`..`'Z'` or the consumer builds the list and frees it.
+
+## The box asks for an EIT when it tunes, and something in it reads one
+
+**Measured 2026-09-23.** The `0xC1` branch above was the one subscription this port had never
+answered. It was not the only one.
+
+### What it arms, and when
+
+Dumping the demux's armed filters either side of a tune — acquire, open ALL CHANNELS, let the grid
+fill, SELECT a channel — gives three different answers, and the third is the interesting one:
+
+    after acquisition      6 armed: 0x0010 0x0011 0x0014 0x0033 0x0034 0x0052
+    with the guide open    6 armed: unchanged
+    while VIEWING          7 armed: ...plus 0x0012 on filter 18
+
+All sixteen match units, dumped unconditionally while viewing:
+
+    unit  1  40/fe 00/ff 20/ff   NIT
+    unit  2  42/fb 00/ff 20/ff   SDT
+    unit  3  4a/ff 10/ff 00/ff   BAT
+    unit  4  4e/fe 00/ff 64/ff   <- EIT present/following, THIS transport
+    unit  5  73/ff               TOT
+    unit  7  a3/ff 01/fe ff/01   a Sky title table
+    unit 10  c1/ff 01/fe ff/00   the Sky index
+
+**Unit 4 is the one that appears on tuning**, and its extension bytes are `00 64` — service_id 100,
+Sky One, the channel just selected. So the box asks for the present/following event information of
+the service it tuned to, by table and by service. Unlike `0xA0`–`0xC1` this is not a Sky private
+table: `0x4E`/`0x4F` on PID `0x0012` is ETSI EN 300 468, which means it can be built from the
+standard rather than read off a parser.
+
+> **The PID is armed LATE and that is load-bearing for the transmitter.** This model's demux
+> refuses a section no armed filter wants and the transmitter turns that refusal into an error, so
+> a wave sent before the viewer tunes brings the server down over a television schedule. The event
+> rung is gated on `Subscription.EITArmed`.
+
+### Something reads them, and the control is exact
+
+The port now transmits present/following for every service on the transport, two sections each,
+built to EN 300 468 §4.4.2 with a short event descriptor carrying plain text. The question that
+matters is not whether the hardware accepts them — it does — but whether any guest task ever drains
+that ring, because a section filed and forgotten is indistinguishable from a section understood.
+
+So the same route runs three times and the sets of executed PCs are compared:
+
+    silent   PID 0x0012 armed,  0 event sections on air, 29751 distinct PCs
+    control  PID 0x0012 armed,  0 event sections on air, 29751 distinct PCs
+    fed      PID 0x0012 armed, 72 event sections on air, 31657 distinct PCs
+
+**The noise floor is ZERO.** Two runs of the same silent schedule execute exactly the same 29,751
+addresses, which is what "no goroutine in the instruction loop, `icount` is the clock" buys: the
+difference between the runs is not a signal-to-noise judgement, it is the whole difference.
+
+**1,925 addresses ran only because the EIT arrived**, in 86 contiguous runs, the widest being:
+
+    800A8176..800A8242  206 bytes      800ABE68..800ABF2A  196 bytes
+    800AC05C..800AC128  206 bytes      800C7CA4..800C7D4C  170 bytes
+    800AF76E..800AF832  198 bytes      800B0A60..800B0AF2  148 bytes
+
+They sit in `0x800A0000`–`0x800C8000`, the same band as the listings dispatcher (`0x800C579C`), the
+`0xB2` row parser (`0x800CB000`) and the Huffman decompressor (`0x800BECF0`). This firmware has an
+event-information consumer, it is roughly ninety functions wide, and before this it had never
+executed a single instruction in this project's history.
+
+### What is NOT established
+
+- **Nothing visible changed.** The viewing screen hashes `27328810` fed and silent alike: the
+  now-and-next banner still draws "NOW Dream Team / 8:00pm Walker Texas Ranger" from the Sky title
+  store, and "No satellite signal is being received" is still there. So the EIT is parsed and its
+  result goes somewhere that is not the banner.
+- **Whether the text encoding is right.** The descriptor carries printable ASCII, which EN 300 468
+  reads as ISO 6937. Whether THIS firmware expects Sky's Huffman coding here, as it does in the
+  private title tables, is untested — the 1,925 addresses prove a parser ran, not that it liked
+  what it read.
+- **Which of the 86 runs is the parser and which is the RTOS carrying it.** The set is a starting
+  point for a disassembly, not a function.

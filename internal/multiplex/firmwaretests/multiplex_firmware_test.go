@@ -48,6 +48,20 @@ func demoScheduleWithIndex() broadcast.Schedule {
 	return schedule
 }
 
+// demoScheduleWithEvents is demoSchedule plus the present/following EIT rung, for the probes that
+// exercise it.
+//
+// IT IS SEPARATE FOR THE SAME REASON THE INDEX IS. The rung is inert until the box tunes -- it
+// transmits nothing while PID 0x0012 is unarmed -- but once it does, twelve sections a wave is
+// real extra work, and this package's probes are pinned to screen hashes taken under a particular
+// load. The shipped carousel carries what it is proved to need; the probes that do not test the
+// EIT keep the broadcast they were calibrated against.
+func demoScheduleWithEvents() broadcast.Schedule {
+	schedule := demoSchedule()
+	schedule.EventPeriod = 4_000_000
+	return schedule
+}
+
 // The flash images and the snapshot, read once for the whole package.
 //
 // This file builds a couple of dozen boxes, and re-reading five megabytes of

@@ -18,6 +18,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ddunford/goretrotv/internal/broadcast"
 	"github.com/ddunford/goretrotv/internal/device/demux"
 )
 
@@ -33,6 +34,15 @@ type Subscription struct {
 	// the network information table. It is asked separately because the box arms
 	// the two independently and a NIT pushed at an unarmed PID reaches nothing.
 	NITArmed bool
+	// EITArmed is the same question for PID 0x12, the event information table.
+	//
+	// IT IS THE ONE THE BOX ARMS LATE. The other three are up from acquisition; this one appears
+	// only when the box TUNES to a service -- six filters after acquisition and with the guide
+	// open, seven while viewing -- carrying a match unit for table 0x4E and the tuned service's
+	// id. So it is the transmitter's signal that the box has started watching something, and a
+	// present/following section sent before it would be refused by the demux and reported as a
+	// transmitter fault.
+	EITArmed bool
 	// ListingsPIDs are the title PIDs the box has armed, in ascending order.
 	//
 	// THERE IS USUALLY MORE THAN ONE, AND TAKING WHICHEVER CAME LAST IS A COIN
@@ -182,7 +192,7 @@ const matchUnits = 16
 
 // Standard PIDs, excluded when working out which PID the box armed for its
 // listings: the three SI tables and the one it boots with.
-var standardPIDs = map[uint16]bool{0x10: true, 0x11: true, 0x14: true, 0x52: true}
+var standardPIDs = map[uint16]bool{0x10: true, 0x11: true, 0x12: true, 0x14: true, 0x52: true}
 
 // isTitleUnit reports whether a match unit is a listings filter.
 //
@@ -241,6 +251,9 @@ func Read(d *demux.Demux) (Subscription, error) {
 		}
 		if pid == 0x11 {
 			sub.SIArmed = true
+		}
+		if pid == broadcast.EventPID {
+			sub.EITArmed = true
 		}
 		if !standardPIDs[pid] {
 			sub.ListingsPIDs = append(sub.ListingsPIDs, pid)

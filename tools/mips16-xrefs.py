@@ -18,7 +18,11 @@ Usage:  tools/mips16-xrefs.py 0x800858f5 [0x800858b1 ...]
 import sys, struct
 
 BASE = 0x800009F4
-IMG = __file__.rsplit('/', 2)[0] + '/ghidra/unpacked_mine.bin'
+# THE DECOMPRESSED APPLICATION IMAGE, where the rest of this toolchain keeps it. This pointed at
+# tools/ghidra/unpacked_mine.bin, which is not in the tree and never has been, so every invocation
+# died in the open() -- the same stale path that tools/opentv-natives.py and tools/disasm.sh both
+# had and both had to be repaired for. firmware/ is where the images live.
+IMG = __file__.rsplit('/', 2)[0] + '/firmware/application-ram-image.bin'
 
 
 def load():

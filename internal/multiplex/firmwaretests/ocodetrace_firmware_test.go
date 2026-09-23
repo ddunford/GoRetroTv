@@ -110,6 +110,25 @@ func TestTraceTheGridsOCode(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// AND THROUGH THE TUNE. The trace is a shared artefact -- tools/ocode-disasm.py learns its
+	// operand lengths from whatever the trace executed, so an opcode this run never reaches is an
+	// opcode the disassembler refuses to decode anywhere. Stopping at the grid left the whole
+	// channel-viewing path undecodable, which is where "No satellite signal is being received" is
+	// chosen. SELECT on a drawn programme tunes to the channel, so one more press covers it.
+	before := screenNow(t, box)
+	viewing := uint32(0)
+	for attempt := 1; attempt <= 6 && (viewing == 0 || viewing == before); attempt++ {
+		viewing = press(keySelect, "select to view the channel", 80_000_000)
+	}
+	for i := 0; i < 40_000_000; i++ {
+		if err := pump(); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Logf("traced through the tune as well; the box is viewing %08X", viewing)
 	watching = false
 	if writeErr != nil {
 		t.Fatal(writeErr)

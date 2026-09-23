@@ -156,33 +156,36 @@ Also, from the same run: printing a `[]uint16` with `%v` gives decimal. The box 
 is `0x52` — a PID this project already knows well — and it read for a moment as a new discovery.
 Format identifiers the way the rest of the record writes them.
 
-### The settle is not a finish, and two of this project's screen pins are the same screen
+### The settle returns mid-paint frames — but two screens that photograph alike are not therefore one
 
 `screenNow` + "four identical samples 65,536 instructions apart" calls a screen done after about a
 quarter of a million instructions of stillness. A menu painting under a busy carousel holds a
-HALF-DRAWN frame still for longer than that, so the detector returns a real framebuffer of a screen
-that has not finished drawing — and every pin taken that way is a pin on whichever frame that run
-happened to catch.
+HALF-DRAWN frame still for longer than that, so the detector can return a real framebuffer of a
+screen that has not finished drawing. That part is measured and it is worth knowing.
 
-Measured 2026-09-23, by picture: **`0xDDBC18E9` is the TV GUIDE menu MID-PAINT**, its tab icon still
-sheared, and **`0x43779DC8` is the same menu FINISHED**. `route_test.go` names the second one
-`tvGuideMenuRedrawn` and reads it as evidence that a SELECT failed to land. It did fail — because
-the route waited for the mid-paint frame and pressed SELECT into a screen that was still drawing,
-which is exactly when a press is swallowed.
+**What was then inferred from it was wrong, and the inference is the lesson.** `0xDDBC18E9` and
+`0x43779DC8` both photograph as the ten-entry TV GUIDE menu with ALL CHANNELS highlighted, so
+`route_test.go` was changed to accept either, on the reading that one was mid-paint and the other
+finished. Then the suite said otherwise: **SELECT from `0xDDBC18E9` opens the grid, and SELECT from
+`0x43779DC8` moves to the next TAB.** Two screens that behave differently under the same key are not
+the same state, whatever they look like. The change was reverted and the claim withdrawn; what
+actually distinguishes them is unmeasured, and "focus on the tab row versus focus in the menu" is
+another guess, which is exactly what produced the wrong one.
 
-**Use `pressAndLetItFinish`** (`rununtil_test.go`): settle, then run a ten-million-instruction tail
-and re-read. With it the whole box-office → TV GUIDE → A-Z walk runs with no swallowed press at all.
-Three other things wear this same hat and are not separate bugs:
+So: **the picture is necessary and it is not sufficient.** This project's rule has always been that
+only the artefact proves which screen you measured — the corollary it did not say out loud is that
+two identical artefacts do not prove you are in the same STATE. Where a hash is load-bearing, prove
+the equivalence by BEHAVIOUR (press the key and see where it goes), not by eye.
+
+`pressAndLetItFinish` (`rununtil_test.go`) — settle, then run a ten-million-instruction tail and
+re-read — is still the right tool for a route of your own, and the A-Z walk runs with no swallowed
+press using it. Three other things wear the same hat and are real:
 
 - **Do not wait for transport state ≥ 6 before pressing keys.** It leaves the box mid-animation, so
-  nothing ever settles and every press reports `00000000` — which reads exactly like a box that has
+  nothing settles and every press reports `00000000` — which reads exactly like a box that has
   stopped taking input, and was chased as one.
 - **Do not crop the tab strip out of the screen hash** to dodge the animation. The strip is the only
   thing that distinguishes one tab from another, so a body-only hash makes navigation *worse*.
 - **Pin the screen you select FROM, not the one you land on**, whenever the destination is the thing
-  under test. ALL PROGRAMMES A-Z opens empty when no index has been delivered and already filled when
-  one resolved, so pinning it cost a run; the category menu before it is eight fixed entries the box
-  draws from its own resources and is stable.
-
-And the rule that catches all of it: **a route that cannot find a screen it has always found is
-usually a route reading the wrong frame, not a broken box.** Open the picture.
+  under test. ALL PROGRAMMES A-Z opens empty with no index and already filled with one, so pinning
+  it cost a run; the category menu before it is stable.

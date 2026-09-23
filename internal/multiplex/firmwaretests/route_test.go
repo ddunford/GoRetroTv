@@ -46,40 +46,31 @@ func openAllChannels(t *testing.T, press pressFunc, artefact string, wantChange 
 		// Both verified by eye against their artefacts rather than inferred from a change.
 		tvGuideMenuScreen = 0xDDBC18E9 // the ten-entry TV GUIDE menu, ALL CHANNELS highlighted
 		allChannelsEmpty  = 0x42DBD889 // "ALL CHANNELS / Today 7.00pm 7.30pm 8.00pm", no rows
-		// THE MENU'S SECOND HASH -- AND IT IS THE SAME SCREEN, WHICH IS WHY SELECT KEPT NOT
-		// LANDING. Corrected 2026-09-22, by picture.
+		// THE MENU'S SECOND HASH. A select that does not land leaves the ten-entry menu on screen
+		// and it settles on this instead of on tvGuideMenuScreen. Verified by eye TWICE, from two
+		// different probes' artefacts, both of which had reported it as the grid. It is listed
+		// here because "not the tab" is the check that let it through, and a screen known not to
+		// be arrival should be named rather than re-derived by whoever opens the next PNG.
 		//
-		// 0xDDBC18E9 above is this menu MID-PAINT, with its tab icon still sheared. 0x43779DC8 is
-		// the same menu FINISHED. Neither is a redraw and neither is a failure: the settle
-		// detector calls a screen done after four identical samples 65,536 instructions apart --
-		// about a quarter of a million instructions of stillness -- and a menu painting under a
-		// busy carousel holds a HALF-DRAWN frame still for longer than that.
-		//
-		// So a route that waits for 0xDDBC18E9 presses SELECT into a screen that is still drawing,
-		// which is exactly when a press is swallowed, and then sees 0x43779DC8 and concludes the
-		// select did not land. It did not, and the route is why. The fix is to let the paint finish
-		// before reading the screen -- pressAndLetItFinish in rununtil_test.go, which runs a tail
-		// after the settle; with it the whole box-office-to-A-Z walk runs with no swallowed press
-		// at all. **This route should be moved onto it**, and its two pins re-derived as finished
-		// frames at the same time; it is left alone here only because doing that blind would
-		// re-pin the grid route on hashes nobody has looked at.
+		// A CLAIM ABOUT THIS PAIR WAS MADE ON 2026-09-23 AND IS WITHDRAWN. Both hashes photograph
+		// as the same thing -- the ten-entry menu with ALL CHANNELS highlighted -- so this route was
+		// briefly changed to accept either, on the reading that one was the menu MID-PAINT and the
+		// other the same menu FINISHED. That is not established and the change was reverted:
+		// pressing SELECT from 0xDDBC18E9 opens the grid, and pressing it from 0x43779DC8 moves to
+		// the next TAB. Two screens that behave differently under the same key are not the same
+		// state, whatever they look like. What actually distinguishes them -- focus on the tab row
+		// versus focus in the menu is the obvious guess -- is UNMEASURED, and a guess is what
+		// produced the wrong change in the first place.
 		tvGuideMenuRedrawn = 0x43779DC8
 	)
-	// STOP AT EITHER HASH, BECAUSE THEY ARE THE SAME SCREEN. The loop used to run until it saw
-	// the mid-paint frame specifically, and would press straight past the finished menu looking
-	// for it -- so the moment the carousel got busy enough that the paint completed inside the
-	// press budget, this route walked off the tv guide tab entirely and reported it unreachable.
-	// Which of the two frames a run happens to catch is a property of how loaded the box is, and
-	// no route should depend on that.
-	arrived := func(s uint32) bool { return s == tvGuideMenuScreen || s == tvGuideMenuRedrawn }
 	menu := press(keyBoxOffice, "box office", 80_000_000)
 	tab := menu
 	seen := []uint32{menu}
-	for attempt := 1; attempt <= 6 && !arrived(tab); attempt++ {
+	for attempt := 1; attempt <= 6 && tab != tvGuideMenuScreen; attempt++ {
 		tab = press(keyLeft, "left to the tv guide tab", 80_000_000)
 		seen = append(seen, tab)
 	}
-	if arrived(tab) {
+	if tab == tvGuideMenuRedrawn {
 		tab = tvGuideMenuScreen
 	}
 	if tab != tvGuideMenuScreen {

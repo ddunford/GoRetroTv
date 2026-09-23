@@ -20,6 +20,73 @@ type Service struct {
 	Name         string
 	EITSchedule  bool
 	NoEITPresent bool // the present/following flag defaults to enabled
+	// Row is the private 0xB2 descriptor this service carries, or nil for none.
+	Row *GuideRow
+}
+
+// GuideRow is the private descriptor tag 0xB2, which is what fills a row of the ALL CHANNELS grid.
+//
+// READ OFF ITS PARSER, NOT GUESSED, the same way the 0xB1 line-up entry was. 0x800CB000 is the
+// callback the row-creating native hands to the descriptor lookup, and it is short enough to quote
+// whole:
+//
+//	if (d[0] == 0xB2) {
+//	    rec[8]  = d[2];
+//	    rec[10] = d[3];
+//	    rec[9]  = (d[4] & 0xE0) >> 5;
+//	    rec[11] = (d[4] & 0x10) >> 4;
+//	    n = d[4] & 0x0F;
+//	    huffman(d + n + 5, (d[1] - 3) - n, rec + 0x4E, 0x101);
+//	}
+//
+// `rec` is the grid's 336-byte row record -- the same one whose first halfword must read 2 before
+// a programme is drawn -- and the decoder at the end is 0x800BECF0, the Huffman decompressor this
+// project has recorded as never having executed once.
+//
+// **THE FIELDS ARE NAMED FOR WHERE THEY LAND, NOT FOR WHAT THEY MEAN.** Which of them carries a
+// time, a duration or a flag is unmeasured, and a field called Duration would be believed. The
+// 0xC1 index records are named the same way and for the same reason.
+type GuideRow struct {
+	// At8 and At10 are copied verbatim into the row record at +8 and +10.
+	At8, At10 byte
+	// At9 is three bits wide and At11 one; the parser shifts them out of one byte and stores them
+	// as whole bytes at +9 and +11.
+	At9, At11 byte
+	// Prefix is the n bytes the parser STEPS OVER between the packed byte and the text, where n is
+	// the low nibble of that same byte. What they are for is unknown -- the parser does not read
+	// them -- but their length is part of the encoding and cannot be skipped.
+	Prefix []byte
+	// Text is already Huffman-coded, because this package builds sections and the dictionary
+	// belongs to the transmitter. Encode it with HuffmanDictionary.Encode, exactly as a title
+	// record's text is encoded.
+	Text []byte
+}
+
+// guideRowDescriptor renders a GuideRow as the private descriptor 0xB2.
+func guideRowDescriptor(row *GuideRow) ([]byte, error) {
+	if row == nil {
+		return nil, nil
+	}
+	if len(row.Prefix) > 0x0f {
+		return nil, fmt.Errorf("broadcast: a 0xB2 prefix is %d bytes and the parser reads its "+
+			"length from a NIBBLE, so it cannot exceed 15", len(row.Prefix))
+	}
+	if row.At9 > 7 {
+		return nil, fmt.Errorf("broadcast: 0xB2 field At9 is %d and the parser takes three bits", row.At9)
+	}
+	if row.At11 > 1 {
+		return nil, fmt.Errorf("broadcast: 0xB2 field At11 is %d and the parser takes one bit", row.At11)
+	}
+	body := make([]byte, 0, 3+len(row.Prefix)+len(row.Text))
+	body = append(body, row.At8, row.At10,
+		row.At9<<5|row.At11<<4|byte(len(row.Prefix))) // #nosec G115 -- checked above
+	body = append(body, row.Prefix...)
+	body = append(body, row.Text...)
+	if len(body) > 0xff {
+		return nil, fmt.Errorf("broadcast: a 0xB2 descriptor body is %d bytes and the length is "+
+			"one byte", len(body))
+	}
+	return append([]byte{0xb2, byte(len(body))}, body...), nil // #nosec G115 -- checked above
 }
 
 // Transport describes a satellite transport and the services announced by its NIT.
@@ -161,6 +228,14 @@ func SDT(transportID, networkID uint16, version byte, services []Service) ([]byt
 		desc = append(desc, provider...)
 		desc = append(desc, byte(len(name))) // #nosec G115 -- name length checked above
 		desc = append(desc, name...)
+		// THE 0xB2 GOES INSIDE THE SAME NAMESPACE, after the specifier that opens it. It is what
+		// the grid's row-creating native reads into the row record, and it is only looked at
+		// because the 0x5F above declared the namespace it lives in.
+		row, err := guideRowDescriptor(svc.Row)
+		if err != nil {
+			return nil, fmt.Errorf("broadcast: service %d row descriptor: %w", svc.ID, err)
+		}
+		desc = append(desc, row...)
 		flags := byte(0xfc)
 		if svc.EITSchedule {
 			flags |= 2

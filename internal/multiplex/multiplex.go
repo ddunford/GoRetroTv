@@ -284,7 +284,10 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 		return nil, nil
 	}
 	listings := m.listings()
-	transport := m.transport(sub, listings)
+	transport, err := m.transport(sub, listings)
+	if err != nil {
+		return nil, err
+	}
 	nit, err := broadcast.NIT(sub.NetworkID, m.version, listings.Bouquet, []broadcast.Transport{transport})
 	if err != nil {
 		return nil, err
@@ -315,15 +318,20 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 
 // transport turns the schedule's channels into the one transport stream this
 // multiplex models.
-func (m *Multiplex) transport(sub Subscription, listings *Listings) broadcast.Transport {
+func (m *Multiplex) transport(sub Subscription, listings *Listings) (broadcast.Transport, error) {
 	transport := broadcast.Transport{
 		ID: sub.NetworkID, NetworkID: sub.NetworkID,
 		FrequencyMHz: transportFrequencyMHz, OrbitTenths: transportOrbitTenths,
 		SymbolRate: transportSymbolRate, FEC: transportFEC,
 	}
-	for _, service := range listings.Services {
+	for i := range listings.Services {
+		service := listings.Services[i]
+		row, err := m.guideRow(&listings.Services[i])
+		if err != nil {
+			return broadcast.Transport{}, err
+		}
 		transport.Services = append(transport.Services, broadcast.Service{
-			ID: service.ServiceID, Name: service.Name, EITSchedule: true,
+			ID: service.ServiceID, Name: service.Name, EITSchedule: true, Row: row,
 		})
 		transport.Lineup = append(transport.Lineup, broadcast.LineupEntry{
 			ServiceID: service.ServiceID,
@@ -334,7 +342,51 @@ func (m *Multiplex) transport(sub Subscription, listings *Listings) broadcast.Tr
 			Flags:     lineupFlags(service.Flags),
 		})
 	}
-	return transport
+	return transport, nil
+}
+
+// guideRow is the private 0xB2 descriptor a service carries: what the ALL CHANNELS grid reads into
+// the row record it draws a programme from.
+//
+// WHY IT IS THE PROGRAMME ON AIR. The descriptor rides in the SDT, which announces SERVICES, so it
+// carries one thing per channel rather than a schedule -- and the row it fills is the row the grid
+// draws for that channel now. The programme on air at the in-world clock is the only candidate
+// that makes the grid's first column mean anything.
+//
+// THE SCALAR FIELDS ARE LEFT ZERO ON PURPOSE. The parser at 0x800CB000 stores four of them into the
+// row record and nothing here knows what any of them is for; the project's rule is that a field
+// named on a guess gets believed, so they are carried as zero until something measures them. The
+// TEXT is the part that is understood: the parser hands it to 0x800BECF0, the Huffman decompressor,
+// exactly as a title record's text is handed to it.
+func (m *Multiplex) guideRow(service *ListedService) (*broadcast.GuideRow, error) {
+	if m.dict == nil || len(service.Programmes) == 0 {
+		return nil, nil
+	}
+	now := secondsOfDay(m.clock.Now())
+	var on *ListedProgramme
+	for n := range service.Programmes {
+		start, err := service.Programmes[n].StartSeconds()
+		if err != nil {
+			return nil, err
+		}
+		if start <= now && now < start+service.Programmes[n].Minutes*60 {
+			on = &service.Programmes[n]
+			break
+		}
+	}
+	if on == nil {
+		return nil, nil
+	}
+	text, err := m.dict.Encode(on.Title)
+	if err != nil {
+		return nil, err
+	}
+	return &broadcast.GuideRow{Text: text}, nil
+}
+
+// secondsOfDay is the in-world clock's time as seconds since midnight.
+func secondsOfDay(now time.Time) int {
+	return now.Hour()*3600 + now.Minute()*60 + now.Second()
 }
 
 // inTheGuide is the line-up flag combination the TV GUIDE's list screens require, measured rather

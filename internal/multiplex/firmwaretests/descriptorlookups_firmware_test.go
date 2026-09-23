@@ -76,6 +76,17 @@ func TestEveryDescriptorTagTheGridLooksUp(t *testing.T) {
 		targets[at] = who
 	}
 
+	// THE PARSER CALLBACKS ARE THE ONLY PROOF A DESCRIPTOR WAS FOUND. A lookup returns 4 whether or
+	// not it found anything -- the record already shows a completed 0x5F lookup writing zero -- so
+	// the tally below says what was ASKED FOR and nothing about what was there. 0x800CB000 is the
+	// callback the row creator hands over for tag 0xB2 and it runs only when the tag matches; if it
+	// never executes, the descriptor is not in the stream, whatever the return codes say.
+	const (
+		parserB2 = 0x800CB000
+		parser5F = 0x800CAE88
+	)
+	parserRuns := map[uint32]int{}
+
 	type tally struct {
 		asked   int
 		nonZero int
@@ -91,6 +102,9 @@ func TestEveryDescriptorTagTheGridLooksUp(t *testing.T) {
 		}
 		st := box.Machine.Core.State()
 		pc := a.Virtual &^ 1
+		if pc == parserB2 || pc == parser5F {
+			parserRuns[pc]++
+		}
 		if who, isTarget := targets[pc]; isTarget && !inside {
 			_ = who
 			inside, entrySP, curAt = true, st.GPR[sp], pc
@@ -169,6 +183,14 @@ func TestEveryDescriptorTagTheGridLooksUp(t *testing.T) {
 		}
 		t.Logf("    tag %#04x%-38s asked %2d, %d non-zero, returned %v",
 			tag, name, v.asked, v.nonZero, got)
+	}
+	t.Logf("=== the parser callbacks, which run ONLY when the tag is actually present ===")
+	t.Logf("    0x800CAE88  the 0x5F parser   ran %d times", parserRuns[parser5F])
+	t.Logf("    0x800CB000  the 0xB2 parser   ran %d times", parserRuns[parserB2])
+	if parserRuns[parserB2] == 0 {
+		t.Logf("    THE 0xB2 PARSER NEVER RAN, so no 0xB2 descriptor reached the box -- the " +
+			"lookups above asked for one and found none. That is a fact about the BROADCAST, " +
+			"not about the screen.")
 	}
 	if byTag[0xb2] == nil {
 		t.Logf("TAG 0xB2 WAS NEVER ASKED FOR. The 0x5F gate above it did not pass, so the row's " +

@@ -331,7 +331,8 @@ func (m *Multiplex) transport(sub Subscription, listings *Listings) (broadcast.T
 			return broadcast.Transport{}, err
 		}
 		transport.Services = append(transport.Services, broadcast.Service{
-			ID: service.ServiceID, Name: service.Name, EITSchedule: true, Row: row,
+			ID: service.ServiceID, Name: service.Name, Type: service.Type,
+			EITSchedule: true, Row: row,
 		})
 		transport.Lineup = append(transport.Lineup, broadcast.LineupEntry{
 			ServiceID: service.ServiceID,

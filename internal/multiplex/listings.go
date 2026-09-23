@@ -49,6 +49,14 @@ type ListedService struct {
 	// join between a channel and its programmes, and matching it is how a
 	// title section reaches the right row of the guide.
 	ListingsID uint16 `json:"listingsId"`
+	// Type is the SDT's service_type for this channel. Left unset it defaults to 1, digital
+	// television, which is what every feed this port has ever sent.
+	//
+	// It is transmittable because the grid's row type is copied out of an object at MIPS
+	// 0x800CB138 and reads 1 on every row, and 1 is also what we send here -- a correlation worth
+	// being able to test rather than argue about. What the o-code's three branches (1, 2 and 0x10)
+	// mean is not established.
+	Type byte `json:"serviceType,omitempty"`
 	// Kind is the byte the line-up entry carries at +2, between the service id
 	// and the listings id.
 	//

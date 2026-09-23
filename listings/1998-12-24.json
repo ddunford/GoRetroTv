@@ -381,36 +381,6 @@
           "start": "16:00",
           "minutes": 60,
           "title": "Guiding Light"
-        },
-        {
-          "start": "18:00",
-          "minutes": 60,
-          "title": "Another World"
-        },
-        {
-          "start": "19:00",
-          "minutes": 60,
-          "title": "As The World Turns"
-        },
-        {
-          "start": "20:00",
-          "minutes": 60,
-          "title": "Days Of Our Lives"
-        },
-        {
-          "start": "21:00",
-          "minutes": 60,
-          "title": "Guiding Light"
-        },
-        {
-          "start": "22:00",
-          "minutes": 60,
-          "title": "Peyton Place"
-        },
-        {
-          "start": "23:00",
-          "minutes": 60,
-          "title": "Another World"
         }
       ]
     }

@@ -142,6 +142,7 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	var allDemodulatorEntryCalls []call
 	var allAudioAPICalls []call
 	var mediaCalls []mediaCall
+	var generalEventEnableWrites []call
 	nativeCalls := map[native]int{}
 	nativeFirst := map[native]call{}
 	ocodeHits := map[uint32]int{}
@@ -264,6 +265,12 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		},
 		Access: func(a bus.ObservedAccess) {
 			pc := box.Machine.Core.State().PC &^ 1
+			if a.Write && a.Virtual == demux.MMIOBase+0xE0 {
+				state := box.Machine.Core.State()
+				generalEventEnableWrites = append(generalEventEnableWrites, call{
+					pc: pc, ra: state.GPR[31] &^ 1, a0: a.Value,
+				})
+			}
 			physical := a.Virtual & 0x1fffffff
 			if active && a.Write && a.Virtual >= 0x80400000 && a.Virtual < 0x80500000 {
 				typedRequestSourceWrites[a.Virtual] = append(typedRequestSourceWrites[a.Virtual],
@@ -361,6 +368,10 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	t.Logf("post-tune armed filters=%#v subscription=%#v", box.Demux.ArmedFilters(), postTuneSubscription)
 	videoPID, audioPID, programmeReady := box.Demux.ProgrammePIDs()
 	t.Logf("post-tune decoder PIDs video=%04X audio=%04X ready=%t", videoPID, audioPID, programmeReady)
+	t.Logf("post-tune demux interrupt enables D0=%08X D4=%08X D8=%08X DC=%08X",
+		box.Demux.Read(0xD0, bus.Word), box.Demux.Read(0xD4, bus.Word),
+		box.Demux.Read(0xD8, bus.Word), box.Demux.Read(0xDC, bus.Word))
+	t.Logf("demux general-event enable writes=%#v", generalEventEnableWrites)
 	if !programmeReady || videoPID != 0x0101 || audioPID != 0x0102 {
 		t.Fatalf("PMT component selection did not program the measured decoder inputs: video=%04X audio=%04X ready=%t",
 			videoPID, audioPID, programmeReady)

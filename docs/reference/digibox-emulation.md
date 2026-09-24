@@ -9709,7 +9709,9 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/device/demux/transport.go -->
 <!-- anchor: internal/multiplex/firmwaretests/bootpsi_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
-<!-- fingerprint: sha256:4da7541d97c533b258e29bf5bf4efe07d51ae3fc73232adea197bae9f5cc3d9e @ 2026-09-24 -->
+<!-- anchor: internal/multiplex/firmwaretests/audiodriver_firmware_test.go -->
+<!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
+<!-- fingerprint: sha256:4db414ad288f83328a96759b8af52885c94cdc17639edd205ad7727f93d71944 @ 2026-09-24 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10089,3 +10091,41 @@ the wire carries the model's alpha value, and the browser applies that alpha wit
 or deciding whether a firmware pixel should be hidden. The test programme remains a declared host
 presentation substitute, but the guest now controls when it is exposed: PMT-derived decoder PIDs
 activate the backing plane, and the firmware's own index-zero clear reveals it.
+
+The next elementary-stream probe ruled out the obvious PES interrupt shortcut. After programming
+the decoder PIDs, the guest leaves both demux PES interrupt enables clear (`+0xD0 = 0`, `+0xD4 =
+0`) while the section groups remain `+0xD8 = +0xDC = 0xFFFFC000`. It does write `0`, then
+`0x4000`, to the separate general-event enable at `+0xE0`, twice, from `0x80003CF4` and
+`0x80003D56`. The configuration routine `0x80003C7C` proves this belongs to the paired decoder
+configuration: it writes both thirteen-bit PIDs to demux `+0x10`, updates `+0x104`, and enables
+general-event bit 14. The LISR reads its status at `+0xC0`; this is not one of the four modelled
+section/PES completion words.
+
+A debugger-only control temporarily modelled `+0xC0/+0xE0`, raised bit 14 only after valid PES
+start-code prefixes on the guest-programmed video and audio PIDs, and then allowed thirty million
+instructions. The real firmware acknowledged the event, but `0x800D5C8C`, the `0x210` callbacks,
+`0x800DBF34` and audio start `0x80088970` all remained cold. The control was removed: a decoder
+general event is real missing register state, but assigning PES-start semantics to bit 14 does not
+produce the missing media object and is not justified by this result.
+
+The `0x210` registration is now pinned from live RAM rather than only from its initializer. Registry
+entry 22 at `0x801296A0 + 22*16` is `[0x210, 0x800DB821, 0x800DB9CD, 0x801026B8]`; its descriptor
+is `[0x210, 0x80001400, 0x800014FF, 1, 3]`. The `0x80001400..0x800014FF` pair is the handle range
+used by its class-3 object callback, not an event-id range. Its class-1 event callback instead
+subtracts base `0x00010010` and handles the measured ids `0x10010`, `0x10020`, `0x10050`,
+`0x100B0`, `0x10140`, `0x10150` and `0x101B0`. The missing producer must emit one of those
+registered events; a generic demux decoder interrupt does not substitute for it. In particular,
+wrappers `0x800DA436` and `0x800DA452` call the class-1 dispatcher with `0x100B0` and `0x10140`;
+both remain cold in the tuned run and are the next caller boundary.
+
+A second observation-only contrast supplied standards-shaped CA descriptors using News Datacom
+system id `0x0960` (the official DVB allocation table assigns `0x0900..0x09FF` to News Datacom:
+<https://app.dvbservices.com/identifiers/ca_system_id>), ECM PID `0x0103` and EMM PID `0x0104`.
+The guest itself armed physical filters
+26 and 25 for those PIDs, proving CAT/PMT conditional-access metadata reaches and controls the NDS
+path. It simultaneously withheld both decoder PIDs, so no `0x210` object or audio start followed
+without entitlement data. The descriptors were removed from the production multiplex: advertising
+an encrypted service without ECM/EMM and smart-card responses makes the signal less complete, not
+more authentic. This narrows the two valid continuations to a measured free-to-air decoder-ready
+event producer or a complete NDS entitlement path; neither may be replaced by a fabricated
+`0x210` object.

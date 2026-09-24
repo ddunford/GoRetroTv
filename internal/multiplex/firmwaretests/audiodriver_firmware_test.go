@@ -108,3 +108,43 @@ func TestTheRestoredMediaObjectPool(t *testing.T) {
 	}
 	t.Logf("restored media records with a non-zero 48-byte prefix=%d/%d", nonempty, records)
 }
+
+// TestTheMediaModuleRegistration pins the live dispatcher entry for module 0x210. The static
+// registration only shows the two callback addresses; the copied registry also identifies its
+// dispatcher classes and object-handle range, which are the boundaries a stream probe must
+// observe rather than calling either callback itself.
+func TestTheMediaModuleRegistration(t *testing.T) {
+	box := restoredBox(t)
+	const (
+		registry = uint32(0x801296A0)
+		entries  = 38
+		stride   = uint32(16)
+		moduleID = uint32(0x210)
+	)
+	for i := range entries {
+		base := registry - memory.DRAMBase + uint32(i)*stride // #nosec G115 -- bounded firmware registry
+		if box.RAM.Read(base, bus.Word) != moduleID {
+			continue
+		}
+		words := [4]uint32{}
+		for j := range words {
+			words[j] = box.RAM.Read(base+uint32(j)*4, bus.Word) // #nosec G115 -- four-word entry
+		}
+		t.Logf("module 0x210 registry index=%d words=%08X", i, words)
+		if words[1] != 0x800DB821 || words[2] != 0x800DB9CD {
+			t.Fatalf("module 0x210 callbacks=%08X/%08X, want measured event/object entries", words[1], words[2])
+		}
+		descriptor := [5]uint32{}
+		for j := range descriptor {
+			descriptor[j] = box.RAM.Read((words[3]-memory.DRAMBase)+uint32(j)*4, bus.Word) // #nosec G115 -- five-word descriptor
+		}
+		t.Logf("module 0x210 descriptor=%08X", descriptor)
+		wantDescriptor := [5]uint32{0x210, 0x80001400, 0x800014FF, 1, 3}
+		if descriptor != wantDescriptor {
+			t.Fatalf("module 0x210 descriptor=%08X, want measured dispatcher contract %08X",
+				descriptor, wantDescriptor)
+		}
+		return
+	}
+	t.Fatal("running firmware registry contains no module 0x210 entry")
+}

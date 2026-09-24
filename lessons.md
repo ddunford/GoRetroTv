@@ -218,3 +218,6 @@ When the owner says to keep going toward test video and audio on a channel, an i
 ### Bars behind the OSD do not prove satellite playback
 
 A browser-generated test card and tone triggered at the MPEG selection callback are not a working channel while the guest still renders *No satellite signal is being received* and the TV Guide search overlay. Acceptance for media must prove the firmware enters its real playback state and dismisses those overlays; a host presentation layered behind them is only an instrument, never the product outcome.
+### A test source is programme configuration, not a channel identity
+
+The presentation substitute must never become a global “Test channel” selected by any decoder PID request. Resolve the firmware-programmed EIT service id through the current guide programme, and activate only that programme's explicit media source; otherwise channel changes inherit plausible but false video.

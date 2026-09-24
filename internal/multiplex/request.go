@@ -53,6 +53,10 @@ type Subscription struct {
 	// present/following section sent before it would be refused by the demux and reported as a
 	// transmitter fault.
 	EITArmed bool
+	// TunedServiceID is the table-id extension in the EIT present/following match unit. The
+	// firmware writes it only while viewing, so it is the receiver's own selected service rather
+	// than a host inference from a key press or from shared elementary-stream PIDs.
+	TunedServiceID uint16
 	// IndexArmed reports whether the box currently has the OpenTV index PID armed. The guest
 	// briefly removes it while rebuilding subscriptions during menu changes; that is an ordinary
 	// receiver state in which a broadcast section passes by, not a transmitter failure.
@@ -291,6 +295,19 @@ func Read(d *demux.Demux) (Subscription, error) {
 
 	for unit := uint8(0); unit < matchUnits; unit++ {
 		table, ok := d.Match(unit, 0)
+		if ok && table.Value == 0x4e && table.Mask == 0xfe {
+			extHigh, highOK := d.Match(unit, 1)
+			extLow, lowOK := d.Match(unit, 2)
+			if !highOK || !lowOK || extHigh.Mask != 0xff || extLow.Mask != 0xff {
+				return Subscription{}, fmt.Errorf("multiplex: EIT unit %d has no exact service id", unit)
+			}
+			serviceID := uint16(extHigh.Value)<<8 | uint16(extLow.Value)
+			if sub.TunedServiceID != 0 && sub.TunedServiceID != serviceID {
+				return Subscription{}, fmt.Errorf("multiplex: EIT units disagree on tuned service (%d and %d)",
+					sub.TunedServiceID, serviceID)
+			}
+			sub.TunedServiceID = serviceID
+		}
 		if !ok || !isTitleUnit(table) {
 			continue
 		}

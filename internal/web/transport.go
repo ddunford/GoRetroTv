@@ -64,8 +64,9 @@ type Transport struct {
 
 // PushMedia publishes the guest's measured MPEG-service selection. It carries no host control:
 // the instruction loop calls it only when the real firmware executes its MPEG callback.
-func (t *Transport) PushMedia(active bool, service string) {
-	next := wire.MediaMessage{Type: "media", Version: wire.Version, Service: service}
+func (t *Transport) PushMedia(active bool, service, programme, source string) {
+	next := wire.MediaMessage{Type: "media", Version: wire.Version, Service: service,
+		Programme: programme, Source: source}
 	if active {
 		next.Active = 1
 	}

@@ -75,7 +75,10 @@
         {
           "start": "19:00",
           "minutes": 60,
-          "title": "Dream Team"
+          "title": "Dream Team",
+          "media": {
+            "kind": "test-pattern"
+          }
         },
         {
           "start": "20:00",

@@ -458,8 +458,8 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	nextFrame := align(start, frameInterval)
 	nextState := align(start, stateInterval)
 	nextProgress := align(start, progressInterval)
-	mediaActive := false
-	transport.PushMedia(false, "")
+	mediaService, mediaProgramme, mediaSource := "", "", ""
+	transport.PushMedia(false, "", "", "")
 	for {
 		count := box.Machine.Retired
 		if count >= nextInput {
@@ -500,11 +500,24 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		// manager has selected video and audio components. Starting the presentation at the older
 		// 0x800A03D0 service callback put bars behind the still-pending no-signal screen; that
 		// callback proves only that a row was selected, not that a programme signal exists.
-		if _, _, requested := box.Demux.ProgrammePIDs(); !mediaActive && requested {
-			mediaActive = true
-			transport.PushMedia(true, "Test channel")
-			videoPID, audioPID, _ := box.Demux.ProgrammePIDs()
-			logger.Info("guest requested programme streams", "video_pid", videoPID, "audio_pid", audioPID)
+		videoPID, audioPID, requested := box.Demux.ProgrammePIDs()
+		service, programme, source, configured := "", "", "", false
+		if requested && transmitter != nil {
+			service, programme, source, configured = transmitter.MediaSelection()
+		}
+		if !configured {
+			service, programme, source = "", "", ""
+		}
+		if service != mediaService || programme != mediaProgramme || source != mediaSource {
+			mediaService, mediaProgramme, mediaSource = service, programme, source
+			transport.PushMedia(configured, service, programme, source)
+			if configured {
+				logger.Info("guest requested configured programme streams", "service", service,
+					"programme", programme, "source", source, "video_pid", videoPID, "audio_pid", audioPID)
+			} else if requested {
+				logger.Info("guest selected a programme without configured media", "video_pid", videoPID,
+					"audio_pid", audioPID)
+			}
 		}
 		count = box.Machine.Retired
 		if count >= nextProgress {

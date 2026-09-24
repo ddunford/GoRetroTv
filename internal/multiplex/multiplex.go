@@ -255,6 +255,21 @@ func (m *Multiplex) reload() {
 // starts transmitting the next day's television without anything restarting.
 func (m *Multiplex) listings() *Listings { return m.guide.On(m.clock.Now()) }
 
+// MediaSelection resolves the receiver's tuned service to the programme currently on air.
+// Decoder PID programming is checked separately by the instruction loop; this method answers only
+// which configured source, if any, that guest-selected service owns at the in-world time.
+func (m *Multiplex) MediaSelection() (serviceName, programmeName, kind string, ok bool) {
+	sub, asking := m.subscription()
+	if !asking || !sub.EITArmed || sub.TunedServiceID == 0 {
+		return "", "", "", false
+	}
+	listings := m.listings()
+	if listings == nil {
+		return "", "", "", false
+	}
+	return listings.MediaFor(sub.TunedServiceID, m.clock.Now())
+}
+
 // OnAir is called once, the first time programmes are actually transmitted to
 // a box that asked for them.
 //

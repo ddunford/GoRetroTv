@@ -103,7 +103,7 @@ func TestTransportSendsFullThenDirtyThenPaletteRefresh(t *testing.T) {
 
 func TestTransportSendsGuestSelectedMediaToCurrentAndFutureClients(t *testing.T) {
 	transport := NewTransport()
-	transport.PushMedia(true, "Test channel")
+	transport.PushMedia(true, "Sky One", "Dream Team", "test-pattern")
 	server := httptest.NewServer(transport)
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -118,10 +118,12 @@ func TestTransportSendsGuestSelectedMediaToCurrentAndFutureClients(t *testing.T)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	message := readMessage(t, conn)
 	if field[string](t, message, "type") != "media" || field[uint8](t, message, "active") != 1 ||
-		field[string](t, message, "service") != "Test channel" {
+		field[string](t, message, "service") != "Sky One" ||
+		field[string](t, message, "programme") != "Dream Team" ||
+		field[string](t, message, "source") != "test-pattern" {
 		t.Fatalf("initial media message = %v", message)
 	}
-	transport.PushMedia(false, "")
+	transport.PushMedia(false, "", "", "")
 	message = readMessage(t, conn)
 	if field[uint8](t, message, "active") != 0 {
 		t.Fatalf("stopped media message = %v", message)
@@ -193,7 +195,7 @@ func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
 		defer response.Body.Close()
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":2,"raw":125,"source":0}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":3,"raw":125,"source":0}`)); err != nil {
 		t.Fatal(err)
 	}
 	link := csi.New(nil)
@@ -219,13 +221,13 @@ func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
 
 func TestTransportRejectsInvalidHandsetMessages(t *testing.T) {
 	cases := []string{
-		`{"type":"frame","version":2,"raw":125,"source":0}`,
-		`{"type":"key","version":3,"raw":125,"source":0}`,
-		`{"type":"key","version":2,"raw":125,"source":2}`,
-		`{"type":"key","version":2,"raw":99,"source":0}`,
-		`{"type":"key","version":2,"raw":256,"source":0}`,
-		`{"type":"key","version":2,"raw":125,"source":0,"other":1}`,
-		`{"type":"key","version":2,"raw":125,"source":0}{}`,
+		`{"type":"frame","version":3,"raw":125,"source":0}`,
+		`{"type":"key","version":2,"raw":125,"source":0}`,
+		`{"type":"key","version":3,"raw":125,"source":2}`,
+		`{"type":"key","version":3,"raw":99,"source":0}`,
+		`{"type":"key","version":3,"raw":256,"source":0}`,
+		`{"type":"key","version":3,"raw":125,"source":0,"other":1}`,
+		`{"type":"key","version":3,"raw":125,"source":0}{}`,
 	}
 	for _, payload := range cases {
 		var key wire.KeyMessage
@@ -259,7 +261,7 @@ func TestTransportClosesSocketOnInvalidKey(t *testing.T) {
 		defer response.Body.Close()
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":2,"raw":125,"source":2}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":3,"raw":125,"source":2}`)); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err = conn.Read(ctx)
@@ -336,7 +338,7 @@ func TestTransportAcceptsResetWhileHaltedAndStillRefusesKeys(t *testing.T) {
 	if transport.TakeReset() {
 		t.Fatal("a reset was pending before the browser asked for one")
 	}
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":2}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":3}`)); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -349,7 +351,7 @@ func TestTransportAcceptsResetWhileHaltedAndStillRefusesKeys(t *testing.T) {
 	// reset would have opened a hole in the gate rather than an exception to it.
 	keyed := dialTransport(t, ctx, server)
 	readMessage(t, keyed)
-	if err := keyed.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":2,"raw":125,"source":0}`)); err != nil {
+	if err := keyed.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":3,"raw":125,"source":0}`)); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := keyed.Read(ctx); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
@@ -394,10 +396,10 @@ func TestTransportFoldsResetsInsideTheMinimumInterval(t *testing.T) {
 
 func TestTransportRejectsMalformedResetsAndUnknownTypes(t *testing.T) {
 	for _, payload := range []string{
-		`{"type":"reset","version":3}`,
-		`{"type":"reset","version":2,"raw":125}`,
-		`{"type":"reset","version":2}{}`,
-		`{"type":"restart","version":2}`,
+		`{"type":"reset","version":2}`,
+		`{"type":"reset","version":3,"raw":125}`,
+		`{"type":"reset","version":3}{}`,
+		`{"type":"restart","version":3}`,
 	} {
 		transport := NewTransport()
 		server := httptest.NewServer(transport)

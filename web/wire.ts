@@ -50,7 +50,10 @@ export function decodeServerMessage(json: string): ServerMessage {
     case 'media': {
       const active = integer(value.active, 'media active', 1);
       if (typeof value.service !== 'string') throw new Error('invalid media service');
-      return { type: 'media', version: WIRE_VERSION, active, service: value.service };
+      if (typeof value.programme !== 'string') throw new Error('invalid media programme');
+      if (typeof value.source !== 'string') throw new Error('invalid media source');
+      return { type: 'media', version: WIRE_VERSION, active, service: value.service,
+        programme: value.programme, source: value.source };
     }
     case 'palette': {
       const epoch = integer(value.epoch, 'palette epoch');

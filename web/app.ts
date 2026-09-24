@@ -27,7 +27,7 @@ if (!drawingContext) {
 }
 const context: CanvasRenderingContext2D = drawingContext;
 const programmeDrawingContext = programme.getContext('2d');
-if (!programmeDrawingContext) throw new Error('This browser cannot display the test channel');
+if (!programmeDrawingContext) throw new Error('This browser cannot display programme video');
 const programmeContext: CanvasRenderingContext2D = programmeDrawingContext;
 
 const width = canvas.width;
@@ -48,6 +48,8 @@ let screenRevision = 0;
 let resetPending = false;
 let resetTimer: ReturnType<typeof setTimeout> | null = null;
 let mediaActive = false;
+let mediaService = '';
+let mediaProgramme = '';
 let audioContext: AudioContext | null = null;
 let toneGain: GainNode | null = null;
 
@@ -84,9 +86,10 @@ function drawProgramme(now: number): void {
   programmeContext.fillStyle = '#fff';
   programmeContext.fillRect(x, programme.height * 0.77, 180, 12);
   programmeContext.font = 'bold 34px system-ui, sans-serif';
-  programmeContext.fillText('GORETROTV TEST CHANNEL', 42, programme.height - 62);
+  programmeContext.fillText(mediaService || 'NO PROGRAMME SOURCE', 42, programme.height - 62);
   programmeContext.font = '22px ui-monospace, monospace';
-  programmeContext.fillText(new Date().toISOString().slice(11, 19) + ' UTC', 42, programme.height - 25);
+  programmeContext.fillText(mediaProgramme || new Date().toISOString().slice(11, 19) + ' UTC', 42,
+    programme.height - 25);
   requestAnimationFrame(drawProgramme);
 }
 requestAnimationFrame(drawProgramme);
@@ -147,11 +150,13 @@ function handleMessage(payload: string): void {
   const message = decodeServerMessage(payload);
   if (message.type === 'media') {
     mediaActive = message.active === 1;
+    mediaService = message.service;
+    mediaProgramme = message.programme;
     document.body.dataset.media = mediaActive ? 'active' : 'inactive';
     if (toneGain) toneGain.gain.value = mediaActive ? 0.055 : 0;
     if (mediaActive) {
       paint(0, 0, width, height);
-      showStatus('ready', `${message.service || 'Test channel'} selected — test video and audio are playing.`);
+      showStatus('ready', `${message.service} — ${message.programme} is playing.`);
     }
     return;
   }
@@ -207,7 +212,7 @@ function handleMessage(payload: string): void {
   machineReady = message.phase === 'ready';
   updateKeys();
   showStatus(message.phase, message.reason || phaseText[message.phase] || 'The box is working…');
-  if (mediaActive) showStatus('ready', 'Test channel selected — test video and audio are playing.');
+  if (mediaActive) showStatus('ready', `${mediaService} — ${mediaProgramme} is playing.`);
   keyFeedback.textContent = ready ? 'The handset is ready.' :
     machineReady ? 'Waiting for the box to send its screen.' : 'The handset will wake when the box is ready.';
 }

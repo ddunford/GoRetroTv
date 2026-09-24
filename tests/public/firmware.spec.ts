@@ -95,7 +95,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
 
   await sky.click();
   await expect.poll(() => sent.length).toBe(1);
-  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 2, raw: 125, source: 0 });
+  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 3, raw: 125, source: 0 });
   await expect.poll(() => indexedHash(pixels), { timeout: 45_000, intervals: [500, 1000] })
     .toBe(0xFE8D1CCC);
   await expect(page.locator('#box-status')).toContainText('ready');
@@ -108,7 +108,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
   await page.screenshot({ path: testInfo.outputPath('public-menu-mobile-dark.png'), fullPage: true });
 });
 
-test('firmware selection exposes the test programme without a browser colour key', async ({ page }, testInfo) => {
+test('firmware selection exposes only the guide-configured programme without a browser colour key', async ({ page }, testInfo) => {
   test.setTimeout(150_000);
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
@@ -128,7 +128,7 @@ test('firmware selection exposes the test programme without a browser colour key
   await press('select');
 
   await expect(page.locator('body')).toHaveAttribute('data-media', 'active', { timeout: 60_000 });
-  await expect(page.locator('#box-status')).toContainText('test video and audio are playing');
+  await expect(page.locator('#box-status')).toHaveText('Sky One — Dream Team is playing.');
   await expect.poll(() => page.locator('#screen').evaluate((canvas: HTMLCanvasElement) => {
     const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
     for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] !== 0) return false;

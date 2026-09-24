@@ -106,3 +106,43 @@ func TestAnEventStartsOnTheDayTheClockIsIn(t *testing.T) {
 		t.Errorf("the event runs %s, want 1h30m", present.Duration)
 	}
 }
+
+func TestProgrammeMediaIsSelectedByServiceAndInWorldTime(t *testing.T) {
+	t.Parallel()
+	listings := &Listings{Services: []ListedService{
+		{Name: "Sky One", ServiceID: 100, Programmes: []ListedProgramme{
+			{Start: "18:00", Minutes: 60, Title: "Friends"},
+			{Start: "19:00", Minutes: 60, Title: "Dream Team",
+				Media: &ProgrammeMedia{Kind: MediaKindTestPattern}},
+		}},
+		{Name: "Sky News", ServiceID: 101, Programmes: []ListedProgramme{
+			{Start: "19:00", Minutes: 60, Title: "Sky News Tonight"},
+		}},
+	}}
+	at := func(clock string) time.Time {
+		when, err := time.Parse("2006-01-02 15:04", "1998-12-24 "+clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return when
+	}
+
+	service, programme, kind, ok := listings.MediaFor(100, at("19:30"))
+	if !ok || service != "Sky One" || programme != "Dream Team" || kind != MediaKindTestPattern {
+		t.Fatalf("configured selection = %q %q %q %t", service, programme, kind, ok)
+	}
+	for _, c := range []struct {
+		service uint16
+		at      string
+	}{
+		{100, "18:30"}, // a real programme with no configured source
+		{101, "19:30"}, // another selected service with no configured source
+		{999, "19:30"}, // no such service
+		{100, "20:00"}, // the configured event has ended
+	} {
+		if service, programme, kind, ok := listings.MediaFor(c.service, at(c.at)); ok {
+			t.Errorf("service %d at %s unexpectedly selected %q %q %q", c.service, c.at,
+				service, programme, kind)
+		}
+	}
+}

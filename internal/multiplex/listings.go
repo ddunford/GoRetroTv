@@ -123,7 +123,20 @@ type ListedProgramme struct {
 	// Genre and Rating are the OpenTV bytes, both optional.
 	Genre  byte `json:"genre,omitempty"`
 	Rating byte `json:"rating,omitempty"`
+	// Media is the optional playout source for this programme. It belongs to the event rather
+	// than the channel because the guide's time axis is the playout schedule: when the event
+	// changes, the source changes with it without a second host-side channel map.
+	Media *ProgrammeMedia `json:"media,omitempty"`
 }
+
+// ProgrammeMedia names a source the media pipeline can play. Test-pattern is deliberately an
+// explicit source rather than a fallback: an event without media must remain without host video.
+type ProgrammeMedia struct {
+	Kind string `json:"kind"`
+}
+
+// MediaKindTestPattern is the deterministic generated bars-and-tone source.
+const MediaKindTestPattern = "test-pattern"
 
 // StartSeconds is the programme's start as seconds into the day.
 //
@@ -401,6 +414,10 @@ func (l *Listings) validate() error {
 			if _, err := programme.StartSeconds(); err != nil {
 				return fmt.Errorf("%q: %q: %w", service.Name, programme.Title, err)
 			}
+			if programme.Media != nil && programme.Media.Kind != MediaKindTestPattern {
+				return fmt.Errorf("%q: %q has unsupported media kind %q", service.Name,
+					programme.Title, programme.Media.Kind)
+			}
 		}
 		sort.SliceStable(service.Programmes, func(a, b int) bool {
 			left, _ := service.Programmes[a].StartSeconds()
@@ -420,4 +437,37 @@ func (l *Listings) Service(listingsID uint16) (*ListedService, bool) {
 		}
 	}
 	return nil, false
+}
+
+// ServiceByID returns the service whose DVB service_id the receiver selected.
+func (l *Listings) ServiceByID(serviceID uint16) (*ListedService, bool) {
+	for i := range l.Services {
+		if l.Services[i].ServiceID == serviceID {
+			return &l.Services[i], true
+		}
+	}
+	return nil, false
+}
+
+// MediaFor returns the configured source for the programme on air on a DVB service.
+func (l *Listings) MediaFor(serviceID uint16, now time.Time) (serviceName, programmeName, kind string, ok bool) {
+	service, found := l.ServiceByID(serviceID)
+	if !found {
+		return "", "", "", false
+	}
+	seconds := secondsOfDay(now)
+	for i := range service.Programmes {
+		programme := &service.Programmes[i]
+		start, err := programme.StartSeconds()
+		if err != nil {
+			return "", "", "", false // LoadListings validates this before a Listings reaches runtime.
+		}
+		if seconds >= start && seconds < start+programme.Minutes*60 {
+			if programme.Media == nil {
+				return "", "", "", false
+			}
+			return service.Name, programme.Title, programme.Media.Kind, true
+		}
+	}
+	return "", "", "", false
 }

@@ -5238,7 +5238,7 @@ still ahead, and the next rung is what `0xA1` carries.
 ### Table `0xA1` on PID `0x33`: the listings path, and the signature that gates it
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:acdf4e5cbe9ba6c8056826f4066ddd169301e5cffc2cddbed65079b2ce07693b @ 2026-09-24 -->
+<!-- fingerprint: sha256:40a6a06f4d2ca5b107c7e978492d9ff7c72901f0131e57eaf9b6fe17533ae282 @ 2026-09-24 -->
 
 `scripts/digibox-probes/what-is-on-0xa1.js`. Three controls, all of which went silent.
 
@@ -6227,7 +6227,7 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:a9d68cf850312c834f6fe2e61c5223f2b1680fb6bc216383fe7946a909a99a2c @ 2026-09-24 -->
+<!-- fingerprint: sha256:fee4bd84540b9c0429a7c3c59fcf542c27b43ad8e5099d8725fd22e966154fdd @ 2026-09-24 -->
 
 *Seven probe runs. Every number below is from `scripts/digibox-probes/`, and the four claims that
 retired earlier readings each retired them by measurement rather than by argument.*
@@ -7729,7 +7729,7 @@ provable. The census now accepts the whole OpenTV title family.
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:a9d68cf850312c834f6fe2e61c5223f2b1680fb6bc216383fe7946a909a99a2c @ 2026-09-24 -->
+<!-- fingerprint: sha256:fee4bd84540b9c0429a7c3c59fcf542c27b43ad8e5099d8725fd22e966154fdd @ 2026-09-24 -->
 
 *20 Sep 2026, in the Go port, against the real firmware. This is the answer to TASK-6.13, and the
 task's own title is wrong: nothing about it is a day-of-eight problem.*
@@ -7821,7 +7821,7 @@ active one. Two things cost time and are worth carrying:
 ## Addressing the listings: two masks, and two facts that came off the screen
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:acdf4e5cbe9ba6c8056826f4066ddd169301e5cffc2cddbed65079b2ce07693b @ 2026-09-24 -->
+<!-- fingerprint: sha256:40a6a06f4d2ca5b107c7e978492d9ff7c72901f0131e57eaf9b6fe17533ae282 @ 2026-09-24 -->
 
 *Measured 2026-09-20 while wiring the modelled multiplex into the running server. Everything here
 was found by being wrong first, and each wrong reading presented as **"the box is not asking"** —
@@ -8867,7 +8867,7 @@ experiment that changes the broadcast needs an acceptance that does not assume t
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:59aa7c6e759b216d92ac201d480653391c8d792e4aea377ca43a00db16e22d91 @ 2026-09-24 -->
+<!-- fingerprint: sha256:e6aafe64491132baf2305a502e4b425389c03a3b37c7c3faf6cf96dcc6e05cf0 @ 2026-09-24 -->
 
 *2026-09-22. Six rows, in channel order, with names.*
 

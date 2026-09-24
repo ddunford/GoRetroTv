@@ -7,8 +7,9 @@
   DVB/device input, names every operand and includes cold and live controls.
 - **TC-8.2: Guide-configured media selection and standards-shaped service** (covers: Phase 8 task 2)
   — each firmware-selected `service_id` resolves to that service's current guide programme; a
-  configured test-pattern source activates with its real channel/programme names, an unconfigured
-  programme stays inactive, and switching services replaces rather than retains the prior source.
+  configured programme or service-default test-pattern source activates with its real
+  channel/programme names, an unconfigured service stays inactive, and switching services replaces
+  rather than retains the prior source.
   PAT/PMT/PES/TS fixtures parse independently, continuity counters and timestamps advance correctly,
   and ffprobe identifies one MPEG-2 video stream plus one MP2 audio stream with the declared PIDs.
 - **TC-8.3: Deterministic media device** (covers: Phase 8 task 3) — guest-programmed PID/DMA state

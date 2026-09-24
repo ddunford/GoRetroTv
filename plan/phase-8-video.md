@@ -29,7 +29,8 @@ media path; no guest RAM, firmware byte, PID, lifecycle state or decoder call is
 The guest remains authoritative for tuning and stream selection. The tuned service is read from the
 service-id extension of the EIT present/following filter the firmware arms while viewing; DVB's
 `service_id` is the join key between the service and its PMT. The transmitter joins that id to the
-current programme in the guide and only then resolves its optional media source. A deterministic
+current programme in the guide and only then resolves its optional media source, falling back to
+the service's configured default source when the programme has no override. A deterministic
 generated fixture (moving bars/clock plus a clearly audible tone cadence) is the first source kind;
 files and folders extend the same programme-owned configuration rather than adding a second channel
 map. The multiplex announces its PAT/PMT and packets only after the measured firmware path requests

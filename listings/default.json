@@ -6,6 +6,9 @@
       "channel": 106,
       "serviceId": 100,
       "listingsId": 106,
+      "media": {
+        "kind": "test-pattern"
+      },
       "programmes": [
         {
           "start": "06:00",

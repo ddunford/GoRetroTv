@@ -145,4 +145,9 @@ func TestProgrammeMediaIsSelectedByServiceAndInWorldTime(t *testing.T) {
 				service, programme, kind)
 		}
 	}
+	listings.Services[1].Media = &ProgrammeMedia{Kind: MediaKindTestPattern}
+	service, programme, kind, ok = listings.MediaFor(101, at("19:30"))
+	if !ok || service != "Sky News" || programme != "Sky News Tonight" || kind != MediaKindTestPattern {
+		t.Fatalf("service-default selection = %q %q %q %t", service, programme, kind, ok)
+	}
 }

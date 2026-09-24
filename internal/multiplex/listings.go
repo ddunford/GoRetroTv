@@ -108,6 +108,9 @@ type ListedService struct {
 	// measured guide-visible combination; set it to say otherwise. What the
 	// individual bits mean is not established and is not guessed at.
 	Flags byte `json:"flags,omitempty"`
+	// Media is the channel's default playout source. A programme may override it; if neither is
+	// present the selected channel has no host-supplied picture.
+	Media *ProgrammeMedia `json:"media,omitempty"`
 	// Programmes are the day's events, in any order; they are sorted on load.
 	Programmes []ListedProgramme `json:"programmes"`
 }
@@ -389,6 +392,9 @@ func (l *Listings) validate() error {
 				"5 NEWS & DOCUMENTARIES, 6 MOVIES, 7 SPORTS, and 0 is no genre",
 				service.Name, service.Genre)
 		}
+		if err := validateMedia(service.Media); err != nil {
+			return fmt.Errorf("%q: %w", service.Name, err)
+		}
 		// Duplicates are the failure this catches: two channels sharing a
 		// listingsId would have their programmes filed under one another, and
 		// the guide would show a plausible wrong day's television.
@@ -414,9 +420,8 @@ func (l *Listings) validate() error {
 			if _, err := programme.StartSeconds(); err != nil {
 				return fmt.Errorf("%q: %q: %w", service.Name, programme.Title, err)
 			}
-			if programme.Media != nil && programme.Media.Kind != MediaKindTestPattern {
-				return fmt.Errorf("%q: %q has unsupported media kind %q", service.Name,
-					programme.Title, programme.Media.Kind)
+			if err := validateMedia(programme.Media); err != nil {
+				return fmt.Errorf("%q: %q: %w", service.Name, programme.Title, err)
 			}
 		}
 		sort.SliceStable(service.Programmes, func(a, b int) bool {
@@ -424,6 +429,13 @@ func (l *Listings) validate() error {
 			right, _ := service.Programmes[b].StartSeconds()
 			return left < right
 		})
+	}
+	return nil
+}
+
+func validateMedia(media *ProgrammeMedia) error {
+	if media != nil && media.Kind != MediaKindTestPattern {
+		return fmt.Errorf("unsupported media kind %q", media.Kind)
 	}
 	return nil
 }
@@ -463,10 +475,14 @@ func (l *Listings) MediaFor(serviceID uint16, now time.Time) (serviceName, progr
 			return "", "", "", false // LoadListings validates this before a Listings reaches runtime.
 		}
 		if seconds >= start && seconds < start+programme.Minutes*60 {
-			if programme.Media == nil {
+			media := programme.Media
+			if media == nil {
+				media = service.Media
+			}
+			if media == nil {
 				return "", "", "", false
 			}
-			return service.Name, programme.Title, programme.Media.Kind, true
+			return service.Name, programme.Title, media.Kind, true
 		}
 	}
 	return "", "", "", false

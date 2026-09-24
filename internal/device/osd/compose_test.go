@@ -137,4 +137,7 @@ func TestComposeDecodesPackedCLUTAndLeavesNoSignalBlack(t *testing.T) {
 	if bright.R < 200 || bright.G < 200 || bright.B < 200 {
 		t.Fatalf("packed CLUT entry = %+v", bright)
 	}
+	if key := frame.Palette[0].(color.RGBA); key.A != 0 {
+		t.Fatalf("OSD key index alpha = %d, want transparent", key.A)
+	}
 }

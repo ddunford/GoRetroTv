@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "raster": {
     "width": 720,
     "height": 576
@@ -9,7 +9,8 @@
       "direction": "server",
       "fields": {
         "epoch": "uint64",
-        "rgb": "base64"
+        "rgb": "base64",
+        "alpha": "base64"
       }
     },
     "frame": {

@@ -37,6 +37,7 @@ type frameData struct {
 	epoch   uint64
 	pixels  []byte
 	palette []byte
+	alpha   []byte
 }
 
 type client struct {
@@ -181,24 +182,26 @@ func (t *Transport) PushFrame(frame *image.Paletted) error {
 		copy(pixels[y*FrameWidth:(y+1)*FrameWidth], frame.Pix[y*frame.Stride:y*frame.Stride+FrameWidth])
 	}
 	palette := make([]byte, 256*3)
+	alpha := make([]byte, 256)
 	for i, colour := range frame.Palette {
 		if colour == nil {
 			return fmt.Errorf("web: palette entry %d has no colour", i)
 		}
 		rgb := color.RGBAModel.Convert(colour).(color.RGBA)
 		palette[i*3], palette[i*3+1], palette[i*3+2] = rgb.R, rgb.G, rgb.B
+		alpha[i] = rgb.A
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.latest != nil && bytes.Equal(t.latest.pixels, pixels) && bytes.Equal(t.latest.palette, palette) {
+	if t.latest != nil && bytes.Equal(t.latest.pixels, pixels) && bytes.Equal(t.latest.palette, palette) && bytes.Equal(t.latest.alpha, alpha) {
 		return nil
 	}
-	next := &frameData{pixels: pixels, palette: palette}
+	next := &frameData{pixels: pixels, palette: palette, alpha: alpha}
 	if t.latest != nil {
 		next.seq = t.latest.seq + 1
 		next.epoch = t.latest.epoch
 	}
-	if t.latest == nil || !bytes.Equal(t.latest.palette, palette) {
+	if t.latest == nil || !bytes.Equal(t.latest.palette, palette) || !bytes.Equal(t.latest.alpha, alpha) {
 		next.epoch++
 	}
 	t.latest = next
@@ -406,7 +409,7 @@ func handsetRaw(raw uint8) bool {
 
 func writeFrame(ctx context.Context, conn *websocket.Conn, previous, current *frameData) error {
 	if previous == nil || previous.epoch != current.epoch {
-		if err := writeJSON(ctx, conn, wire.PaletteMessage{Type: "palette", Version: wire.Version, Epoch: current.epoch, RGB: current.palette}); err != nil {
+		if err := writeJSON(ctx, conn, wire.PaletteMessage{Type: "palette", Version: wire.Version, Epoch: current.epoch, RGB: current.palette, Alpha: current.alpha}); err != nil {
 			return err
 		}
 	}

@@ -260,6 +260,35 @@ func TestWhichDMAChannelsTheBoxProgramsWhenViewing(t *testing.T) {
 	if err := dumpScreen(t, box, "mediadma-viewing.png"); err != nil {
 		t.Fatal(err)
 	}
+	frame, err := box.Compose()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, index := range frame.Pix {
+		if index != 0 {
+			t.Fatalf("firmware viewing handoff pixel %d = palette index %#02x, want transparent index 0", i, index)
+		}
+	}
+	_, _, _, alpha := frame.Palette[0].RGBA()
+	if alpha != 0 {
+		t.Fatalf("firmware viewing handoff left palette index 0 opaque: alpha=%#04x", alpha)
+	}
+	root := box.Display.Read(0x200, bus.Word)
+	descAt := 0xA0000000 | (root & 0x00FFFFFF)
+	t.Logf("viewing display root=%08X descriptor=%08X", root, descAt)
+	for at, seen := descAt, map[uint32]bool{}; at != 0 && !seen[at]; {
+		seen[at] = true
+		words := make([]uint32, 20)
+		for i := range words {
+			words[i] = box.RAM.Read((at&0x1FFFFFFF)+uint32(i*4), bus.Word)
+		}
+		t.Logf("display descriptor %08X: %08X", at, words)
+		next := words[16]
+		if next == 0 {
+			break
+		}
+		at = next
+	}
 	if writes == 0 {
 		t.Fatal("harness: the guest never wrote a DMA register in this whole run, so a tally of " +
 			"zero is the instrument and not the box")

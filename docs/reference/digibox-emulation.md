@@ -202,7 +202,7 @@ path. ZERO `COMP` containers exist in the image; the flash is already that forma
 <!-- anchor: internal/device/osd/display.go -->
 <!-- anchor: internal/device/blitter/blitter.go -->
 <!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:9a817123022e2121100495ed804d8497bc410770dd085029f75cfe72c3b18871 @ 2026-09-22 -->
+<!-- fingerprint: sha256:38497e0e88b650e06c7f9cbdaeef136022edc58344340fc33395991120823e6c @ 2026-09-24 -->
 
 The bootloader draws the UPDATING SYSTEM SOFTWARE screen with two self-contained MIPS16 calls,
 no RTOS task, no stream, no viewing card:
@@ -1518,7 +1518,7 @@ question is the one this document started with — what it is waiting for.**
 
 <!-- anchor: internal/device/osd/compose.go -->
 <!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:53efa1fa9b012df0b592ef26aebc5c08ae3b32faafefb2ab820b61a919dcc9c8 @ 2026-09-22 -->
+<!-- fingerprint: sha256:ae198aeee6c300c78c3b8c242951e776cd1622b430993d5b1c5f5e4c69931234 @ 2026-09-24 -->
 
 **The emulator's graphics are not the problem.** The box paints its screen with the blitter,
 correctly, and `__blitLog()` carries the whole of it with parameters:
@@ -2449,7 +2449,7 @@ busy. What it is not doing is drawing, and that is now the whole of the remainin
 <!-- anchor: internal/device/osd/display.go -->
 <!-- anchor: internal/device/blitter/blitter.go -->
 <!-- anchor: internal/device/blitter/execute.go -->
-<!-- fingerprint: sha256:9a817123022e2121100495ed804d8497bc410770dd085029f75cfe72c3b18871 @ 2026-09-22 -->
+<!-- fingerprint: sha256:38497e0e88b650e06c7f9cbdaeef136022edc58344340fc33395991120823e6c @ 2026-09-24 -->
 
 **This question is open.** Recording it that way because the eliminations are worth having and
 the temptation is to dress up progress as an answer.
@@ -10077,3 +10077,15 @@ programmed both decoder PID inputs. The now/next selector is still expected to b
 the firmware itself dismisses it after its timer (the post-selection probe reaches the plain video
 plane after forty million more instructions). A selector which never dismisses would be a timer
 fault; its transient presence immediately after tuning is the box's real behaviour.
+
+The "plain video plane" is not green. That was a renderer defect. At the handoff the guest keeps
+the same enabled OSD root `0x01583FE8` and descriptor, programs decoder/display registers including
+the black field values `0x00108080` at `0xB0004320/+0x324`, and clears every one of the 414,720 OSD
+pixels to palette index `0`. The old browser renderer made every CLUT entry opaque, so index zero's
+incidental decoded colour appeared as a solid green screen. It then compounded the mistake by
+making RGB `(0,5,69)`—palette index `0xDC`, the firmware's legitimate Sky-blue background—transparent
+when media was active. The hardware model now marks index zero transparent in the composed palette,
+the wire carries the model's alpha value, and the browser applies that alpha without naming a colour
+or deciding whether a firmware pixel should be hidden. The test programme remains a declared host
+presentation substitute, but the guest now controls when it is exposed: PMT-derived decoder PIDs
+activate the backing plane, and the firmware's own index-zero clear reveals it.

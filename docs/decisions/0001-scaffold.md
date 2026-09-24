@@ -77,7 +77,7 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 <!-- anchor: internal/wire/wire.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:ad39d88e895448da3b332d2e8a9cddd917937d8f642c65b56d431963777a1c71 @ 2026-09-24 -->
+<!-- fingerprint: sha256:58d3b71d1b05ad6b833114cea49d14e00772d28cbc8abd545630ee1f24603cff @ 2026-09-24 -->
 
 The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
 Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt

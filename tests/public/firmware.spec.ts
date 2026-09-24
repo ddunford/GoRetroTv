@@ -41,6 +41,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
   page.on('pageerror', error => errors.push(error.message));
   const pixels = Buffer.alloc(720 * 576);
   let palette: Buffer | null = null;
+  let paletteAlpha: Buffer | null = null;
   let initial: Buffer | null = null;
   const sent: string[] = [];
   let websocketURL = '';
@@ -49,9 +50,12 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
     socket.on('framesent', frame => { if (typeof frame.payload === 'string') sent.push(frame.payload); });
     socket.on('framereceived', frame => {
       if (typeof frame.payload !== 'string') return;
-      const message = JSON.parse(frame.payload) as { type: string; rgb?: string; pixels?: string;
+      const message = JSON.parse(frame.payload) as { type: string; rgb?: string; alpha?: string; pixels?: string;
         x?: number; y?: number; w?: number; h?: number };
-      if (message.type === 'palette' && message.rgb) palette = Buffer.from(message.rgb, 'base64');
+      if (message.type === 'palette' && message.rgb && message.alpha) {
+        palette = Buffer.from(message.rgb, 'base64');
+        paletteAlpha = Buffer.from(message.alpha, 'base64');
+      }
       if (message.type !== 'frame' || !message.pixels || message.x === undefined ||
           message.y === undefined || message.w === undefined || message.h === undefined) return;
       const patch = Buffer.from(message.pixels, 'base64');
@@ -70,7 +74,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
   const sky = page.getByRole('button', { name: 'box office', exact: true });
   await expect(sky).toBeEnabled();
   await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide on the handset.');
-  await expect.poll(() => initial !== null && palette !== null).toBe(true);
+  await expect.poll(() => initial !== null && palette !== null && paletteAlpha !== null).toBe(true);
   expect(indexedHash(initial!)).toBe(0xA6A21DC5);
 
   const frame = initial!;
@@ -80,7 +84,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
     rgba[i * 4] = colors[frame[i] * 3];
     rgba[i * 4 + 1] = colors[frame[i] * 3 + 1];
     rgba[i * 4 + 2] = colors[frame[i] * 3 + 2];
-    rgba[i * 4 + 3] = 255;
+    rgba[i * 4 + 3] = paletteAlpha![frame[i]];
   }
   const expectedDigest = createHash('sha256').update(rgba).digest('hex');
   await expect.poll(() => page.locator('#screen').evaluate(async (canvas: HTMLCanvasElement) => {
@@ -91,7 +95,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
 
   await sky.click();
   await expect.poll(() => sent.length).toBe(1);
-  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 1, raw: 125, source: 0 });
+  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 2, raw: 125, source: 0 });
   await expect.poll(() => indexedHash(pixels), { timeout: 45_000, intervals: [500, 1000] })
     .toBe(0xFE8D1CCC);
   await expect(page.locator('#box-status')).toContainText('ready');
@@ -102,4 +106,40 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await page.screenshot({ path: testInfo.outputPath('public-menu-mobile-dark.png'), fullPage: true });
+});
+
+test('firmware selection exposes the test programme without a browser colour key', async ({ page }, testInfo) => {
+  test.setTimeout(150_000);
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Reset the box' }).click();
+  await expect(page.locator('#reset-feedback')).toHaveText('The box was reset.', { timeout: 30_000 });
+  await expect(page.locator('#box-status')).toContainText('restored to its startup state');
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
+
+  const press = async (name: string) => {
+    await page.getByRole('button', { name, exact: true }).click();
+    await page.waitForTimeout(4_000);
+  };
+  await press('box office');
+  await press('Left');
+  await press('select');
+  await page.waitForTimeout(10_000);
+  await press('select');
+
+  await expect(page.locator('body')).toHaveAttribute('data-media', 'active', { timeout: 60_000 });
+  await expect(page.locator('#box-status')).toContainText('test video and audio are playing');
+  await expect.poll(() => page.locator('#screen').evaluate((canvas: HTMLCanvasElement) => {
+    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+    for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] !== 0) return false;
+    return true;
+  }), { timeout: 60_000, intervals: [1_000] }).toBe(true);
+  await expect(page.locator('#programme')).toHaveCSS('visibility', 'visible');
+
+  await page.screenshot({ path: testInfo.outputPath('programme-light.png'), fullPage: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: testInfo.outputPath('programme-dark.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.screenshot({ path: testInfo.outputPath('programme-mobile-dark.png'), fullPage: true });
 });

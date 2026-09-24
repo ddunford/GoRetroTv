@@ -11,6 +11,7 @@ test('decodes palette and dirty pixels captured from the Go WebSocket server', (
   assert.equal(palette.type, 'palette');
   assert.equal(palette.epoch, 1);
   assert.equal(palette.rgb.length, 768);
+  assert.equal(palette.alpha.length, 256);
   assert.deepEqual([...palette.rgb.slice(0, 6)], [0, 0, 0, 255, 255, 255]);
   assert.equal(frame.type, 'frame');
   assert.deepEqual([frame.seq, frame.x, frame.y, frame.w, frame.h, frame.epoch], [1, 5, 7, 1, 1, 1]);
@@ -19,20 +20,20 @@ test('decodes palette and dirty pixels captured from the Go WebSocket server', (
 
 test('rejects protocol version, impossible rectangle, and truncated bytes', () => {
   const original = JSON.parse(frameWire);
-  assert.throws(() => decodeServerMessage(JSON.stringify({ ...original, version: 2 })), /version/);
+  assert.throws(() => decodeServerMessage(JSON.stringify({ ...original, version: 3 })), /version/);
   assert.throws(() => decodeServerMessage(JSON.stringify({ ...original, x: 720 })), /frame x/);
   assert.throws(() => decodeServerMessage(JSON.stringify({ ...original, pixels: '' })), /length/);
   assert.throws(() => decodeServerMessage(JSON.stringify({ ...original, pixels: '*' })), /base64/);
 });
 
 test('encodes key and validates raw/source bytes', () => {
-  assert.deepEqual(JSON.parse(encodeKeyMessage(0x11, 2)), { type: 'key', version: 1, raw: 0x11, source: 2 });
+  assert.deepEqual(JSON.parse(encodeKeyMessage(0x11, 2)), { type: 'key', version: 2, raw: 0x11, source: 2 });
   assert.throws(() => encodeKeyMessage(256, 1), /raw/);
   assert.throws(() => encodeKeyMessage(1, -1), /source/);
 });
 
 test('decodes the guest-selected media state', () => {
-  assert.deepEqual(decodeServerMessage('{"type":"media","version":1,"active":1,"service":"Test channel"}'),
-    { type: 'media', version: 1, active: 1, service: 'Test channel' });
-  assert.throws(() => decodeServerMessage('{"type":"media","version":1,"active":2,"service":"Test"}'), /active/);
+  assert.deepEqual(decodeServerMessage('{"type":"media","version":2,"active":1,"service":"Test channel"}'),
+    { type: 'media', version: 2, active: 1, service: 'Test channel' });
+  assert.throws(() => decodeServerMessage('{"type":"media","version":2,"active":2,"service":"Test"}'), /active/);
 });

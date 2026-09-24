@@ -118,6 +118,14 @@ func (d *Display) palette(desc Descriptor) (color.Palette, error) {
 		}
 		palette[i] = decodeColour(y, cb, cr)
 	}
+	// The firmware clears the OSD surface to index zero when it hands the
+	// picture to the decoder plane. The Pace display mixer treats that index as
+	// transparent; its decoded CLUT colour is not a chroma key.
+	if len(palette) != 0 {
+		key := color.RGBAModel.Convert(palette[0]).(color.RGBA)
+		key.A = 0
+		palette[0] = key
+	}
 	return palette, nil
 }
 

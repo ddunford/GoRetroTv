@@ -118,7 +118,7 @@ func TestResetRestartsAHaltedBoxAndSaysWhatItDid(t *testing.T) {
 
 	// The reset must be accepted in the halted phase, which is where the
 	// handset's own gate refuses everything.
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":1}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":2}`)); err != nil {
 		t.Fatal(err)
 	}
 	reason := waitForState(t, ctx, conn, "the rebuilt box", func(phase, reason string) bool {
@@ -178,7 +178,7 @@ func TestResetRebuildsARunningBoxAndItKeepsRetiring(t *testing.T) {
 	defer watcher.Close(websocket.StatusNormalClosure, "")
 	watcher.SetReadLimit(4 << 20)
 
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":1}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":2}`)); err != nil {
 		t.Fatal(err)
 	}
 	waitForState(t, ctx, conn, "the rebuilt box", func(phase, reason string) bool {
@@ -196,7 +196,7 @@ func TestResetRebuildsARunningBoxAndItKeepsRetiring(t *testing.T) {
 	// takes input and reaches the compositor: the whole path, the way a
 	// viewer would find out.
 	if err := conn.Write(ctx, websocket.MessageText,
-		[]byte(`{"type":"key","version":1,"raw":125,"source":0}`)); err != nil {
+		[]byte(`{"type":"key","version":2,"raw":125,"source":0}`)); err != nil {
 		t.Fatal(err)
 	}
 	for frames := 0; frames < 1; {

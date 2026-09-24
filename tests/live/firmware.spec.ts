@@ -13,14 +13,18 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   let palette: Buffer | null = null;
+  let paletteAlpha: Buffer | null = null;
   let initialFrame: Buffer | null = null;
   let frameMessages = 0;
   const livePixels = Buffer.alloc(720 * 576);
   page.on('websocket', socket => socket.on('framereceived', frame => {
     if (typeof frame.payload !== 'string') return;
-    const message = JSON.parse(frame.payload) as { type: string; rgb?: string; pixels?: string;
+    const message = JSON.parse(frame.payload) as { type: string; rgb?: string; alpha?: string; pixels?: string;
       x?: number; y?: number; w?: number; h?: number };
-    if (message.type === 'palette' && message.rgb) palette = Buffer.from(message.rgb, 'base64');
+    if (message.type === 'palette' && message.rgb && message.alpha) {
+      palette = Buffer.from(message.rgb, 'base64');
+      paletteAlpha = Buffer.from(message.alpha, 'base64');
+    }
     if (message.type === 'frame' && message.pixels && message.x !== undefined &&
         message.y !== undefined && message.w !== undefined && message.h !== undefined) {
       frameMessages++;
@@ -38,7 +42,7 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
   const sky = page.getByRole('button', { name: 'box office', exact: true });
   await expect(sky).toBeEnabled();
   const screen = page.locator('#screen');
-  await expect.poll(() => initialFrame !== null && palette !== null).toBe(true);
+  await expect.poll(() => initialFrame !== null && palette !== null && paletteAlpha !== null).toBe(true);
   const frameBytes = initialFrame!;
   const paletteBytes = palette!;
   const rgba = Buffer.alloc(720 * 576 * 4);
@@ -47,7 +51,7 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
     rgba[i * 4] = paletteBytes[index * 3];
     rgba[i * 4 + 1] = paletteBytes[index * 3 + 1];
     rgba[i * 4 + 2] = paletteBytes[index * 3 + 2];
-    rgba[i * 4 + 3] = 255;
+    rgba[i * 4 + 3] = paletteAlpha![index];
   }
   expect(indexedHash(frameBytes)).toBe(0xA6A21DC5); // Pinned by board's real snapshot Compose test.
   await expect(screen).toHaveAttribute('aria-label', 'Plain dark blue Digibox screen. No menu is visible.');

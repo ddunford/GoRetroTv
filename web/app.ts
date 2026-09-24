@@ -34,6 +34,7 @@ const width = canvas.width;
 const height = canvas.height;
 const framebuffer = new Uint8Array(width * height);
 let palette = new Uint8Array(256 * 3);
+let paletteAlpha = new Uint8Array(256).fill(255);
 let paletteEpoch = 0;
 let socket: WebSocket | null = null;
 let connected = false;
@@ -136,8 +137,7 @@ function paint(x: number, y: number, w: number, h: number): void {
       image.data[target] = palette[source];
       image.data[target + 1] = palette[source + 1];
       image.data[target + 2] = palette[source + 2];
-      image.data[target + 3] = mediaActive && palette[source] === 0 &&
-        palette[source + 1] === 5 && palette[source + 2] === 69 ? 0 : 255;
+      image.data[target + 3] = paletteAlpha[index];
     }
   }
   context.putImageData(image, x, y);
@@ -162,6 +162,7 @@ function handleMessage(payload: string): void {
       if (machineReady) keyFeedback.textContent = 'Waiting for the box to send its screen.';
     }
     palette = new Uint8Array(message.rgb);
+    paletteAlpha = new Uint8Array(message.alpha);
     paletteEpoch = message.epoch;
     return;
   }

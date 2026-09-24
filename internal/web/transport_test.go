@@ -68,7 +68,8 @@ func TestTransportSendsFullThenDirtyThenPaletteRefresh(t *testing.T) {
 	defer conn.Close(websocket.StatusNormalClosure, "")
 	conn.SetReadLimit(1 << 20)
 	palette := readMessage(t, conn)
-	if field[string](t, palette, "type") != "palette" || field[uint64](t, palette, "epoch") != 1 || len(field[[]byte](t, palette, "rgb")) != 768 {
+	if field[string](t, palette, "type") != "palette" || field[uint64](t, palette, "epoch") != 1 ||
+		len(field[[]byte](t, palette, "rgb")) != 768 || len(field[[]byte](t, palette, "alpha")) != 256 {
 		t.Fatalf("initial palette = %v", palette)
 	}
 	full := readMessage(t, conn)
@@ -192,7 +193,7 @@ func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
 		defer response.Body.Close()
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":1,"raw":125,"source":0}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":2,"raw":125,"source":0}`)); err != nil {
 		t.Fatal(err)
 	}
 	link := csi.New(nil)
@@ -218,13 +219,13 @@ func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
 
 func TestTransportRejectsInvalidHandsetMessages(t *testing.T) {
 	cases := []string{
-		`{"type":"frame","version":1,"raw":125,"source":0}`,
-		`{"type":"key","version":2,"raw":125,"source":0}`,
-		`{"type":"key","version":1,"raw":125,"source":2}`,
-		`{"type":"key","version":1,"raw":99,"source":0}`,
-		`{"type":"key","version":1,"raw":256,"source":0}`,
-		`{"type":"key","version":1,"raw":125,"source":0,"other":1}`,
-		`{"type":"key","version":1,"raw":125,"source":0}{}`,
+		`{"type":"frame","version":2,"raw":125,"source":0}`,
+		`{"type":"key","version":3,"raw":125,"source":0}`,
+		`{"type":"key","version":2,"raw":125,"source":2}`,
+		`{"type":"key","version":2,"raw":99,"source":0}`,
+		`{"type":"key","version":2,"raw":256,"source":0}`,
+		`{"type":"key","version":2,"raw":125,"source":0,"other":1}`,
+		`{"type":"key","version":2,"raw":125,"source":0}{}`,
 	}
 	for _, payload := range cases {
 		var key wire.KeyMessage
@@ -258,7 +259,7 @@ func TestTransportClosesSocketOnInvalidKey(t *testing.T) {
 		defer response.Body.Close()
 	}
 	defer conn.Close(websocket.StatusNormalClosure, "")
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":1,"raw":125,"source":2}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":2,"raw":125,"source":2}`)); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err = conn.Read(ctx)
@@ -335,7 +336,7 @@ func TestTransportAcceptsResetWhileHaltedAndStillRefusesKeys(t *testing.T) {
 	if transport.TakeReset() {
 		t.Fatal("a reset was pending before the browser asked for one")
 	}
-	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":1}`)); err != nil {
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"reset","version":2}`)); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -348,7 +349,7 @@ func TestTransportAcceptsResetWhileHaltedAndStillRefusesKeys(t *testing.T) {
 	// reset would have opened a hole in the gate rather than an exception to it.
 	keyed := dialTransport(t, ctx, server)
 	readMessage(t, keyed)
-	if err := keyed.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":1,"raw":125,"source":0}`)); err != nil {
+	if err := keyed.Write(ctx, websocket.MessageText, []byte(`{"type":"key","version":2,"raw":125,"source":0}`)); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := keyed.Read(ctx); websocket.CloseStatus(err) != websocket.StatusPolicyViolation {
@@ -393,10 +394,10 @@ func TestTransportFoldsResetsInsideTheMinimumInterval(t *testing.T) {
 
 func TestTransportRejectsMalformedResetsAndUnknownTypes(t *testing.T) {
 	for _, payload := range []string{
-		`{"type":"reset","version":2}`,
-		`{"type":"reset","version":1,"raw":125}`,
-		`{"type":"reset","version":1}{}`,
-		`{"type":"restart","version":1}`,
+		`{"type":"reset","version":3}`,
+		`{"type":"reset","version":2,"raw":125}`,
+		`{"type":"reset","version":2}{}`,
+		`{"type":"restart","version":2}`,
 	} {
 		transport := NewTransport()
 		server := httptest.NewServer(transport)

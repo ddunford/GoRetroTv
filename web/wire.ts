@@ -15,7 +15,7 @@ export type { FrameMessage, KeyMessage, MediaMessage, PaletteMessage, ResetMessa
 export { FRAME_HEIGHT, FRAME_WIDTH, WIRE_VERSION } from './wire_generated.js';
 
 export type ServerMessage =
-  | (Omit<PaletteMessage, 'rgb'> & { rgb: Uint8Array })
+  | (Omit<PaletteMessage, 'rgb' | 'alpha'> & { rgb: Uint8Array; alpha: Uint8Array })
   | (Omit<FrameMessage, 'pixels'> & { pixels: Uint8Array })
   | MediaMessage
   | StateMessage;
@@ -54,7 +54,8 @@ export function decodeServerMessage(json: string): ServerMessage {
     }
     case 'palette': {
       const epoch = integer(value.epoch, 'palette epoch');
-      return { type: 'palette', version: WIRE_VERSION, epoch, rgb: bytes(value.rgb, 'palette rgb', 256 * 3) };
+      return { type: 'palette', version: WIRE_VERSION, epoch,
+        rgb: bytes(value.rgb, 'palette rgb', 256 * 3), alpha: bytes(value.alpha, 'palette alpha', 256) };
     }
     case 'frame': {
       const seq = integer(value.seq, 'frame sequence');

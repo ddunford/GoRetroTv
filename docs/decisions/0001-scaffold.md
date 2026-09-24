@@ -38,7 +38,7 @@ been sufficient.
 
 <!-- anchor: go.mod -->
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:12ecafdeb0e16a55f337bae2080aa18f230120cc3f0cef41dff3c6ac3e03d80c @ 2026-09-24 -->
+<!-- fingerprint: sha256:52da3957e68e2ee8aa0f777ab8849840c0ef8ea81e08208d820da9849b993dbf @ 2026-09-24 -->
 
 **One module at the repository root** (`github.com/ddunford/goretrotv`, lowercased from the git
 remote), with binaries under `cmd/` sharing `internal/`. The `cmd/` shape rather than the root shape

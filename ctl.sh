@@ -127,6 +127,11 @@ cmd_down_public() {
     public_compose down
 }
 
+cmd_logs_public() {
+    public_env
+    public_compose logs --tail "${1:-100}" goretrotv
+}
+
 cmd_restart_public() {
     public_env
     public_compose restart goretrotv
@@ -424,6 +429,7 @@ Running
   logs [n]       Follow the container log (default: last 100 lines)
   health         Probe the health endpoint and print what it says
   health-public  Probe the real HTTPS URL through Traefik
+  logs-public [n] Show published container logs (default: last 100 lines)
   gate           Boot gate: build, verify firmware, listen, /health, graceful stop
   cpu-gate       Real firmware CPU/oracle gate through the first unmodelled video RAM read
   handoff-gate   Prove declared handoff, guest loader and application entry
@@ -479,6 +485,7 @@ main() {
         logs)    cmd_logs "$@" ;;
         health)  cmd_health "$@" ;;
         health-public) cmd_public_health "$@" ;;
+        logs-public) cmd_logs_public "$@" ;;
         gate)    cmd_gate "$@" ;;
         cpu-gate) cmd_cpu_gate "$@" ;;
         handoff-gate) cmd_handoff_gate "$@" ;;

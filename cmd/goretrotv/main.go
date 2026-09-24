@@ -459,6 +459,7 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	nextState := align(start, stateInterval)
 	nextProgress := align(start, progressInterval)
 	mediaService, mediaProgramme, mediaSource := "", "", ""
+	mediaRequested := false
 	transport.PushMedia(false, "", "", "")
 	for {
 		count := box.Machine.Retired
@@ -504,6 +505,14 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		service, programme, source, configured := "", "", "", false
 		if requested && transmitter != nil {
 			service, programme, source, configured = transmitter.MediaSelection()
+		}
+		if requested != mediaRequested {
+			mediaRequested = requested
+			subscription, subscriptionErr := multiplex.Read(box.Demux)
+			logger.Info("guest decoder request changed", "requested", requested, "video_pid", videoPID,
+				"audio_pid", audioPID, "tuned_service_id", subscription.TunedServiceID,
+				"eit_armed", subscription.EITArmed, "subscription_error", subscriptionErr,
+				"configured", configured, "service", service, "programme", programme, "source", source)
 		}
 		if !configured {
 			service, programme, source = "", "", ""

@@ -365,6 +365,12 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		t.Fatalf("PMT component selection did not program the measured decoder inputs: video=%04X audio=%04X ready=%t",
 			videoPID, audioPID, programmeReady)
 	}
+	serviceName, programmeName, source, configured := transmitter.MediaSelection()
+	if !configured || serviceName != "Sky One" || programmeName != "Dream Team" ||
+		source != multiplex.MediaKindTestPattern {
+		t.Fatalf("firmware-selected programme media = %q %q %q configured=%t, want Sky One / "+
+			"Dream Team / test-pattern", serviceName, programmeName, source, configured)
+	}
 	for unit := uint8(0); unit < 16; unit++ {
 		var matches [10]demux.MatchByte
 		for index := uint8(0); index < 10; index++ {

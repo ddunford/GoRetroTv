@@ -118,3 +118,7 @@ digest: 5908864ecba1374f0f0f62629366c71fce22d59000602927d75c6b1f41f35cec
   when: 2026-09-24T19:50:38Z
    why: Allow scoped Go test arguments and a plain focused firmware-test command so measured probes can run through the project control script without bypassing it.
 
+digest: ad38ce4cf3c17446398fa4f5303aa78f8fc063a50cfeeda43699d317b0103a3e
+  when: 2026-09-24T22:48:53Z
+   why: add the missing public-log diagnostic required to verify a failed published firmware transition
+

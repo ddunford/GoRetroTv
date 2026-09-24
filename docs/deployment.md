@@ -14,7 +14,7 @@ read-only mounts; neither is in the build context or published image.
 ## Start and verify
 
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:a8a5c43ff5fffcdba834a3bd79b0507237b1c9fc9199c281d139c2e9674a87d3 @ 2026-09-24 -->
+<!-- fingerprint: sha256:6e14e7353625d055a7278ee4ab662b2e42c8591eab8ef1356cafabfa73632882 @ 2026-09-24 -->
 
 From the repository owner account, with the private firmware files and
 `snapshots/post-acquisition.snapshot` present:
@@ -22,6 +22,7 @@ From the repository owner account, with the private firmware files and
 ```sh
 ./ctl.sh up-public
 ./ctl.sh health-public
+./ctl.sh logs-public 100
 ```
 
 `up-public` starts the container under the caller's non-root UID/GID so it can read the private
@@ -31,6 +32,8 @@ with pprof enabled outside explicit development mode, including a direct product
 bypasses this overlay. The firmware is checked against its
 manifest before the listener opens; the restored snapshot must pass the exact post-acquisition
 state check before the page is served.
+`logs-public` reads the published container through the same compose overlay when startup or a
+firmware-driven transition needs diagnosing; it does not require a local-development `.env`.
 
 Check `https://goretrotv.demosrv.uk/` in a browser, including the actual `/styles.css`,
 `/favicon.svg`, and `/dist/*.js` requests. The server must return 404 for unknown assets, not
@@ -87,7 +90,7 @@ The public overlay publishes no host port, and the runtime image contains only `
 ## Stop or roll back
 
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:a8a5c43ff5fffcdba834a3bd79b0507237b1c9fc9199c281d139c2e9674a87d3 @ 2026-09-24 -->
+<!-- fingerprint: sha256:6e14e7353625d055a7278ee4ab662b2e42c8591eab8ef1356cafabfa73632882 @ 2026-09-24 -->
 
 `./ctl.sh down-public` removes the route and container while preserving the private files. To
 restore a previous release, check out that release and run `./ctl.sh up-public`; the firmware and

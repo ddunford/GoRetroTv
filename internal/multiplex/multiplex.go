@@ -18,14 +18,20 @@ import (
 // across a reset would release the line-up into a machine that had just
 // forgotten the clock.
 
-// Transport-stream constants. The frequency and symbol rate are cosmetic --
-// nothing in the emulator tunes -- but they appear in the NIT the box parses,
-// so they are named once here rather than invented at three call sites.
+// Transport-stream constants. The firmware validates the frequency and symbol
+// rate before it reports front-end success, so these are part of the emulated
+// signal rather than display metadata.
 const (
 	transportFrequencyMHz = 11778
 	transportOrbitTenths  = 282 // 28.2 degrees east
 	transportSymbolRate   = 27500
 	transportFEC          = 2
+	// programmeMapPID is the transmitter's allocation for the service PMT. It
+	// is announced through the PAT rather than written into guest state; the
+	// firmware must open this PID itself before anything is sent on it.
+	programmeMapPID = 0x100
+	videoPID        = 0x101
+	audioPID        = 0x102
 
 	// THE NIT HAS ITS OWN PID AND IT IS NOT THE SDT'S. EN 300 468 puts the
 	// network information table on 0x10 and the service description and bouquet
@@ -196,6 +202,9 @@ func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 	if schedule.EventPeriod != 0 {
 		source.Events = m.eventWave
 	}
+	if schedule.ProgrammePeriod != 0 {
+		source.Programmes = m.programmeWave
+	}
 	carousel, err := broadcast.NewCarousel(schedule, source)
 	if err != nil {
 		return nil, err
@@ -357,6 +366,60 @@ func (m *Multiplex) lineupWave(uint64) ([]broadcast.Emission, error) {
 	}
 	for _, section := range bat {
 		wave = append(wave, broadcast.Emission{PID: sectionPIDSI, Section: section})
+	}
+	return wave, nil
+}
+
+// programmeWave answers the fixed-PSI filters the firmware opens after a successful tune.
+func (m *Multiplex) programmeWave(uint64) ([]broadcast.Emission, error) {
+	sub, asking := m.subscription()
+	if !asking {
+		return nil, nil
+	}
+	listings := m.listings()
+	if listings == nil || len(listings.Services) == 0 {
+		return nil, nil
+	}
+	var wave []broadcast.Emission
+	// PAT AND CAT ARE VIEWING-TIME REQUESTS ON THIS FIRMWARE. They are not sent merely because a
+	// DVB transport normally carries them: a successful tune makes the guest arm PID 0 and PID 1,
+	// and this answers only those measured requests.
+	if sub.PATArmed {
+		programmes := make([]broadcast.Programme, 0, len(listings.Services))
+		for _, service := range listings.Services {
+			programmes = append(programmes, broadcast.Programme{
+				Number: service.ServiceID,
+				MapPID: programmeMapPID,
+			})
+		}
+		pat, err := broadcast.PAT(sub.NetworkID, m.version, programmes)
+		if err != nil {
+			return nil, err
+		}
+		wave = append(wave, broadcast.Emission{PID: 0x00, Section: pat})
+	}
+	if sub.CATArmed {
+		cat, err := broadcast.CAT(m.version, nil)
+		if err != nil {
+			return nil, err
+		}
+		wave = append(wave, broadcast.Emission{PID: 0x01, Section: cat})
+	}
+	if sub.PMTArmed {
+		// H.222.0 assigns 0x02 to MPEG-2 video and 0x03 to MPEG-1 audio.
+		// These are transmitter-owned component allocations, announced on air;
+		// the guest still has to accept the PMT and request their PIDs itself.
+		streams := []broadcast.ElementaryStream{
+			{Type: 0x02, PID: videoPID},
+			{Type: 0x03, PID: audioPID},
+		}
+		for _, service := range listings.Services {
+			pmt, err := broadcast.PMT(service.ServiceID, m.version, videoPID, nil, streams)
+			if err != nil {
+				return nil, err
+			}
+			wave = append(wave, broadcast.Emission{PID: programmeMapPID, Section: pmt})
+		}
 	}
 	return wave, nil
 }

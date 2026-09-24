@@ -288,7 +288,7 @@ answer more than once.
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/dvb/crc.go -->
-<!-- fingerprint: sha256:6b349ede26bdd54e81cfad06884534dbdb691dbffe775b4c20a08950f8e75172 @ 2026-09-24 -->
+<!-- fingerprint: sha256:3ceb9c592320a4e8695fdb5b667ff0e76afe4667e9ccf487601358dd42017d7d @ 2026-09-24 -->
 
 During initial SI acquisition the box asks for exactly three PIDs and says so: `__dispState().pids`
 gives **filter 22 → PID 0x0014 (TDT, the clock), 23 → 0x0011 (SDT, the line-up), 24 → 0x0010
@@ -317,6 +317,10 @@ all ones, no final inversion); `withCrc()` on the page does it. Then the OpenTV 
 
 **There is no MPEG-2 audio/video decoder here yet.** The current browser colour bars and tone are
 a declared presentation substitute triggered by the guest's own selected-service MPEG callback;
-they are not decoded broadcast media. Phase 8 adds real component signalling and decoding only
-after the firmware requests the programme's component streams. Until that path is measured, the
-OSD, menus and guide are the emulated output and any test card must be described as a prototype.
+they are not decoded broadcast media. Component signalling is now real: a successful front-end
+tune makes the guest open PAT, CAT and then the PMT PID announced by the PAT; a PMT carrying MPEG-2
+video and MPEG audio executes the firmware's component rebuild and reaches its audio stop decision.
+The PMT channel is PID-only—none of the sixteen match units describes table `0x02`—so do not route
+it through an unrelated unit merely because byte-nine bits overlap its filter number. Phase 8 still
+adds elementary-stream delivery and decoding; until the guest changes the audio decision from stop
+to start, any test card remains a prototype rather than decoded broadcast media.

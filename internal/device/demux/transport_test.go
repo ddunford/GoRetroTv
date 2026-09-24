@@ -3,7 +3,9 @@ package demux
 import (
 	"testing"
 
+	"github.com/ddunford/goretrotv/internal/broadcast"
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/dvb"
 	"github.com/ddunford/goretrotv/internal/memory"
 )
 
@@ -45,6 +47,40 @@ func TestTransportRetainsPacketAcrossDMATransfers(t *testing.T) {
 	}
 	if len(restored.transportPacket) != 0 {
 		t.Fatal("completed packet left a partial fragment")
+	}
+}
+
+func TestTransportPIDOnlyChannelIgnoresAnUnrelatedRouteBit(t *testing.T) {
+	t.Parallel()
+	ram, err := memory.NewRAM("dram", memory.DRAMSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := New()
+	if err := d.BindRAM(ram); err != nil {
+		t.Fatal(err)
+	}
+	const channel = uint32(15)
+	d.Write(0x140, bus.Word, 1)
+	d.Write(0xD8, bus.Word, 1<<channel)
+	d.Write(0x14+4*channel, bus.Word, 0x14100)
+	// Reproduce the live firmware state: unit 3 matches BAT, while its byte-nine value happens
+	// to overlap filter 15's route bit. There is deliberately no table-0x02 unit for the PMT.
+	d.matchWords[3][0] = 0x4aff
+	d.matchWords[3][9] = 1 << channel
+	pmt, err := broadcast.PMT(0x64, 0, 0x101, nil,
+		[]broadcast.ElementaryStream{{Type: 0x03, PID: 0x102}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.PushTransport(dvb.PacketizeSection(0x100, pmt, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Read(0xB8, bus.Word); got != 1<<channel {
+		t.Fatalf("PID-only PMT completion = %#08x", got)
+	}
+	if got := ram.Read(RingBase(uint8(channel))&0x1fffffff, bus.Byte); got != 0x02 {
+		t.Fatalf("PMT first byte = %#x", got)
 	}
 }
 

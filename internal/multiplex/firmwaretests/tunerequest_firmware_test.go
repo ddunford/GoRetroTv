@@ -10,6 +10,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/bus"
+	"github.com/ddunford/goretrotv/internal/device/demux"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
@@ -114,6 +115,7 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 
 	active := false
 	noSignalDecision := false
+	componentRebuilt := false
 	var calls []call
 	var serviceResolveResults []uint32
 	var serviceLookupResults []uint32
@@ -148,6 +150,9 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		AfterPump: func() error {
 			state := box.Machine.Core.State()
 			pc := state.PC &^ 1
+			if pc == 0x800A127C {
+				componentRebuilt = true
+			}
 			if pc == 0x8007E6D8 {
 				c := call{pc: pc,
 					ra: state.GPR[31] &^ 1, a0: state.GPR[4], a1: state.GPR[5],
@@ -166,8 +171,12 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 					a2: state.GPR[6], a3: state.GPR[7], ocode: latestOCode})
 			}
 			if pc == 0x8009D370 || pc == 0x8001C908 || pc == 0x8001CF8C ||
+				pc == 0x800ABB2C || pc == 0x800AFD74 || pc == 0x800AFF1C ||
+				pc == 0x8009E140 || pc == 0x8009E250 || pc == 0x8009E290 ||
+				pc == 0x8009E47C || pc == 0x800A127C || pc == 0x800A1A48 || pc == 0x8009E764 ||
 				pc == 0x8009F4EC || pc == 0x8009F878 || pc == 0x800A03B0 || pc == 0x800A03D0 ||
-				pc == 0x800D5C8C || pc == 0x800D5D2C || pc == 0x800DB9CA || pc == 0x800DBF34 || pc == 0x800E8DE8 || pc == 0x800DC014 {
+				pc == 0x800DA436 || pc == 0x800DA452 || pc == 0x800D5C8C || pc == 0x800D5D2C ||
+				pc == 0x800DB9CA || pc == 0x800DBF34 || pc == 0x800E8DE8 || pc == 0x800DC014 {
 				c := mediaCall{call: call{pc: pc,
 					ra: state.GPR[31] &^ 1, a0: state.GPR[4], a1: state.GPR[5],
 					a2: state.GPR[6], a3: state.GPR[7], ocode: latestOCode}}
@@ -334,6 +343,29 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	openAllChannels(t, press, ".artifacts/tune-request-grid.png", true)
 	active = true
 	press(keySelect, "select service", 80_000_000)
+	// The PAT is sent on the line-up cadence; after the guest parses it and opens the advertised
+	// PMT PID, one more cadence is required for the PMT to arrive. Observe longer than that full
+	// handshake rather than declaring the component path cold halfway through it.
+	if at := runUntilHooked(t, box, transmitter, hooks, 90_000_000,
+		func(int) bool { return componentRebuilt }); at < 0 {
+		t.Log("component rebuild did not execute within the post-tune observation window")
+	} else {
+		// The rebuild publishes component records; give their consumers time to make the stream
+		// decision before taking the census.
+		runUntilHooked(t, box, transmitter, hooks, 30_000_000, func(int) bool { return false })
+	}
+	postTuneSubscription, err := multiplex.Read(box.Demux)
+	if err != nil {
+		t.Fatalf("read post-tune subscription: %v", err)
+	}
+	t.Logf("post-tune armed filters=%#v subscription=%#v", box.Demux.ArmedFilters(), postTuneSubscription)
+	for unit := uint8(0); unit < 16; unit++ {
+		var matches [10]demux.MatchByte
+		for index := uint8(0); index < 10; index++ {
+			matches[index], _ = box.Demux.Match(unit, index)
+		}
+		t.Logf("post-tune match unit %d routes-PMT=%v: %#v", unit, box.Demux.Routes(unit, 15), matches)
+	}
 	active = false
 
 	if !noSignalDecision {
@@ -424,10 +456,33 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	for _, c := range mediaCalls {
 		mediaHits[c.pc]++
 	}
-	if mediaHits[0x800A03B0] == 0 || mediaHits[0x800A03D0] == 0 {
-		t.Fatalf("harness: MPEG manager queue callbacks were not live controls: hits=%#v", mediaHits)
+	if mediaHits[0x800A03B0] == 0 {
+		t.Fatalf("harness: MPEG manager queue callback was not a live control: hits=%#v", mediaHits)
 	}
-	for _, pc := range []uint32{0x8009F4EC, 0x8009F878, 0x800D5C8C, 0x800D5D2C, 0x800DB9CA, 0x800DBF34, 0x800E8DE8, 0x800DC014} {
+	if mediaHits[0x800A1A48] == 0 {
+		t.Fatalf("harness: component-refresh task callback was not a live upstream control: hits=%#v", mediaHits)
+	}
+	if mediaHits[0x8009E764] == 0 {
+		t.Fatalf("successful front-end tune did not request the programme refresh: hits=%#v", mediaHits)
+	}
+	if mediaHits[0x8009E47C] == 0 || mediaHits[0x800A127C] == 0 ||
+		mediaHits[0x8009F4EC] == 0 || mediaHits[0x8009F878] == 0 {
+		t.Fatalf("PMT did not execute the component rebuild and programme/stream callbacks: hits=%#v", mediaHits)
+	}
+	stopCalls := 0
+	for _, c := range allAudioAPICalls {
+		if c.pc == 0x800889BC {
+			stopCalls++
+		}
+		if c.pc == 0x80088970 {
+			t.Fatalf("audio start unexpectedly executed before an elementary stream was delivered: %#v", allAudioAPICalls)
+		}
+	}
+	if stopCalls == 0 {
+		t.Fatalf("PMT component publication did not reach the measured audio stop decision: %#v", allAudioAPICalls)
+	}
+	for _, pc := range []uint32{0x800DA436, 0x800DA452, 0x800D5C8C, 0x800D5D2C,
+		0x800DB9CA, 0x800DBF34, 0x800E8DE8, 0x800DC014} {
 		if mediaHits[pc] != 0 {
 			t.Fatalf("media program/stream path %08X unexpectedly became live before the no-signal decision: %#v", pc, mediaCalls)
 		}
@@ -438,15 +493,15 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	if len(frontendTaskStates) == 0 {
 		t.Fatal("harness: front-end task did not return from its receive boundary")
 	}
-	receivedAuxiliary := false
+	receivedSuccess := false
 	for i := 0; i+1 < len(frontendTaskStates); i += 2 {
 		if frontendTaskStates[i] != 0 {
 			t.Fatalf("front-end task left idle state without issuing a command: %#v", frontendTaskStates)
 		}
-		receivedAuxiliary = receivedAuxiliary || frontendTaskStates[i+1] == 2
+		receivedSuccess = receivedSuccess || frontendTaskStates[i+1] == 1
 	}
-	if !receivedAuxiliary {
-		t.Fatalf("front-end task receive control did not observe message 2: %#v", frontendTaskStates)
+	if !receivedSuccess {
+		t.Fatalf("front-end task receive control did not observe successful message 1: %#v", frontendTaskStates)
 	}
 	t.Logf("typed-request discriminator byte reads=%#v", typedRequestDiscriminatorReads)
 	t.Logf("typed-request discriminator writes=%#v", typedRequestDiscriminatorWrites)
@@ -471,7 +526,13 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	if ocodeHits[0x9FC6A9FE] != 0 || ocodeHits[0x9FC6B5CD] != 0 {
 		t.Fatal("a direct typed-request caller unexpectedly executed; trace its record before retaining this assertion")
 	}
-	if len(typedRequestDiscriminatorReads) != 1 || typedRequestDiscriminatorReads[0].value != 1 {
+	if len(typedRequestDiscriminatorReads) == 0 {
+		t.Fatal("typed-request discriminator was never read")
+	}
+	for _, read := range typedRequestDiscriminatorReads {
+		if read.value == 1 {
+			continue
+		}
 		t.Fatalf("typed-request discriminator reads=%#v, want the measured television-service value 1",
 			typedRequestDiscriminatorReads)
 	}

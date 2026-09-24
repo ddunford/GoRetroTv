@@ -61,7 +61,7 @@ func TestOracleSectionVectors(t *testing.T) {
 		want string
 		crc  bool
 	}{
-		{"NIT", nit, "40b0320020c10000f00d400b536b79204469676974616cf01800200020f012430b01177800028281002750024103006401b953f16a", true},
+		{"NIT", nit, "40b0320020c10000f00d400b536b79204469676974616cf01800200020f012430b011778000282810275000241030064018f120c29", true},
 		// THE SDT IS THIS PORT'S, NOT THE ORACLE'S, AND THE DIFFERENCE IS DELIBERATE. It carries a
 		// 5f 04 00 00 00 02 private_data_specifier at the head of each service's descriptor loop,
 		// which the oracle's builder does not emit. TestTheSDTDivergesByExactlyTheSpecifier below

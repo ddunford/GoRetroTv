@@ -68,6 +68,9 @@ type Source struct {
 	// PID 0x0012 the moment it tunes, with a match unit carrying table 0x4E and the tuned
 	// service's id. Nothing else in this port answers that filter.
 	Events func(now uint64) ([]Emission, error)
+	// Programmes supplies the fixed PSI chain used while viewing: PAT, CAT and PMT. It is
+	// optional because cold acquisition does not arm those PIDs on this firmware.
+	Programmes func(now uint64) ([]Emission, error)
 	// Index supplies the table 0xC1 index sections -- the A-Z LISTINGS screens.
 	//
 	// It is OPTIONAL, and a carousel without one is a carousel whose A-Z screens say
@@ -89,6 +92,9 @@ type Schedule struct {
 	// EventPeriod is the gap between present/following EIT waves. It is ignored when
 	// Source.Events is nil.
 	EventPeriod uint64
+	// ProgrammePeriod is the gap between fixed-PSI waves. It is ignored when
+	// Source.Programmes is nil.
+	ProgrammePeriod uint64
 	// IndexPeriod is the gap between index waves. It is ignored when Source.Index is nil.
 	IndexPeriod uint64
 	// ClockSettle is how long after the FIRST clock wave the line-up is held
@@ -120,12 +126,13 @@ type Carousel struct {
 	schedule Schedule
 	source   Source
 
-	started    bool
-	nextClock  uint64
-	nextLineup uint64
-	nextTitles uint64
-	nextEvents uint64
-	nextIndex  uint64
+	started        bool
+	nextClock      uint64
+	nextLineup     uint64
+	nextTitles     uint64
+	nextEvents     uint64
+	nextProgrammes uint64
+	nextIndex      uint64
 
 	clockedAt  uint64 // instruction of the first clock wave
 	lineupAt   uint64 // instruction of the first line-up wave
@@ -166,6 +173,9 @@ func NewCarousel(schedule Schedule, source Source) (*Carousel, error) {
 	}
 	if source.Events != nil && schedule.EventPeriod == 0 {
 		return nil, fmt.Errorf("broadcast: carousel EventPeriod is zero with an event source set; a wave due every zero instructions never stops firing")
+	}
+	if source.Programmes != nil && schedule.ProgrammePeriod == 0 {
+		return nil, fmt.Errorf("broadcast: carousel ProgrammePeriod is zero with a programme source set; a wave due every zero instructions never stops firing")
 	}
 	if source.Index != nil && schedule.IndexPeriod == 0 {
 		return nil, fmt.Errorf("broadcast: carousel IndexPeriod is zero with an index source set; a wave due every zero instructions never stops firing")
@@ -244,6 +254,16 @@ func (c *Carousel) Wave(now uint64) ([]Emission, error) {
 		c.nextEvents = now + c.schedule.EventPeriod
 	}
 
+	if c.source.Programmes != nil && c.sentLineup &&
+		now >= c.lineupAt+c.schedule.LineupSettle && now >= c.nextProgrammes {
+		sections, err := c.source.Programmes(now)
+		if err != nil {
+			return nil, fmt.Errorf("broadcast: carousel programme wave at %d: %w", now, err)
+		}
+		wave = append(wave, sections...)
+		c.nextProgrammes = now + c.schedule.ProgrammePeriod
+	}
+
 	// THE INDEX REPEATS FOR EVER AND THAT IS THE POINT, not a cost to be trimmed. The 0xC1 parser
 	// hands its decoded array to whatever already sits in the list-head slot for that extension, so
 	// a section that arrives before its screen exists is decoded and dropped. A viewer opens A-Z
@@ -299,6 +319,15 @@ func (c *Carousel) NextDue() uint64 {
 		}
 		if index < due {
 			due = index
+		}
+	}
+	if c.source.Programmes != nil && c.sentLineup {
+		programmes := c.nextProgrammes
+		if hold := c.lineupAt + c.schedule.LineupSettle; hold > programmes {
+			programmes = hold
+		}
+		if programmes < due {
+			due = programmes
 		}
 	}
 	return due

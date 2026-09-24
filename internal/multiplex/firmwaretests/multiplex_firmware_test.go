@@ -26,8 +26,9 @@ const pcPerEventRegister = 0x800c587c
 // depends on them; the two SETTLES are the part that matters.
 func demoSchedule() broadcast.Schedule {
 	return broadcast.Schedule{
-		ClockPeriod:  20_000_000,
-		LineupPeriod: 60_000_000,
+		ClockPeriod:     20_000_000,
+		LineupPeriod:    60_000_000,
+		ProgrammePeriod: 2_000_000,
 		// Title waves are one section each so the guest can drain them. Match production's cadence;
 		// keeping the old whole-wave period here starves a serial carousel after two sections.
 		TitlePeriod:  2_000_000,

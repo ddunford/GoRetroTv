@@ -27,6 +27,16 @@ type Subscription struct {
 	// BouquetID and NetworkID are the ids the BAT and NIT must carry.
 	BouquetID uint16
 	NetworkID uint16
+	// PATArmed and CATArmed report the fixed programme-information PIDs the
+	// firmware opens after a successful front-end tune. They are deliberately
+	// separate from SIArmed: on this box acquisition can complete with only the
+	// network/service tables, while PID 0 and PID 1 appear later when a viewer
+	// selects a service.
+	PATArmed bool
+	CATArmed bool
+	// PMTArmed becomes true only after the firmware parses the PAT and opens
+	// the programme-map PID announced by this transmitter.
+	PMTArmed bool
 	// SIArmed is whether PID 0x11 is armed, i.e. whether a BAT pushed there
 	// would reach the guest at all.
 	SIArmed bool
@@ -196,7 +206,9 @@ const matchUnits = 16
 
 // Standard PIDs, excluded when working out which PID the box armed for its
 // listings: the three SI tables and the one it boots with.
-var standardPIDs = map[uint16]bool{0x10: true, 0x11: true, 0x12: true, 0x14: true, 0x52: true}
+var standardPIDs = map[uint16]bool{
+	0x00: true, 0x01: true, 0x10: true, 0x11: true, 0x12: true, 0x14: true, 0x52: true,
+}
 
 // isTitleUnit reports whether a match unit is a listings filter.
 //
@@ -250,6 +262,15 @@ func Read(d *demux.Demux) (Subscription, error) {
 	sub.NetworkID = uint16(networkHigh.Value)<<8 | uint16(networkLow.Value)
 
 	for _, pid := range d.ArmedPIDs() {
+		if pid == 0x00 {
+			sub.PATArmed = true
+		}
+		if pid == 0x01 {
+			sub.CATArmed = true
+		}
+		if pid == programmeMapPID {
+			sub.PMTArmed = true
+		}
 		if pid == 0x10 {
 			sub.NITArmed = true
 		}

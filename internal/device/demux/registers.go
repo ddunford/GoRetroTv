@@ -239,6 +239,16 @@ func (d *Demux) Match(unit, byteIndex uint8) (MatchByte, bool) {
 	return MatchByte{Value: uint8((word >> 8) & 0xff), Mask: uint8(word & 0xff)}, true // #nosec G115 -- masked to bytes.
 }
 
+// Routes reports whether a programmed match unit is bound to a section filter.
+// It exposes the same guest-written relation acceptTransportSection uses, so an
+// instrument can distinguish "PID armed" from "this table can reach it".
+func (d *Demux) Routes(unit, filter uint8) bool {
+	if unit >= 16 || filter >= FilterCount {
+		return false
+	}
+	return d.matchWords[unit][9]&(uint32(1)<<filter) != 0
+}
+
 // MatchWord returns the complete value written for one match-unit index. Most indices pack the
 // byte value and mask into one halfword; routing index 9 uses the full word, so reducing it to a
 // MatchByte would discard the channel binding that diagnostic instruments need to observe.

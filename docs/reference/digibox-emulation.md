@@ -281,7 +281,7 @@ bits, and the handler column reuses a handful of addresses.
 
 <!-- anchor: internal/dvb/crc.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:ff7fb69d3921adf3665d4d4c1f14d07f9f20cd2f77b7e5e164e344c49dd2b6b2 @ 2026-09-24 -->
+<!-- fingerprint: sha256:c7de6ef67f14a63a59296ff7cad85d179d30541f720a8b1409d8a685ba3d57ca @ 2026-09-24 -->
 
 **Demux register block `0xB000A000`, size `0x160`**, declared in a 30-block SoC peripheral map at
 flash **`0x20FD8`** — which is the register map the NEC manual could never provide.
@@ -1034,7 +1034,7 @@ task is now free rather than mirroring.
 ## What the SI we broadcast does, and what it does not
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
+<!-- fingerprint: sha256:e9735cc261351410d83717557d912b7a14a07f8f4b8eb12588e2af08fe6eee43 @ 2026-09-24 -->
 
 **It is received and parsed — proved by a name that could not have come from anywhere else.**
 Broadcasting an SDT whose services are called `ZQXBBC One` and `ZQXBBC Two` puts those exact
@@ -1709,7 +1709,7 @@ of the address space and reported on all of it. Neither zero looked thin.
 
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:3177035d6605b49e4924abf126c820f394421b45803df2e3fe3d3387ad5761f6 @ 2026-09-24 -->
+<!-- fingerprint: sha256:257784c879512aa2ba2b19fd933a5a37a2e88f247b3da0fd7f33884344a1ff23 @ 2026-09-24 -->
 
 **"The box parses our tables" was too generous, and this is the measurement that corrects it.**
 The delivery path is sound: the demux accepts the section, the LISR fires, the section task
@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:fd22f4ebe7e82c3cf20b115fae78fe3faabb8eceeca13aa1aa7591f1e3743a06 @ 2026-09-24 -->
+<!-- fingerprint: sha256:e644e47439edf46852b0f593fade298d16e6cb5944cd19bbde545f0bc76c405a @ 2026-09-24 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2093,7 +2093,7 @@ to a subtable.**
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/device/demux/section.go -->
-<!-- fingerprint: sha256:bef493158ad779c95a7325bd3fc33259874e2a4268dccdf39a1e5e6cc71f4f0c @ 2026-09-24 -->
+<!-- fingerprint: sha256:f0c0f1f7c53b03980d8d42c384e29462080438aa2ed028537e6914a2ce9de380 @ 2026-09-24 -->
 
 **Attaching a client means PROGRAMMING A SECTION FILTER.** `0x800B0C70(entry, 1)` switches on
 the subtable's type, and for type 4 it builds `{0xFE40, id}` — a mask/value pair matching
@@ -2142,7 +2142,7 @@ and the service list is unexplained any more.
 ## The ids in our SI are not ours to choose
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
+<!-- fingerprint: sha256:e9735cc261351410d83717557d912b7a14a07f8f4b8eb12588e2af08fe6eee43 @ 2026-09-24 -->
 
 **A section is kept only if `find_subtable(id_from_its_header, type)` matches a REGISTERED
 subtable**, and the id it matches on is the halfword at `+30` of a subtable entry. So the
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:fd22f4ebe7e82c3cf20b115fae78fe3faabb8eceeca13aa1aa7591f1e3743a06 @ 2026-09-24 -->
+<!-- fingerprint: sha256:e644e47439edf46852b0f593fade298d16e6cb5944cd19bbde545f0bc76c405a @ 2026-09-24 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -2404,7 +2404,7 @@ service-list module runs and grows. The screen is still 8 blits of blue.
 ## The service list rejects nothing — and the application is now working
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
+<!-- fingerprint: sha256:e9735cc261351410d83717557d912b7a14a07f8f4b8eb12588e2af08fe6eee43 @ 2026-09-24 -->
 
 **The premise of this question was wrong, and finding that out relocated the search.** The SVL
 module's entire activity is a single `jalr $v1` at `0x800A6414` inside a dispatcher — when
@@ -4703,7 +4703,7 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:0b8b0fb5aee5bb440894549a33a5cce1372ac25af8715e041128f404ab624c8c @ 2026-09-24 -->
+<!-- fingerprint: sha256:2b4f9f3881201f81c196020436bae137ea51a943a1693f11bf65a6acdfa3c7cc @ 2026-09-24 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -4787,7 +4787,7 @@ fall out of that, and neither needs to be guessed.
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:f1ceb6afda19ce39e66006876469732b7d0bc33d7d705a9bb66696fe16634cdb @ 2026-09-24 -->
+<!-- fingerprint: sha256:65c1ca4990c70ebdd1aa8b5784a7becdceb7892c94f9a49a4862d7e6c02838da @ 2026-09-24 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
@@ -6896,7 +6896,7 @@ it waiting for state that was already there, is what made this screen expensive 
 ## The clock table is the TOT, and the listings PID is a day-of-eight rotation
 
 <!-- anchor: internal/broadcast/carousel.go -->
-<!-- fingerprint: sha256:fef9eb50fb117ef329736a86b8558984179d58d75b1c7b59f4af9f84a1c35954 @ 2026-09-23 -->
+<!-- fingerprint: sha256:69d75f894d272dd2df3717bd5c464e012b3380bfecb172f5ca717cc32cc1ddf5 @ 2026-09-24 -->
 
 *Measured on the Go port, 20 Sep 2026, against the post-acquisition snapshot fixture (a warm box,
 1.1 billion instructions retired). Three findings, two of which correct entries above, and one
@@ -8867,7 +8867,7 @@ experiment that changes the broadcast needs an acceptance that does not assume t
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:9580a272e61659562bc8ddee5eda7eac06f4351b457043ac694b688d24768087 @ 2026-09-24 -->
+<!-- fingerprint: sha256:1d07323e334fc4266c326e3223cf9df70db33a7d03973ebbe60427f771c3c797 @ 2026-09-24 -->
 
 *2026-09-22. Six rows, in channel order, with names.*
 
@@ -9435,7 +9435,7 @@ not any two rows touch, and that is what it measures now.
 ## Every BAT section must declare the private namespace it uses
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
+<!-- fingerprint: sha256:e9735cc261351410d83717557d912b7a14a07f8f4b8eb12588e2af08fe6eee43 @ 2026-09-24 -->
 
 **Measured 2026-09-23 on real firmware.** A 140-channel line-up stopped at exactly 84 channels:
 three 28-entry `0xB1` descriptors, which is precisely what fitted in BAT section 0. The SDT carried
@@ -9709,7 +9709,7 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/device/demux/transport.go -->
 <!-- anchor: internal/multiplex/firmwaretests/bootpsi_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
-<!-- fingerprint: sha256:930030decae1c58a4bf57dde7cb0fbc47543f0c5cdbc67c25c5e3b619ee16357 @ 2026-09-24 -->
+<!-- fingerprint: sha256:4da7541d97c533b258e29bf5bf4efe07d51ae3fc73232adea197bae9f5cc3d9e @ 2026-09-24 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10029,3 +10029,35 @@ does not claim that generated colour bars and a Web Audio tone are decoded guest
 declared presentation substitute while the component input and `0x210` data path remain under
 measurement. The important boundary is nevertheless authentic—the host does not infer selection
 from a key or framebuffer hash; the firmware's own MPEG callback starts the presentation.
+
+The missing component population routine is now located. `0x800A127C` clears and rebuilds all six
+32-entry component banks, their six component-number arrays and the PID table behind MPEG manager
+`0x80163198 + 0x128`. It enumerates at most 32 source objects, passes each through `0x800A0AD0`,
+which classifies component kinds 1, 2, 5 and 6 and walks their descriptor lists, then atomically
+publishes the rebuilt banks to the manager. This is the authentic predecessor of the component
+callbacks; supplying a PID or PMT after this point would bypass it.
+
+The apparent missing kind-1 notification was a malformed satellite delivery descriptor, not a
+missing state-machine producer. The NIT encoded 27.5 Msymbol/s one BCD nibble too far right, so
+`0x8002FB68` decoded 2.75 Msymbol/s, rejected it outside its measured 20--30 Msymbol/s range and
+reported front-end result `0x185`. Encoding the seven symbol-rate digits above the FEC nibble puts
+`0x00275000` in the firmware tuner record. The same callback then reports success `1`,
+`0x800A1A48` accepts it, and `0x8009E764(network=0x20, service=0x64)` runs.
+
+That successful tune makes the guest itself open PID 0 for PAT, PID 1 for CAT and, after parsing a
+PAT which maps service `0x64`, PID `0x0100` for PMT table `0x02`. The PMT channel is deliberately
+PID-only: all sixteen match units were dumped after tuning and none matches table `0x02`. The demux
+had been treating an overlapping bit in BAT unit 3's byte-nine word as a route from filter 15, then
+dropped every PMT because `0x02` did not match BAT `0x4A`. With PID-only delivery modelled, the real
+firmware dispatches the PMT, executes `0x8009E47C` and rebuilds the component banks at `0x800A127C`.
+No guest memory, PID table or component record is injected.
+
+A PMT carrying H.222.0 stream types `0x02` (MPEG-2 video, PID `0x0101`) and `0x03` (MPEG audio,
+PID `0x0102`) makes the previously cold callbacks live. `0x8009F4EC` is called four times and
+`0x8009F878` twice; its observed operands include manager `0x80163198`, `a2=0x2001` and
+`a3=0x0100`. The public audio API reaches `0x800889BC`, the stop wrapper, twice: from
+`0x80039664` with `(object=0x801C6490, service=0x64)` and from `0x800394A0` with the stream object.
+Start wrapper `0x80088970`, the `0x210` object path and the lower audio driver remain cold. This
+withdraws the earlier claim that the public audio API is wholly cold: PMT component publication
+reaches its stop decision. The next measured boundary is elementary-stream delivery and the
+condition which changes that decision from stop to start.

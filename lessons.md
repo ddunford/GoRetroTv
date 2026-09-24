@@ -214,3 +214,7 @@ Three other things wear the same hat and are real:
 ### Continue means pursue the visible outcome
 
 When the owner says to keep going toward test video and audio on a channel, an investigation boundary is not a handoff boundary. Keep the bead active and continue through the measured implementation and browser proof; do not offer to stop merely because the next missing predecessor has been identified.
+
+### Bars behind the OSD do not prove satellite playback
+
+A browser-generated test card and tone triggered at the MPEG selection callback are not a working channel while the guest still renders *No satellite signal is being received* and the TV Guide search overlay. Acceptance for media must prove the firmware enters its real playback state and dismisses those overlays; a host presentation layered behind them is only an instrument, never the product outcome.

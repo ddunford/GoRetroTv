@@ -202,8 +202,9 @@ type broadcastConfig struct {
 // its whole life: eight million instructions is about a section pair per service every quarter of
 // a second of guest time, which is the order a real multiplex repeats present/following at.
 var airSchedule = bcast.Schedule{
-	ClockPeriod:  20_000_000,
-	LineupPeriod: 60_000_000,
+	ClockPeriod:     20_000_000,
+	LineupPeriod:    60_000_000,
+	ProgrammePeriod: 2_000_000,
 	// Title waves carry one section so the guest can drain each delivery before the next. At two
 	// million instructions the complete launch line-up turns over promptly without bursting.
 	TitlePeriod:  2_000_000,

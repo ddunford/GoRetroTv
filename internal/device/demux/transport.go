@@ -144,7 +144,12 @@ func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
 		return d.acceptROMTransportSection(channel, section)
 	}
 	routed := false
+	tableHasRule := false
 	for unit := uint8(0); unit < 16; unit++ {
+		table, ok := d.Match(unit, 0)
+		if ok && table.Mask != 0 && section[0]&table.Mask == table.Value&table.Mask {
+			tableHasRule = true
+		}
 		if d.matchWords[unit][9]&(uint32(1)<<channel) == 0 {
 			continue
 		}
@@ -154,7 +159,17 @@ func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
 		}
 	}
 	if routed {
-		return nil
+		// Some application channels are deliberately PID-only. The fixed PMT channel is the
+		// measured example: the guest opens PID 0x0100 but programs no table-0x02 match unit.
+		// Bits in unrelated units' byte-nine words overlap the channel bitmap and used to make
+		// that look routed through the BAT unit, dropping every PMT against table 0x4A. When no
+		// unit in the machine describes this table at all, there is no table rule to apply and
+		// the enabled PID channel admits it. A table for which the guest did program a rule is
+		// still dropped when none of its routed rules match.
+		if tableHasRule {
+			return nil
+		}
+		return d.pushFilter(channel, section)
 	}
 	return d.pushFilter(channel, section)
 }

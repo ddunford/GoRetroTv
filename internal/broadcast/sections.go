@@ -707,8 +707,12 @@ func satelliteDescriptor(tr Transport) ([]byte, error) {
 	if tr.Polarisation > 3 || tr.FEC > 15 {
 		return nil, fmt.Errorf("broadcast: satellite flags out of range")
 	}
-	// Seven BCD digits of 100-symbol/s rate, followed by the FEC nibble.
-	sym, err := bcdDigits(tr.SymbolRate*10, 8)
+	// Seven BCD digits of 100-symbol/s rate, followed by the FEC nibble. SymbolRate is
+	// ksymbols/s, so multiplying by ten produces the seven-digit value; multiplying by one
+	// further ten places that value in the upper seven nibbles and reserves the low nibble
+	// for FEC. Encoding only SymbolRate*10 as eight BCD digits shifted the rate right by one
+	// decimal place, and the real firmware rejected 27.5 Msymbol/s as 2.75 Msymbol/s.
+	sym, err := bcdDigits(tr.SymbolRate*100, 8)
 	if err != nil {
 		return nil, fmt.Errorf("broadcast: symbol rate: %w", err)
 	}
@@ -838,6 +842,71 @@ func CAT(version byte, descriptors []byte) ([]byte, error) {
 		at = next
 	}
 	return longSection(0x01, 1, version, descriptors)
+}
+
+// ElementaryStream is one component announced by a programme map table.
+type ElementaryStream struct {
+	// Type is the H.222.0 stream_type.
+	Type byte
+	// PID is the elementary_PID carrying this component.
+	PID uint16
+	// Descriptors is the complete ES_info descriptor loop in DVB TLV form.
+	Descriptors []byte
+}
+
+// PMT builds an H.222.0 transport_stream_program_map_section (table 0x02).
+// The programme number is the table-id extension, and each component names the
+// elementary PID the receiver must open if it accepts that stream type.
+func PMT(programmeNumber uint16, version byte, pcrPID uint16, descriptors []byte,
+	streams []ElementaryStream) ([]byte, error) {
+	if programmeNumber == 0 {
+		return nil, fmt.Errorf("broadcast: PMT programme number 0 is reserved")
+	}
+	if pcrPID > 0x1fff {
+		return nil, fmt.Errorf("broadcast: PCR PID %#x exceeds thirteen bits", pcrPID)
+	}
+	if len(streams) == 0 {
+		return nil, fmt.Errorf("broadcast: a PMT with no elementary streams announces no media")
+	}
+	if err := descriptorLoop(descriptors); err != nil {
+		return nil, fmt.Errorf("broadcast: malformed PMT programme descriptor loop")
+	}
+	payload := appendU16(nil, 0xe000|pcrPID)
+	if len(descriptors) > 0x0fff {
+		return nil, fmt.Errorf("broadcast: PMT programme descriptor loop is too long")
+	}
+	payload = appendU16(payload, 0xf000|uint16(len(descriptors))) // #nosec G115 -- bounded above
+	payload = append(payload, descriptors...)
+	for _, stream := range streams {
+		if stream.PID > 0x1fff {
+			return nil, fmt.Errorf("broadcast: elementary PID %#x exceeds thirteen bits", stream.PID)
+		}
+		if len(stream.Descriptors) > 0x0fff {
+			return nil, fmt.Errorf("broadcast: elementary descriptor loop is too long")
+		}
+		if err := descriptorLoop(stream.Descriptors); err != nil {
+			return nil, fmt.Errorf("broadcast: malformed elementary descriptor loop")
+		}
+		payload = append(payload, stream.Type)
+		payload = appendU16(payload, 0xe000|stream.PID)
+		payload = appendU16(payload, 0xf000|uint16(len(stream.Descriptors))) // #nosec G115 -- bounded above
+		payload = append(payload, stream.Descriptors...)
+	}
+	return longSection(0x02, programmeNumber, version, payload)
+}
+
+func descriptorLoop(descriptors []byte) error {
+	for at := 0; at < len(descriptors); {
+		if len(descriptors)-at < 2 {
+			return fmt.Errorf("short descriptor header")
+		}
+		next := at + 2 + int(descriptors[at+1])
+		if next > len(descriptors) {
+			return fmt.Errorf("descriptor extends past loop")
+		}
+		at = next
+	}
+	return nil
 }
 
 // IndexRecord is one nine-byte entry of a table 0xC1 A-Z index section.

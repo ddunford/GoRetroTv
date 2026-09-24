@@ -23,8 +23,10 @@ import (
 // tested and both looking authoritative, is worse than either alone: the next person reaches for
 // whichever they find first.
 const (
-	snapWriter  = "machine"
-	snapVersion = 1
+	snapWriter           = "machine"
+	snapVersion          = 2
+	legacyAudioControl   = "audio-control"
+	legacyBeforeAudioVer = 1
 )
 
 // Snapshot encodes the state of every attached device.
@@ -66,7 +68,7 @@ func (b *Bus) Restore(state []byte) error {
 		return fmt.Errorf("bus: restore: %w", b.unknownState)
 	}
 
-	set, err := snapcodec.OpenSet(state, snapWriter, snapVersion, snapVersion)
+	set, err := snapcodec.OpenSet(state, snapWriter, legacyBeforeAudioVer, snapVersion)
 	if err != nil {
 		return fmt.Errorf("bus: restore: %w", err)
 	}
@@ -77,7 +79,16 @@ func (b *Bus) Restore(state []byte) error {
 	for _, r := range b.regions {
 		attached = append(attached, r.dev.Name())
 	}
-	if err := set.Require(attached); err != nil {
+	required := attached
+	if set.Version() == legacyBeforeAudioVer {
+		required = make([]string, 0, len(attached))
+		for _, name := range attached {
+			if name != legacyAudioControl {
+				required = append(required, name)
+			}
+		}
+	}
+	if err := set.Require(required); err != nil {
 		// snapcodec says which members are missing and which are unexpected, and why that
 		// matters; what it cannot know is that the members here are DEVICES.
 		return fmt.Errorf("bus: restore: the snapshot does not describe the devices on this "+
@@ -87,6 +98,18 @@ func (b *Bus) Restore(state []byte) error {
 	blobs := make(map[string][]byte, len(attached))
 	for _, name := range attached {
 		blob, ok := set.Member(name)
+		if !ok && set.Version() == legacyBeforeAudioVer && name == legacyAudioControl {
+			for _, region := range b.regions {
+				if region.dev.Name() == name {
+					blob, err = region.dev.Snapshot()
+					ok = err == nil
+					break
+				}
+			}
+			if err != nil {
+				return fmt.Errorf("bus: restore: initialise %q for legacy snapshot: %w", name, err)
+			}
+		}
 		if !ok {
 			// Require has just established that this cannot happen. Saying so, rather than
 			// restoring a device from nothing, is the difference between a refusal and the

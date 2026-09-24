@@ -73,7 +73,38 @@ func TestALargeLineupSpansSeveralCorrectlyNumberedSections(t *testing.T) {
 		}
 	}
 	assertEachExactlyOnce(t, "BAT line-up", inLineup, services)
+	for sectionNumber, section := range bat {
+		assertPrivateLineupHasNamespace(t, sectionNumber, section)
+	}
 	t.Logf("%d channels: SDT %d sections, BAT %d sections", channels, len(sdt), len(bat))
+}
+
+// A private_data_specifier applies only within the descriptor loop containing it. A BAT section
+// may be byte-perfect and reach the guest while every 0xB1 in it is ignored because namespace 2
+// appeared in an earlier section. Check each transport loop independently, as the receiver does.
+func assertPrivateLineupHasNamespace(t *testing.T, sectionNumber int, section []byte) {
+	t.Helper()
+	body := section[8 : len(section)-4]
+	bouquetLen := int(body[0]&0x0f)<<8 | int(body[1])
+	at := 2 + bouquetLen
+	tsLen := int(body[at]&0x0f)<<8 | int(body[at+1])
+	at += 2
+	end := at + tsLen
+	for at < end {
+		loopLen := int(body[at+4]&0x0f)<<8 | int(body[at+5])
+		loop, namespaced := body[at+6:at+6+loopLen], false
+		for i := 0; i < len(loop); {
+			tag, n := loop[i], int(loop[i+1])
+			if tag == 0x5f && n == 4 && loop[i+5] == 2 {
+				namespaced = true
+			}
+			if tag == 0xb1 && !namespaced {
+				t.Fatalf("BAT section %d carries a 0xB1 line-up before declaring private namespace 2", sectionNumber)
+			}
+			i += 2 + n
+		}
+		at += 6 + loopLen
+	}
 }
 
 // checkNumbering requires a table's sections to be a complete, correctly numbered, valid set.

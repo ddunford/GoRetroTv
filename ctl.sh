@@ -195,7 +195,15 @@ cmd_replay_gate() { ./tools/input-replay-gate.sh "$@"; }
 
 cmd_snapshot() { ./tools/snapshot-library.sh "$@"; }
 
-cmd_test() { make test-race; }
+cmd_test() {
+    if (( $# )); then
+        go test -race "$@"
+    else
+        make test-race
+    fi
+}
+
+cmd_test_one() { go test "$@"; }
 
 # THE PER-TURN GATE. `cmd_test` is a ~25 minute race-detector run because the firmware tests
 # restore real boxes and retire millions of guest instructions each; that is a pre-push and CI
@@ -209,7 +217,13 @@ cmd_test() { make test-race; }
 #
 # It is NOT a substitute for `test`. A change to anything the firmware touches is unproven until
 # the full suite has run.
-cmd_test_fast() { go test -short -race ./...; }
+cmd_test_fast() {
+    if (( $# )); then
+        go test -short -race "$@"
+    else
+        go test -short -race ./...
+    fi
+}
 
 cmd_conformance() { python3 conformance/run.py "$@"; }
 
@@ -422,8 +436,9 @@ Running
 Building and checking
   build          Build every binary into bin/
   image          Build the firmware-free runtime container image
-  test           Run the tests under the race detector (~25 min: restores real boxes)
-  test:fast      The same suite with -short, so the firmware boxes skip (~45s) -- the per-turn gate
+  test [go test args]  Run tests under the race detector (~25 min); optional args select focused tests
+  test:one <go test args>  Run a focused plain test, including real-firmware probes
+  test:fast [go test args]  The same suite with -short (~45s); optional args select focused tests
   conformance    Run architecture rules and their probes
   stop-gate      Neutralise each conformance detector and check probe independence
   ablate         Remove each rule subject in turn and check its coverage guard
@@ -473,6 +488,7 @@ main() {
         replay-gate) cmd_replay_gate "$@" ;;
         snapshot) cmd_snapshot "$@" ;;
         test)    cmd_test "$@" ;;
+        test:one) cmd_test_one "$@" ;;
         test:fast) cmd_test_fast "$@" ;;
         conformance) cmd_conformance "$@" ;;
         stop-gate) cmd_conformance_stop_gate "$@" ;;

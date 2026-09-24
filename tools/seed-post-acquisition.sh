@@ -10,7 +10,14 @@ target="$snapshot_dir/post-acquisition.snapshot"
 mkdir -p "$snapshot_dir"
 chmod 0700 "$snapshot_dir"
 work="$(mktemp -d "$snapshot_dir/.seed.XXXXXX")"
-trap 'rm -rf "$work"' EXIT
+cleanup() {
+    if [[ "${GORETROTV_KEEP_SEED_WORK:-0}" == 1 ]]; then
+        printf 'kept seed evidence in %s\n' "$work" >&2
+    else
+        rm -rf "$work"
+    fi
+}
+trap cleanup EXIT
 
 ./ctl.sh build
 "$binary_dir/firmwaretrace" -steps 470000000 -interval 470000000 \
@@ -19,7 +26,7 @@ grep -Fqx 'tasks found: 42' "$work/cold.log" || {
     printf 'cold firmware did not reach 42 guest tasks\n' >&2; exit 1;
 }
 nvram_digest="$(sha256sum "$work/cold.nvram")"
-[[ "${nvram_digest%% *}" == e63dc6f8c46c486a1db56a77280b6cc4b4c139316e243b682868de98225aa1b0 ]] || {
+[[ "${nvram_digest%% *}" == 41f13bfe6882f1ad4b82de1e0ff5db134b79a676482f1e0c008b063bac40473b ]] || {
     printf 'cold EEPROM differs from the measured acquisition seed\n' >&2; exit 1;
 }
 cp -f "$work/cold.nvram" "$work/warm.nvram"
@@ -48,7 +55,7 @@ for expected in \
     'section-match unit=2 table=42/FB extension=0000/FFFF' \
     'section-match unit=3 table=4A/FF extension=1000/FFFF' \
     'section-match unit=5 table=73/FF extension=0000/0000' \
-    'state-hash retired=1100000000 hash=04E99A24'; do
+    'state-hash retired=1100000000 hash=8B2A7E0B'; do
     grep -Fqx "$expected" "$work/acquired.log" || {
         printf 'acquired firmware missed expected state: %s\n' "$expected" >&2; exit 1;
     }
@@ -66,7 +73,7 @@ grep -Fqx 'pc-hit 8006EA04 total=2 before-key=0 after-key=2' "$work/key.log" || 
 grep -Fq 'surface hash=F3634409 distinct=37 ' "$work/key.log" || {
     printf 'Sky key did not draw the measured Box Office surface\n' >&2; exit 1;
 }
-grep -Fqx 'state-hash retired=1120000000 hash=F51114FC' "$work/key.log" || {
+grep -Fqx 'state-hash retired=1120000000 hash=847B9151' "$work/key.log" || {
     printf 'Sky key run-on state differs from the measured checkpoint\n' >&2; exit 1;
 }
 

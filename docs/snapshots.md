@@ -36,18 +36,18 @@ partially.
 
 The private `post-acquisition` image is a **warm**, pressable machine at instruction
 1,100,000,000. Its EEPROM came from a real 470M cold boot (SHA-256
-`e63dc6f8c46c486a1db56a77280b6cc4b4c139316e243b682868de98225aa1b0`).
+`41f13bfe6882f1ad4b82de1e0ff5db134b79a676482f1e0c008b063bac40473b`).
 The warm boot uses the measured Sky menu gate policy. The guest then receives three
 TDT/TOT clock pairs, a NIT for its requested network `0x0020`, a BAT for bouquet
 `0x1000`, and an SDT, and finishes its finite service-list rebuild. It has 42 tasks,
 PID `0x52` armed, and NIT/BAT/SDT/TOT match units. The same acquisition sequence
 agrees with the unchanged browser oracle; see `plan/test-plan-phase-3a.md`.
 
-`./ctl.sh snapshot inspect post-acquisition` reports state hash `04E99A24` and a
+`./ctl.sh snapshot inspect post-acquisition` reports state hash `8B2A7E0B` and a
 blue baseline surface hash `9825B318`. A raw Sky key (`0x7D`) after restore reaches
 the guest input routine twice and draws the Box Office menu by instruction
 1,120,000,000: surface hash `F3634409`, 37 distinct bytes, and state hash
-`F51114FC`. Reproduce the press with:
+`847B9151`. Reproduce the press with:
 
 ```bash
 ./ctl.sh snapshot run post-acquisition -steps 1120000000 \

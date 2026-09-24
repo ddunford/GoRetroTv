@@ -2,11 +2,11 @@ package firmwaretests_test
 
 import (
 	"fmt"
-	"github.com/ddunford/goretrotv/internal/board"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/multiplex"
 )
 

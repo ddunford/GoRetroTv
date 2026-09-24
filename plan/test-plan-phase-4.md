@@ -32,10 +32,10 @@
   service-list rebuild. The independently seeded image was byte-identical to the earlier named
   `post-acquisition` image (SHA-256 `4d12dab14717b558e3fc0827dbac5ba3fd0528f5491811920cb444b8cae12e0a`).
   Restoring the named image with the built binary took **0.74 seconds**, including firmware
-  loading and state-hash calculation; it restored at instruction 1.1B with hash `04E99A24`.
+  loading and state-hash calculation; it restored at instruction 1.1B with hash `8B2A7E0B`.
   Sky `0x7D` at that instruction reached guest PC `0x8006EA04` twice and drew the measured
   Box Office surface by 1.12B (raw hash `F3634409`, 37 distinct bytes, final state hash
-  `F51114FC`). The seed command refuses an existing name, and both library directory and image
+  `847B9151`). The seed command refuses an existing name, and both library directory and image
   are private (`0700`/`0600`). Evidence: `.artifacts/si-warm-ready-v2.log`,
   `.artifacts/post-acquisition-named-key.log`, and `docs/snapshots.md`.
 - [x] **TC-4.4: Replay is byte-identical** (covers: TASK-4.4, TASK-4.7) — two replays of one recording produce
@@ -44,7 +44,7 @@
   snapshot, then replays the trace twice. All three runs retire exactly
   1,120,000,000 guest instructions and produce the same 414,720-byte framebuffer
   (SHA-256 `1bffc82b335571138a8c80c8589a0da52a4dcb317b634183311e2c4a7a3f0b74`,
-  raw hash `F3634409`, 37 distinct bytes) and state hash `F51114FC`. A recording
+  raw hash `F3634409`, 37 distinct bytes) and state hash `847B9151`. A recording
   with an altered expected framebuffer digest fails replay; the decoder also
   rejects malformed input events and trailing JSON. Evidence:
   `.artifacts/sky-key-record.log` and `.artifacts/sky-key-replay-{a,b}.log`.

@@ -67,20 +67,6 @@ func (s indexSignature) overlap(run map[uint32]bool) int {
 	return n
 }
 
-// accepted reports whether a delivery reached the dispatcher, judged against the measured floor
-// rather than a threshold. Half the signature is far above any floor this instrument has produced
-// and far below what a real acceptance reaches, so the two verdicts cannot both be true.
-func (s indexSignature) accepted(run map[uint32]bool) bool {
-	return s.overlap(run) >= len(s.pcs)/2
-}
-
-// rejected is the other half of the same reading, and it is deliberately NOT !accepted: a delivery
-// that lands between the floor and half the signature is neither, and a probe that forced it into
-// one bucket would report a verdict the measurement does not support.
-func (s indexSignature) rejected(run map[uint32]bool) bool {
-	return s.overlap(run) <= s.floor*2
-}
-
 // The signature is a property of the fixture rather than of either sweep, and building it costs six
 // acquisitions. Both probes share one.
 var (

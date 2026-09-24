@@ -88,6 +88,8 @@ func TestWhoFillsTheGridsChannelTable(t *testing.T) {
 		}
 		width := uint32(1)
 		switch a.Size {
+		case bus.Byte:
+			// width already describes a byte access
 		case bus.Half:
 			width = 2
 		case bus.Word:

@@ -5,17 +5,19 @@ import {
   WIRE_VERSION,
   type FrameMessage,
   type KeyMessage,
+  type MediaMessage,
   type PaletteMessage,
   type ResetMessage,
   type StateMessage,
 } from './wire_generated.js';
 
-export type { FrameMessage, KeyMessage, PaletteMessage, ResetMessage, StateMessage } from './wire_generated.js';
+export type { FrameMessage, KeyMessage, MediaMessage, PaletteMessage, ResetMessage, StateMessage } from './wire_generated.js';
 export { FRAME_HEIGHT, FRAME_WIDTH, WIRE_VERSION } from './wire_generated.js';
 
 export type ServerMessage =
   | (Omit<PaletteMessage, 'rgb'> & { rgb: Uint8Array })
   | (Omit<FrameMessage, 'pixels'> & { pixels: Uint8Array })
+  | MediaMessage
   | StateMessage;
 
 function object(value: unknown): Record<string, unknown> {
@@ -45,6 +47,11 @@ export function decodeServerMessage(json: string): ServerMessage {
   const value = object(JSON.parse(json) as unknown);
   if (value.version !== WIRE_VERSION) throw new Error('unsupported wire version');
   switch (value.type) {
+    case 'media': {
+      const active = integer(value.active, 'media active', 1);
+      if (typeof value.service !== 'string') throw new Error('invalid media service');
+      return { type: 'media', version: WIRE_VERSION, active, service: value.service };
+    }
     case 'palette': {
       const epoch = integer(value.epoch, 'palette epoch');
       return { type: 'palette', version: WIRE_VERSION, epoch, rgb: bytes(value.rgb, 'palette rgb', 256 * 3) };

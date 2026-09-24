@@ -3,6 +3,7 @@ package firmwaretests_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +28,9 @@ func demoSchedule() broadcast.Schedule {
 	return broadcast.Schedule{
 		ClockPeriod:  20_000_000,
 		LineupPeriod: 60_000_000,
-		TitlePeriod:  60_000_000,
+		// Title waves are one section each so the guest can drain them. Match production's cadence;
+		// keeping the old whole-wave period here starves a serial carousel after two sections.
+		TitlePeriod:  2_000_000,
 		ClockSettle:  8_000_000,
 		LineupSettle: 4_000_000,
 	}
@@ -105,7 +108,10 @@ func restoredBox(t *testing.T) *board.Runtime {
 	if _, err := os.Stat(filepath.Join(dir, firmware.FileU202)); os.IsNotExist(err) {
 		t.Skip("private firmware is not installed")
 	}
-	snapshot := filepath.Join("..", "..", "..", "snapshots", "post-acquisition.snapshot")
+	snapshot := os.Getenv("GORETROTV_TEST_SNAPSHOT")
+	if snapshot == "" {
+		snapshot = filepath.Join("..", "..", "..", "snapshots", "post-acquisition.snapshot")
+	}
 	if _, err := os.Stat(snapshot); os.IsNotExist(err) {
 		t.Skip("private post-acquisition snapshot is not installed")
 	}
@@ -167,6 +173,57 @@ func programmesInTheBlock(t *testing.T, guide *multiplex.Guide, day time.Time) i
 
 func demoGuide(t *testing.T) *multiplex.Guide {
 	t.Helper()
+	guide, _ := demoGuideWithPath(t)
+	return guide
+}
+
+func demoGuideWithPath(t *testing.T) (*multiplex.Guide, string) {
+	t.Helper()
+	// The firmware probes below are measurements over six deliberately distinct channels. The
+	// shipped demo now carries the full launch lineup, so using production content here would turn
+	// every experimental sweep into a moving target and make its six-value controls meaningless.
+	// Derive the stable laboratory fixture from the six schedules whose programmes the project has
+	// actually reconstructed, then restore the synthetic numbers under which the screen pins and
+	// per-channel traces were measured.
+	listings, err := multiplex.LoadListings(filepath.Join("..", "..", "..", "listings", "1998-12-24.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listings.Services) < 6 {
+		t.Fatalf("production schedule has %d services, cannot derive the six-channel measurement fixture",
+			len(listings.Services))
+	}
+	fixture := *listings
+	fixture.Services = append([]multiplex.ListedService(nil), listings.Services[:6]...)
+	for i, identity := range []struct {
+		name       string
+		channel    uint16
+		listingsID uint16
+	}{
+		{"Sky One", 101, 101}, {"Sky News", 501, 501}, {"Sky Sports 1", 401, 401},
+		{"Sky Movies", 301, 301}, {"Sky Travel", 251, 251}, {"Sky Soap", 121, 121},
+	} {
+		fixture.Services[i].Name = identity.name
+		fixture.Services[i].Channel = identity.channel
+		fixture.Services[i].ListingsID = identity.listingsID
+	}
+	blob, err := json.Marshal(&fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "measurement.json")
+	if err := os.WriteFile(path, blob, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guide, err := multiplex.LoadGuide(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return guide, path
+}
+
+func productionGuide(t *testing.T) *multiplex.Guide {
+	t.Helper()
 	guide, err := multiplex.LoadGuide(filepath.Join("..", "..", "..", "listings"))
 	if err != nil {
 		t.Fatal(err)
@@ -210,7 +267,9 @@ func TestTheBoxTakesProgrammesOffTheModelledMultiplex(t *testing.T) {
 
 	programmes := programmesInTheBlock(t, guide, day)
 	registered := 0
-	const budget = 40_000_000
+	// The stop condition is the guest's programme count. The ceiling only catches a stalled
+	// carousel; allow several complete serial passes now that each section travels as TS packets.
+	const budget = 120_000_000
 	doneAt := runUntil(t, box, transmitter, budget, registeringProgrammes(box, programmes, &registered))
 
 	counts := transmitter.Counts()

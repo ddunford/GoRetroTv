@@ -79,7 +79,7 @@ func TestPrivatePostAcquisitionSnapshotRestoresAndRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want uint32 = 0x04E99A24
+	const want uint32 = 0x8B2A7E0B
 	if got := h.Hash(r.Machine.Core.State()); got != want {
 		t.Fatalf("restored state hash %08X, want %08X", got, want)
 	}
@@ -101,11 +101,25 @@ func TestPrivatePostAcquisitionSnapshotRestoresAndRuns(t *testing.T) {
 	if r.Machine.Retired != 1_100_100_000 {
 		t.Fatalf("retired %d", r.Machine.Retired)
 	}
-	const afterWant uint32 = 0x24B1489D // firmwaretrace from the same private snapshot
+	const afterWant uint32 = 0x8DD8BC2E // firmwaretrace from the same private snapshot
 	if got := h.Hash(r.Machine.Core.State()); got != afterWant {
 		t.Fatalf("run-on state hash %08X, want %08X", got, afterWant)
 	}
 	if err := h.Err(); err != nil {
+		t.Fatal(err)
+	}
+	// The run-on hash above and the Sky route below are separate measured anchors. Restore the
+	// route's declared precondition instead of injecting its key into the state altered by the
+	// run-on probe. CSI's idle-key tests independently prove that waiting cannot splice a reply
+	// into the first handset frame.
+	if _, err := f.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	r, err = board.New(images, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Restore(f); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.CSI.Key(0x7D, 0); err != nil {

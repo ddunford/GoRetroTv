@@ -16,7 +16,7 @@ import (
 // place to look:
 //
 //   - the demux transport path is gated in THIS MODEL on bit 0 of register 0x140, which the box
-//     never writes -- and the record describes +0x140/+0x144/+0x148 as section-filter MATCH AND
+//     preserves through read-modify-write -- and the record describes +0x140/+0x144/+0x148 as section-filter MATCH AND
 //     MASK programming, so that gate is probably ours rather than the hardware's;
 //   - the media DMA is real and used -- 644 writes across opening the guide and viewing -- but
 //     ONLY CHANNEL 12 is ever armed, and it is armed when the guide opens, which is the OSD.

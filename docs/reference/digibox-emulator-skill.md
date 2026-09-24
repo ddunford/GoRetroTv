@@ -288,12 +288,14 @@ answer more than once.
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/dvb/crc.go -->
-<!-- fingerprint: sha256:168509bbbf7b88ae8c6c981aea35c4dd9acb5d349f6f5ac58f2da76b5bf6cda5 @ 2026-09-22 -->
+<!-- fingerprint: sha256:6b349ede26bdd54e81cfad06884534dbdb691dbffe775b4c20a08950f8e75172 @ 2026-09-24 -->
 
-The box asks for exactly three PIDs and says so: `__dispState().pids` on a booted machine
+During initial SI acquisition the box asks for exactly three PIDs and says so: `__dispState().pids`
 gives **filter 22 → PID 0x0014 (TDT, the clock), 23 → 0x0011 (SDT, the line-up), 24 → 0x0010
 (NIT)**, with the enable at `+0xD8` reading `0xFFC00000` — filters 22..31, matching the ten
-that carry contexts in the filter records. **The channel index IS the filter index.**
+that carry contexts in the filter records. **The channel index IS the filter index.** Later guest
+states also arm viewing EIT and OpenTV carousel PIDs; measure the state whose behavior you are
+explaining rather than treating this acquisition snapshot as a permanent census.
 
 Delivery, read off the firmware rather than the DVB spec:
 
@@ -313,5 +315,8 @@ Next after TDT: SDT `0x42` and NIT `0x40` need a correct MPEG CRC-32 (poly `0x04
 all ones, no final inversion); `withCrc()` on the page does it. Then the OpenTV carousel
 (`0xA0`-`0xB1`, parsers `0x800C95D0`/`0x800C9CA0`, Huffman `0x800BECF0`).
 
-**There is no MPEG-2 video decoder here and none is planned.** The target is the menus and the
-guide, which the OSD and blitter already draw.
+**There is no MPEG-2 audio/video decoder here yet.** The current browser colour bars and tone are
+a declared presentation substitute triggered by the guest's own selected-service MPEG callback;
+they are not decoded broadcast media. Phase 8 adds real component signalling and decoding only
+after the firmware requests the programme's component streams. Until that path is measured, the
+OSD, menus and guide are the emulated output and any test card must be described as a prototype.

@@ -31,6 +31,13 @@ export interface StateMessage {
 
 export const STATE_PHASES = ["booting","flash-check","channel-list","ready","halted"] as const;
 
+export interface MediaMessage {
+  type: 'media';
+  version: typeof WIRE_VERSION;
+  active: number;
+  service: string;
+}
+
 export interface KeyMessage {
   type: 'key';
   version: typeof WIRE_VERSION;
@@ -43,5 +50,5 @@ export interface ResetMessage {
   version: typeof WIRE_VERSION;
 }
 
-export type ServerWireMessage = PaletteMessage | FrameMessage | StateMessage;
+export type ServerWireMessage = PaletteMessage | FrameMessage | StateMessage | MediaMessage;
 export type ClientWireMessage = KeyMessage | ResetMessage;

@@ -12,7 +12,7 @@
   observed state, not a timer. The predecessor's said Ready twenty seconds early because it keyed on
   a task count that plateaus before the work starts.
   **Result:** The server sends Ready only after restoring the exact post-acquisition snapshot
-  (`retired=1.1B`, completed handoff/Sky gates, state hash `04E99A24`). Cold runs remain Booting
+  (`retired=1.1B`, completed handoff/Sky gates, state hash `8B2A7E0B`). Cold runs remain Booting
   through handoff and TASK20's initial one-schedule plateau; active TASK20 bank validation reports
   Flash check; the channel-list label requires TASK20's event wait after running and all three
   firmware-programmed SI PIDs (`0x14`, `0x11`, `0x10`). Its text says the box is *waiting* for the

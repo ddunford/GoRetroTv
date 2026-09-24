@@ -191,8 +191,8 @@ func TestWhetherTheLineUpKindIntersectsTheGridsMask(t *testing.T) {
 		t.Logf("    %-14s channel %4d  record %08X  word %08X  & %08X = %08X%s",
 			name, channel, 0x80000000|base, wordAt, mask, hit, note)
 	}
-	switch {
-	case intersecting == 0:
+	switch intersecting {
+	case 0:
 		t.Logf("VERDICT: NOT ONE channel's record intersects the grid's mask, so the second "+
 			"condition fails for every one of them and no channel is ever reported -- even though "+
 			"the filter now accepts them all. The word is Kind in its top byte and three Flags "+
@@ -537,8 +537,8 @@ func TestWhatValueReachesTheMaskedWord(t *testing.T) {
 		}
 		t.Logf("    wrote %08X to %08X   (it now holds %08X)%s", p.value, p.at, now, note)
 	}
-	switch {
-	case nonZero == 0:
+	switch nonZero {
+	case 0:
 		t.Logf("VERDICT: all %d writes put ZERO into record+0x0C. The value comes straight from the "+
 			"first word of the struct the builder is handed, so nothing upstream ever supplies a "+
 			"bit for the grid's 0x10 mask to find. THE SOURCE OF THAT WORD IS THE NEXT THING TO "+

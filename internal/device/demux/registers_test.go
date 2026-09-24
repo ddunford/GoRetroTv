@@ -121,6 +121,17 @@ func TestPackedMatchWordIsStoredButNotReadBack(t *testing.T) {
 	}
 }
 
+func TestMatchControlSupportsGuestReadModifyWrite(t *testing.T) {
+	t.Parallel()
+	d := New()
+	d.Write(0x140, bus.Word, 1|(1<<18))
+	current := d.Read(0x140, bus.Word)
+	d.Write(0x140, bus.Word, current&^(1<<18))
+	if got := d.Read(0x140, bus.Word); got != 1 {
+		t.Fatalf("match control after clearing pair-mode bit = %#08x, want global bit preserved", got)
+	}
+}
+
 func TestLISRPointerHandshake(t *testing.T) {
 	t.Parallel()
 	d := New()

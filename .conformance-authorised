@@ -114,3 +114,7 @@ digest: 4f8078be22c23ca8384d1bbd5f9e3bd7365246fe420174ef27673ff9aefa937c
   when: 2026-09-23T09:48:33Z
    why: Add ARCH-PRESS-1. Broadcasting the 0xB2 guide-row descriptor on 2026-09-23 made every menu take longer to paint, and thirty-one firmware probes stopped reaching the TV GUIDE tab in one suite run -- not because the box stopped drawing, which was measured, but because forty-eight of them carried their own screen-settle loop with no paint tail and read the menu half-drawn. The rule that presses go through one helper existed in prose in two places already and was broken forty-eight times anyway, so it becomes a check: a screen read with a counter incremented and compared against the stability threshold in the same window may exist only in rununtil_test.go. Additive and structural; no existing rule weakened.
 
+digest: 5908864ecba1374f0f0f62629366c71fce22d59000602927d75c6b1f41f35cec
+  when: 2026-09-24T19:50:38Z
+   why: Allow scoped Go test arguments and a plain focused firmware-test command so measured probes can run through the project control script without bypassing it.
+

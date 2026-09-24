@@ -162,7 +162,6 @@ func azListingsRun(t *testing.T, deliver bool, artefact string) (opened, final u
 	if err := dumpScreen(t, box, "opened-"+artefact); err != nil {
 		t.Fatal(err)
 	}
-	opened = az
 
 	// LET THE CATEGORY MENU FINISH, THEN GO THROUGH IT. A-Z LISTINGS is not a list of programmes:
 	// it is a menu of the eight categories the string table names -- ALL PROGRAMMES, ENTERTAINMENT,
@@ -199,7 +198,6 @@ func azListingsRun(t *testing.T, deliver bool, artefact string) (opened, final u
 			"below is the menu and not the list", menuAZ)
 	}
 	az = inner
-	opened = inner
 	afterOpen := word(slotA)
 	t.Logf("slot A with A-Z LISTINGS open: %08X  (was %08X before)", afterOpen, beforeOpen)
 	switch {
@@ -225,7 +223,7 @@ func azListingsRun(t *testing.T, deliver bool, artefact string) (opened, final u
 	// The records carry our own channels' listings ids. rec[4..8] have never been swept off zero
 	// and are NOT guessed at here; if the screen wants something in them it will keep drawing
 	// nothing, and that is a cleaner answer than a plausible fabrication.
-	records := []broadcast.IndexRecord{}
+	records := make([]broadcast.IndexRecord, 0, len(guide.On(day).Services))
 	listings := guide.On(day)
 	for i := range listings.Services {
 		records = append(records, broadcast.IndexRecord{

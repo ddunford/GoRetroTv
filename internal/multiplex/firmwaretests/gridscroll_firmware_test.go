@@ -115,12 +115,12 @@ func TestWhetherTheGridDrawsTomorrowWhenScrolledTo(t *testing.T) {
 
 		// scroll presses the yellow key and lets the grid redraw, returning what it settled on.
 		scroll := func(label, shot string) uint32 {
-			drew := press(keyYellow, label, pressBudget)
+			press(keyYellow, label, pressBudget)
 			settle()
 			if err := dumpScreen(t, box, shot); err != nil {
 				t.Fatal(err)
 			}
-			drew = screenNow(t, box)
+			drew := screenNow(t, box)
 			t.Logf("    %-28s %08X   .artifacts/%s", label, drew, shot)
 			return drew
 		}

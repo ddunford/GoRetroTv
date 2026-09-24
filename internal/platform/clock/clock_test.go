@@ -50,6 +50,65 @@ func TestOneShotFiresAtItsDueInstruction(t *testing.T) {
 	}
 }
 
+func TestTickUsesTheCachedDeadlineAcrossQueueChanges(t *testing.T) {
+	t.Parallel()
+
+	c := clock.New()
+	var fired []uint64
+	if _, err := c.At(10, "kept", func(now uint64) error {
+		fired = append(fired, now)
+		_, err := c.After(1, "chained", func(now uint64) error {
+			fired = append(fired, now)
+			return nil
+		})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := c.At(5, "cancelled head", func(uint64) error {
+		t.Fatal("cancelled event fired")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Cancel(cancelled) {
+		t.Fatal("failed to cancel queue head")
+	}
+
+	for range 11 {
+		if err := c.Tick(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if want := []uint64{10, 11}; !reflect.DeepEqual(fired, want) {
+		t.Fatalf("Tick firings = %v, want %v", fired, want)
+	}
+}
+
+func TestTickAtCounterLimit(t *testing.T) {
+	t.Parallel()
+
+	c := clock.New()
+	c.RestoreTo(^uint64(0) - 1)
+	fired := false
+	if _, err := c.At(^uint64(0), "last instruction", func(uint64) error {
+		fired = true
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Tick(); err != nil || !fired || c.Now() != ^uint64(0) {
+		t.Fatalf("final Tick: now=%d fired=%v err=%v", c.Now(), fired, err)
+	}
+	if err := c.Tick(); !errors.Is(err, clock.ErrCounterOverflow) {
+		t.Fatalf("overflow Tick error = %v, want %v", err, clock.ErrCounterOverflow)
+	}
+	if c.Now() != ^uint64(0) {
+		t.Fatalf("overflow Tick changed counter to %d", c.Now())
+	}
+}
+
 // TestTheHandlerSeesItsOwnDueInstruction is what makes a log line from inside a device honest. If
 // the handler saw the end of the batch instead, every event in a 1,000-instruction advance would
 // report the same time and the trace would be unreadable.

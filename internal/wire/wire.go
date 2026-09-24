@@ -31,6 +31,13 @@ type StateMessage struct {
 	Reason  string `json:"reason"`
 }
 
+type MediaMessage struct {
+	Type    string `json:"type"`
+	Version int    `json:"version"`
+	Active  uint8  `json:"active"`
+	Service string `json:"service"`
+}
+
 type KeyMessage struct {
 	Type    string `json:"type"`
 	Version int    `json:"version"`

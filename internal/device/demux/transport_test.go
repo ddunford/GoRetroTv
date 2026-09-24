@@ -1,10 +1,9 @@
 package demux
 
 import (
-	"encoding/binary"
 	"testing"
 
-	"github.com/ddunford/goretrotv/internal/dvb"
+	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/memory"
 )
 
@@ -49,7 +48,7 @@ func TestTransportRetainsPacketAcrossDMATransfers(t *testing.T) {
 	}
 }
 
-func TestTransportRejectsUnrepresentableWritePointer(t *testing.T) {
+func TestTransportPacketUsesGuestPIDAndSectionFilters(t *testing.T) {
 	t.Parallel()
 	ram, err := memory.NewRAM("dram", memory.DRAMSize)
 	if err != nil {
@@ -59,13 +58,29 @@ func TestTransportRejectsUnrepresentableWritePointer(t *testing.T) {
 	if err := d.BindRAM(ram); err != nil {
 		t.Fatal(err)
 	}
-	section := make([]byte, 0, 7)
-	section = append(section, 0x00, 0xb0, 0x04)
-	var checksum [4]byte
-	binary.BigEndian.PutUint32(checksum[:], dvb.MPEGCRC32(section))
-	section = append(section, checksum[:]...)
-	d.indirect[0], d.indirect[3], d.writePointer[0] = 0x1ffffc, 0x200010, 0x1ffffc
-	if err := d.acceptTransportSection(0, section); err == nil {
-		t.Fatal("write pointer escaped its 21-bit range")
+	const channel = uint32(22)
+	d.Write(0x140, bus.Word, 1)
+	d.Write(0xD8, bus.Word, 1<<channel)
+	d.Write(0x14+4*channel, bus.Word, 0x14014)
+	d.Write(0x148, bus.Word, 0x70ff)
+	d.Write(0x144, bus.Word, 0xc005)
+	d.Write(0x148, bus.Word, 1<<channel)
+	d.Write(0x144, bus.Word, 0xc095)
+
+	section := []byte{0x70, 0x70, 0x05, 0xc3, 0x50, 0, 0, 0}
+	packet := make([]byte, transportPacketSize)
+	for i := range packet {
+		packet[i] = 0xff
+	}
+	packet[0], packet[1], packet[2], packet[3], packet[4] = 0x47, 0x40, 0x14, 0x10, 0
+	copy(packet[5:], section)
+	if err := d.PushTransport(packet); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Read(0xB8, bus.Word); got != 1<<channel {
+		t.Fatalf("transport section completion = %#08x", got)
+	}
+	if got := ram.Read(RingBase(uint8(channel))&0x1fffffff, bus.Byte); got != 0x70 {
+		t.Fatalf("transport section first byte = %#x", got)
 	}
 }

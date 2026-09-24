@@ -113,10 +113,10 @@ func TestEveryNativeModuleTheDispatcherKnows(t *testing.T) {
 	t.Logf("=== every native module the dispatcher knows ===")
 	for _, m := range modules {
 		note := ""
-		switch {
-		case m.n == 1:
+		switch m.n {
+		case 1:
 			note = "  <- the one tools/opentv-natives.py covers"
-		case m.n == 12:
+		case 12:
 			note = "  <- MODULE 12: scall(0x0c,0x08) creates the grid's row record"
 		}
 		t.Logf("    module %2d  array %08X  %4d functions%s", m.n, m.array, m.count, note)

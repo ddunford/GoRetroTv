@@ -196,3 +196,274 @@ func TestWhatDecidesNoSatelliteSignal(t *testing.T) {
 			"around it with tools/ocode-disasm.py", trail[len(trail)-1])
 	}
 }
+
+// WHAT VALUE SENDS THE CHANNEL VIEW DOWN THE NO-SIGNAL PATH.
+//
+// The bytecode trail above identifies the decision precisely:
+//
+//	9fc6acc9  pushs_mm_ind_fp_nn 26 fc  ; signed halfword from object+0x26
+//	9fc6accd  push_3
+//	9fc6acd0  and
+//	9fc6acd6  jz 0x9fc6ad1a             ; zero skips the channel-error message
+//
+// This probe catches the data read made by that load, rather than assigning a meaning to the
+// field from its position. It also follows the executed writer back to the event-object member
+// whose value selects bit 1 versus bit 0x40, and attributes every observed write to its MIPS and
+// o-code sites. It changes no guest state.
+func TestWhatValueChoosesNoSatelliteSignal(t *testing.T) {
+	const (
+		mainFetchSite = 0x80069298
+		comparedAt    = 0x80494DD0
+	)
+	targets := map[uint32]struct {
+		label string
+		size  int
+	}{
+		0x9FC6ACB5: {"channel object field before message", 2},
+		0x9FC6ACC9: {"channel status bits", 2},
+		0x9FC6BAE1: {"value compared with 0x0107", 4},
+	}
+	type read struct {
+		opcode uint32
+		label  string
+		at     uint32
+		value  uint32
+		pc     uint32
+		size   int
+	}
+	type write struct {
+		at, value, opcode, pc, ra uint32
+		size                      int
+	}
+	type enqueue struct {
+		at, ra uint32
+		words  [2]uint32
+	}
+
+	guide := demoGuide(t)
+	box := restoredBox(t)
+	day := time.Date(1998, 12, 24, 19, 0, 0, 0, time.UTC)
+	transmitter, err := multiplex.New(box, guide, demoDictionary(t), multiplex.FixedClock{At: day}, demoSchedule())
+	if err != nil {
+		t.Fatal(err)
+	}
+	moduleRecords := box.RAM.Read(0x00105E9C, bus.Word)
+	if moduleRecords < 0x80000000 {
+		t.Fatalf("harness: VM module-record pointer is %#08x", moduleRecords)
+	}
+	moduleOne := moduleRecords + 100
+	var targetEnqueue enqueue
+	var contrastEnqueue enqueue
+	var contrastRecord [3]uint32
+	var enqueueInputs []enqueue
+	var pendingEnqueue enqueue
+	enqueueByIndex := make(map[uint32]enqueue)
+	observeQueue := func(a bus.ObservedAccess) {
+		st := box.Machine.Core.State()
+		if st.PC&^1 == 0x80083832 && st.GPR[5] == 1 {
+			base := st.GPR[4] & 0x1fffffff
+			pendingEnqueue = enqueue{at: st.GPR[4], ra: st.GPR[31] &^ 1, words: [2]uint32{
+				box.RAM.Read(base, bus.Word),
+				box.RAM.Read(base+4, bus.Word),
+			}}
+			enqueueInputs = append(enqueueInputs, pendingEnqueue)
+		}
+		if a.Write && a.Virtual|0x80000000 == moduleOne+80 && pendingEnqueue.at != 0 {
+			enqueueByIndex[a.Value] = pendingEnqueue
+		}
+	}
+	var earlyWrites []write
+	var earlyLastOp uint32
+	acquireHooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		observeQueue(a)
+		if !a.Fetch && !a.Write && a.Virtual >= 0x9FC00000 &&
+			box.Machine.Core.State().PC&^1 == mainFetchSite {
+			earlyLastOp = 0x9FC00000 | (a.Virtual & 0x00ffffff)
+			return
+		}
+		at := a.Virtual | 0x80000000
+		if a.Write && at >= comparedAt && at < comparedAt+4 {
+			st := box.Machine.Core.State()
+			earlyWrites = append(earlyWrites, write{at: at, value: a.Value,
+				opcode: earlyLastOp, pc: st.PC &^ 1, ra: st.GPR[31] &^ 1, size: sizeBytes(a.Size)})
+		}
+	}}
+	want, registered := programmesInTheBlock(t, guide, day), 0
+	if at := runUntilHooked(t, box, transmitter, acquireHooks, 120_000_000,
+		registeringProgrammes(box, want, &registered)); at < 0 {
+		t.Fatalf("harness: only %d of %d programmes registered", registered, want)
+	}
+	var (
+		active        = true // the compared event object may be constructed before the guide opens
+		armed         int
+		opcode        uint32
+		reads         []read
+		writes        = earlyWrites
+		seen          = map[uint32]int{}
+		field         uint32
+		subject       uint32
+		eventWords    [3]uint32
+		eventModule   uint32
+		dequeueModule uint32
+		lastOp        uint32
+	)
+	hooks := board.StepHooks{Access: func(a bus.ObservedAccess) {
+		if !active {
+			return
+		}
+		st := box.Machine.Core.State()
+		pc := st.PC &^ 1
+		// The VM event dequeuer at 0x80083E20 calls 0x80083644 with the selected
+		// module number in a0 and its output buffer in a1. The native (1, 0x22)
+		// wrapper later copies that buffer into the o-code event object. Correlate
+		// those two executed calls; addresses and queue layout alone do not prove
+		// which module supplied this particular record.
+		if pc == 0x8008364C {
+			dequeueModule = st.GPR[4]
+		}
+		observeQueue(a)
+		if !a.Fetch && a.Virtual >= 0x9FC00000 && box.Machine.Core.State().PC&^1 == mainFetchSite {
+			op := 0x9FC00000 | (a.Virtual & 0x00ffffff)
+			lastOp = op
+			if _, ok := targets[op]; ok {
+				opcode, armed = op, 60
+			}
+			return
+		}
+		at := a.Virtual | 0x80000000
+		if a.Write {
+			if at >= comparedAt-8 && at < comparedAt+4 &&
+				pc >= 0x800FBDFA && pc < 0x800FBE40 && st.GPR[31]&^1 == 0x80084020 {
+				eventModule = dequeueModule
+				queued := enqueueByIndex[box.RAM.Read((moduleOne+84)&0x1fffffff, bus.Word)]
+				if at == comparedAt+3 && a.Value == 0x85 {
+					targetEnqueue = queued
+				}
+				if at == comparedAt+3 && a.Value == 0x07 {
+					base := uint32((comparedAt - 8) & 0x1fffffff)
+					contrastRecord = [3]uint32{
+						box.RAM.Read(base, bus.Word), box.RAM.Read(base+4, bus.Word),
+						box.RAM.Read(base+8, bus.Word),
+					}
+					if contrastRecord[2] == 0x0107 {
+						contrastEnqueue = queued
+					}
+				}
+			}
+			if (field != 0 && at == field) || (at >= comparedAt && at < comparedAt+4) {
+				writes = append(writes, write{at: at, value: a.Value, opcode: lastOp,
+					pc: st.PC &^ 1, ra: st.GPR[31] &^ 1, size: sizeBytes(a.Size)})
+			}
+			return
+		}
+		if a.Fetch || armed == 0 {
+			return
+		}
+		armed--
+		if (at >= 0x80060000 && at < 0x80070000) || at >= 0x9FC00000 {
+			return
+		}
+		// The VM stack and frame are word accesses. The opcode's subject is the only byte or
+		// halfword data read outside the interpreter in this short handler window.
+		wantSize := targets[opcode].size
+		if sizeBytes(a.Size) != wantSize {
+			return
+		}
+		if opcode == 0x9FC6BAE1 && box.Machine.Core.State().PC&^1 != 0x8006C0EE {
+			return
+		}
+		reads = append(reads, read{opcode: opcode, label: targets[opcode].label, at: at,
+			value: a.Value, pc: box.Machine.Core.State().PC &^ 1, size: wantSize})
+		if opcode == 0x9FC6ACC9 {
+			field = at
+		}
+		if opcode == 0x9FC6BAE1 {
+			subject = at
+			base := (at - 8) & 0x1fffffff
+			for i := range eventWords {
+				eventWords[i] = box.RAM.Read(base+uint32(i*4), bus.Word)
+			}
+		}
+		seen[opcode]++
+		if opcode != 0x9FC6BAE1 {
+			armed = 0
+		}
+	}}
+	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
+	press := func(raw uint8, _ string, budget int) uint32 {
+		if raw == keySelect {
+			active = true
+		}
+		return pressAndLetItFinishHooked(t, box, pump, hooks, raw, budget)
+	}
+	openAllChannels(t, press, ".artifacts/nosignal-field-grid.png", true)
+	before := screenNow(t, box)
+	for attempt := 0; attempt < 6 && screenNow(t, box) == before; attempt++ {
+		press(keySelect, "select to view the channel", 80_000_000)
+	}
+	for i := 0; i < 40_000_000 && seen[0x9FC6ACC9] == 0; i++ {
+		if err := pump(); err != nil {
+			t.Fatal(err)
+		}
+		if err := box.StepWithHooks(hooks); err != nil {
+			t.Fatal(err)
+		}
+	}
+	active = false
+	for op, target := range targets {
+		if seen[op] == 0 {
+			t.Errorf("harness: bytecode %#08x (%s) ran no observable subject read", op, target.label)
+		}
+	}
+	for _, r := range reads {
+		t.Logf("%08X %-22s read %08X size %d = %d (%#x), MIPS %08X",
+			r.opcode, r.label, r.at, r.size, r.value, r.value, r.pc)
+	}
+	if field == 0 {
+		t.Fatal("harness: the channel-status field was not located")
+	}
+	if subject != comparedAt {
+		t.Fatalf("harness: the value compared with 0x0107 came from %08X, not measured address %08X",
+			subject, uint32(comparedAt))
+	}
+	t.Logf("the 12-byte event record at %08X is %08X %08X %08X",
+		subject-8, eventWords[0], eventWords[1], eventWords[2])
+	if eventModule == 0 {
+		t.Fatal("harness: the measured event was not correlated with a VM module dequeue")
+	}
+	t.Logf("the event was dequeued from VM module %d", eventModule)
+	if targetEnqueue.at == 0 {
+		first := 0
+		if len(enqueueInputs) > 20 {
+			first = len(enqueueInputs) - 20
+		}
+		for _, e := range enqueueInputs[first:] {
+			t.Logf("candidate module 1 enqueue %08X %08X at %08X; caller %08X",
+				e.words[0], e.words[1], e.at, e.ra)
+		}
+		t.Fatal("harness: module 1 supplied the event but its matching enqueue was not observed")
+	}
+	t.Logf("the matching module 1 enqueue read %08X %08X at %08X; caller %08X",
+		targetEnqueue.words[0], targetEnqueue.words[1],
+		targetEnqueue.at, targetEnqueue.ra)
+	if contrastRecord[2] == 0x0107 {
+		t.Logf("contrast event %08X %08X %08X came from %08X %08X at %08X; caller %08X",
+			contrastRecord[0], contrastRecord[1], contrastRecord[2],
+			contrastEnqueue.words[0], contrastEnqueue.words[1], contrastEnqueue.at,
+			contrastEnqueue.ra)
+	} else {
+		t.Log("no 0x0107 contrast event reached this object during the measured route")
+	}
+	if len(writes) == 0 {
+		t.Fatalf("harness: %08X changed across reads but no write to it was observed after its first read", field)
+	}
+	firstWrite := 0
+	if len(writes) > 24 {
+		firstWrite = len(writes) - 24
+		t.Logf("... %d earlier writes to the two measured fields elided", firstWrite)
+	}
+	for _, w := range writes[firstWrite:] {
+		t.Logf("WRITE %08X size %d <- %d (%#x), MIPS %08X RA %08X after o-code %08X",
+			w.at, w.size, w.value, w.value, w.pc, w.ra, w.opcode)
+	}
+}

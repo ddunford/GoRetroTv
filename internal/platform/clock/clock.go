@@ -31,6 +31,7 @@ import (
 	"container/heap"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // Errors returned when a caller asks for a schedule that cannot be honoured. Each one is a bug at
@@ -69,6 +70,7 @@ type event struct {
 // Clock counts instructions and fires what is due.
 type Clock struct {
 	icount  uint64
+	nextDue uint64
 	queue   eventQueue
 	live    map[EventID]*event
 	nextID  EventID
@@ -77,7 +79,7 @@ type Clock struct {
 
 // New returns a clock at instruction zero with nothing scheduled.
 func New() *Clock {
-	return &Clock{live: make(map[EventID]*event)}
+	return &Clock{nextDue: math.MaxUint64, live: make(map[EventID]*event)}
 }
 
 // Now reports the current instruction count.
@@ -143,6 +145,7 @@ func (c *Clock) Cancel(id EventID) bool {
 	if ev.index >= 0 {
 		heap.Remove(&c.queue, ev.index)
 		ev.index = -1
+		c.refreshNextDue()
 	}
 	return true
 }
@@ -152,7 +155,7 @@ func (c *Clock) NextDue() (uint64, bool) {
 	if c.queue.Len() == 0 {
 		return 0, false
 	}
-	return c.queue[0].due, true
+	return c.nextDue, true
 }
 
 // Budget reports how many instructions may be run before the next event is due, capped at max.
@@ -175,6 +178,24 @@ func (c *Clock) Budget(max uint64) uint64 {
 	return max
 }
 
+// Tick advances exactly one instruction. The instruction loop uses this instead of Advance(1):
+// while no event is due it is only an overflow check, an increment and a cached-deadline compare.
+// Keeping the heap out of this path matters because it runs once or twice for every guest
+// instruction the emulator retires.
+func (c *Clock) Tick() error {
+	if c.icount == ^uint64(0) {
+		return ErrCounterOverflow
+	}
+	c.icount++
+	if c.icount != c.nextDue {
+		return nil
+	}
+	return c.fireTick()
+}
+
+//go:noinline
+func (c *Clock) fireTick() error { return c.fireDue(c.icount) }
+
 // Advance moves the counter on by n instructions, firing everything that comes due on the way.
 //
 // Events fire in due order, and the counter reads as the event's own due instruction while its
@@ -191,7 +212,11 @@ func (c *Clock) Advance(n uint64) error {
 		return fmt.Errorf("clock: advance by %d from %d: %w", n, c.icount, err)
 	}
 
-	for c.queue.Len() > 0 && c.queue[0].due <= target {
+	return c.fireDue(target)
+}
+
+func (c *Clock) fireDue(target uint64) error {
+	for c.queue.Len() > 0 && c.nextDue <= target {
 		ev := heap.Pop(&c.queue).(*event)
 		ev.index = -1
 		c.icount = ev.due
@@ -208,6 +233,7 @@ func (c *Clock) Advance(n uint64) error {
 		} else {
 			delete(c.live, ev.id)
 		}
+		c.refreshNextDue()
 
 		if err := ev.fn(c.icount); err != nil {
 			return fmt.Errorf("clock: %s at instruction %d: %w", ev.name, c.icount, err)
@@ -229,6 +255,7 @@ func (c *Clock) RestoreTo(icount uint64) {
 	c.queue = nil
 	c.live = make(map[EventID]*event)
 	c.icount = icount
+	c.nextDue = math.MaxUint64
 }
 
 // Reset returns the clock to instruction zero with nothing scheduled.
@@ -247,7 +274,15 @@ func (c *Clock) schedule(name string, due, period uint64, fn Handler) EventID {
 	c.nextSeq++
 	c.live[ev.id] = ev
 	heap.Push(&c.queue, ev)
+	c.refreshNextDue()
 	return ev.id
+}
+
+func (c *Clock) refreshNextDue() {
+	c.nextDue = math.MaxUint64
+	if c.queue.Len() > 0 {
+		c.nextDue = c.queue[0].due
+	}
 }
 
 func add(a, b uint64) (uint64, error) {

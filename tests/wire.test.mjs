@@ -30,3 +30,9 @@ test('encodes key and validates raw/source bytes', () => {
   assert.throws(() => encodeKeyMessage(256, 1), /raw/);
   assert.throws(() => encodeKeyMessage(1, -1), /source/);
 });
+
+test('decodes the guest-selected media state', () => {
+  assert.deepEqual(decodeServerMessage('{"type":"media","version":1,"active":1,"service":"Test channel"}'),
+    { type: 'media', version: 1, active: 1, service: 'Test channel' });
+  assert.throws(() => decodeServerMessage('{"type":"media","version":1,"active":2,"service":"Test"}'), /active/);
+});

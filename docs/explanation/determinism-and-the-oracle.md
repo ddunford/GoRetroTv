@@ -32,7 +32,7 @@ hunting a device bug that did not exist.
 
 <!-- anchor: internal/platform/clock/clock.go#^func \(c \*Clock\) Advance -->
 <!-- anchor: internal/platform/statehash/statehash.go -->
-<!-- fingerprint: sha256:67c2b87e47c4ad6deb5ea943fb4893ed2ece333216981874531f65a77c8bd4ad @ 2026-09-22 -->
+<!-- fingerprint: sha256:424129e702c3947c8d7522afcdea9b224951b8c531ac1b6d6cf8e3cb5bdc2161 @ 2026-09-24 -->
 
 ## Why there is exactly one state hash
 

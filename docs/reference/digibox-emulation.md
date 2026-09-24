@@ -10,7 +10,7 @@ is because the method is the evidence.
 <!-- anchor: internal/board/runtime.go -->
 <!-- anchor: internal/memory/ram.go -->
 <!-- anchor: internal/memory/flash.go -->
-<!-- fingerprint: sha256:b4ffd1c42e7d9abc2a37616479551dcd80d39e69ba8d4a78d568b7031e46f038 @ 2026-09-22 -->
+<!-- fingerprint: sha256:e101699d7bce3379d62ae38f9cc6b799d242b5db9d5980e005f1230b2a40b1d1 @ 2026-09-24 -->
 
 **NEC VR4111, big-endian MIPS, mixed MIPS32 + MIPS16 reached via `JALX`.** RTOS is **Nucleus
 PLUS** — the image says `Copyright (c) 1993-1998 ATI - Nucleus PLUS - NEC4111`. MIPS16 is the
@@ -281,7 +281,7 @@ bits, and the handler column reuses a handful of addresses.
 
 <!-- anchor: internal/dvb/crc.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:6c20f05300fee3af3259d2655db0e169b1f45defe7d5b941638a616501d3ff9e @ 2026-09-22 -->
+<!-- fingerprint: sha256:ff7fb69d3921adf3665d4d4c1f14d07f9f20cd2f77b7e5e164e344c49dd2b6b2 @ 2026-09-24 -->
 
 **Demux register block `0xB000A000`, size `0x160`**, declared in a 30-block SoC peripheral map at
 flash **`0x20FD8`** — which is the register map the NEC manual could never provide.
@@ -405,7 +405,7 @@ mechanism that does not exist.
 
 <!-- anchor: internal/device/smartcard/port.go -->
 <!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:ce13ceac60d350b53c9015ad274332d1631c25c5eebb642c1bce8b7167546891 @ 2026-09-22 -->
+<!-- fingerprint: sha256:0347a7b347d9074e776b02a72ebc1fae9ffb2dd95ecb9a08b7cc362fbb408490 @ 2026-09-24 -->
 
 **The application boots, creates all six of its tasks, and then every one of them blocks. The
 thing it is waiting for is the viewing card.** This is the gate; nothing downstream of it — video,
@@ -729,7 +729,7 @@ a signal-state change from a tuner that has no stream behind it. That is the nex
 ## The remote control: how a key reaches the EPG
 
 <!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-22 -->
+<!-- fingerprint: sha256:43db4f837a55b7ce39bf344f0f2c01abcef8caa62ff8e0b2fd07118a9ccd221b @ 2026-09-24 -->
 
 Mapped from the firmware by a subagent (listings under a session scratchpad, report
 `inputs/REPORT.md`) and then measured in the emulator.
@@ -864,7 +864,7 @@ the cheap check that the box is actually up.
 
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
-<!-- fingerprint: sha256:2bc43cbcc579c6052658f322c7d1cddf36c9667c1593750204d7ed7bd4577d43 @ 2026-09-22 -->
+<!-- fingerprint: sha256:af2945c90b1319cbcb83b5e003b42f1946bba94058d429d04284dccd98e7908e @ 2026-09-24 -->
 
 The box asks for exactly three PIDs and says so. On a booted machine `__dispState()` reports
 **filter 22 → PID `0x0014` (TDT, the clock), 23 → `0x0011` (SDT, the line-up), 24 → `0x0010`
@@ -920,11 +920,11 @@ filter and the wrong one.
 pointer, and it is distinct for exactly the three SI filters while 25..31 share one value — so
 it is the natural way to find each table's own handler, and following it from filter 23 should
 land on the SDT path without having to guess at `ASTRA_SDT_SVL`. (The addresses themselves are
-heap and change per boot; read them off a live box rather than quoting them.) And `+0x140`,
-`+0x144`, `+0x148` are the section-filter MATCH and MASK programming, written in a
+heap and change per boot; read them off a live box rather than quoting them.) And `+0x140`, `+0x144`, `+0x148` are the section-filter MATCH and MASK programming, written in a
 select-value-commit rhythm — `+0x148 ← value`, `+0x144 ← 0xC000|index` — which is how the box
-says which `table_id` each filter accepts. Neither is modelled; nothing has needed them yet,
-because we choose which filter to deliver to rather than letting a match decide.
+says which `table_id` each unit accepts. These are now modelled: word 9 routes a unit's accepted
+sections to PID channels, and `Push` lets those guest-programmed rules decide whether delivery
+occurs. The exact write-order evidence is recorded at the end of this file.
 
 ## The firmware narrates its own boot, and reading it is one printf
 
@@ -1034,7 +1034,7 @@ task is now free rather than mirroring.
 ## What the SI we broadcast does, and what it does not
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
+<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
 
 **It is received and parsed — proved by a name that could not have come from anywhere else.**
 Broadcasting an SDT whose services are called `ZQXBBC One` and `ZQXBBC Two` puts those exact
@@ -1709,7 +1709,7 @@ of the address space and reported on all of it. Neither zero looked thin.
 
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:1caf21c8a6f4cf73ac8133d5f8da22dccac20687fddf4d7793833521abc9af7b @ 2026-09-22 -->
+<!-- fingerprint: sha256:3177035d6605b49e4924abf126c820f394421b45803df2e3fe3d3387ad5761f6 @ 2026-09-24 -->
 
 **"The box parses our tables" was too generous, and this is the measurement that corrects it.**
 The delivery path is sound: the demux accepts the section, the LISR fires, the section task
@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:37945d626269321b65efd48dddb0fed1704fda71b3fae4779f888b819f3e6a46 @ 2026-09-23 -->
+<!-- fingerprint: sha256:fd22f4ebe7e82c3cf20b115fae78fe3faabb8eceeca13aa1aa7591f1e3743a06 @ 2026-09-24 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2093,7 +2093,7 @@ to a subtable.**
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/device/demux/section.go -->
-<!-- fingerprint: sha256:3f0b1c8e7135a0c055b6ed793ef56edfb1e6246567caed0ec4271a2f0e141764 @ 2026-09-22 -->
+<!-- fingerprint: sha256:bef493158ad779c95a7325bd3fc33259874e2a4268dccdf39a1e5e6cc71f4f0c @ 2026-09-24 -->
 
 **Attaching a client means PROGRAMMING A SECTION FILTER.** `0x800B0C70(entry, 1)` switches on
 the subtable's type, and for type 4 it builds `{0xFE40, id}` — a mask/value pair matching
@@ -2142,7 +2142,7 @@ and the service list is unexplained any more.
 ## The ids in our SI are not ours to choose
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
+<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
 
 **A section is kept only if `find_subtable(id_from_its_header, type)` matches a REGISTERED
 subtable**, and the id it matches on is the halfword at `+30` of a subtable entry. So the
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:37945d626269321b65efd48dddb0fed1704fda71b3fae4779f888b819f3e6a46 @ 2026-09-23 -->
+<!-- fingerprint: sha256:fd22f4ebe7e82c3cf20b115fae78fe3faabb8eceeca13aa1aa7591f1e3743a06 @ 2026-09-24 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -2404,7 +2404,7 @@ service-list module runs and grows. The screen is still 8 blits of blue.
 ## The service list rejects nothing — and the application is now working
 
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:b4bf2f2a2ee69bdcb4aa28b57c0d6dfeabd4b9a88710b3687d9f8122e19723a6 @ 2026-09-22 -->
+<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
 
 **The premise of this question was wrong, and finding that out relocated the search.** The SVL
 module's entire activity is a single `jalr $v1` at `0x800A6414` inside a dispatcher — when
@@ -4542,7 +4542,7 @@ yet. Not established.
 ### `sky-02me.2`: the handset map, and two gaps it found
 
 <!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-22 -->
+<!-- fingerprint: sha256:43db4f837a55b7ce39bf344f0f2c01abcef8caa62ff8e0b2fd07118a9ccd221b @ 2026-09-24 -->
 
 *2026-09-15. Every button on the page's handset, pressed on a settled box.
 `scripts/digibox-probes/keymap.js`. The button set is read out of the DOM rather than typed in, so
@@ -4703,16 +4703,17 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:497d57126fe2c8f86b0240ac9387e76182569638f6658f3f2e4884a46812184c @ 2026-09-23 -->
+<!-- fingerprint: sha256:0b8b0fb5aee5bb440894549a33a5cce1372ac25af8715e041128f404ab624c8c @ 2026-09-24 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
 #### The answer
 
-**The match table holds 16 filters; the PID channels number 32. A channel above 15 cannot have a
-match, so nothing filters it.** The box arms channel **21** for PID `0x52` after acquisition, and 21
-is above 15 -- so **every section delivered on `0x52` reaches the firmware** and the SI layer
-decides. A feed for it does not need a table id guessed past the hardware.
+**WITHDRAWN 2026-09-24: “a channel above 15 cannot have a match.”** The namespaces are separate
+because match-unit word 9 is a 32-bit routing bitmap. A unit does not need the same number as its
+PID channel: any of the sixteen units can route its accepted sections to any of the thirty-two
+channels. In the post-acquisition fixture unit 5 routes to channel 21. The earlier conclusion that
+every section on PID `0x52` passes the hardware was therefore false.
 
 **Measured, not preferred between readings.** The command at `+0x144` packs `{byteIndex, filter}`
 into one byte and the split was open: four bits each, or five for the filter and three for the byte
@@ -4786,16 +4787,18 @@ fall out of that, and neither needs to be guessed.
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:c2686791408f1c7d64d00714f269e823b71417e3bd093e79f9d0d0c669bc582b @ 2026-09-22 -->
+<!-- fingerprint: sha256:f1ceb6afda19ce39e66006876469732b7d0bc33d7d705a9bb66696fe16634cdb @ 2026-09-24 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
 
 #### The feed works
 
-`__siPush(0x52, ...)` is accepted for **every** table id from `0xA0` to `0xB1` and for `0x4E` and
-`0x42` as controls -- 0 refusals -- which is what the 16-match-units-for-32-channels finding
-predicted: channel 21 is above 15, so nothing filters that PID and the hardware takes anything.
+`__siPush(0x52, ...)` accepted **every** table id from `0xA0` to `0xB1` and the `0x4E` and `0x42`
+controls because both the browser oracle and the original Go `Demux.Push` bypassed match units.
+That result measured the instrument, not the hardware, and all acceptance conclusions derived from
+it are withdrawn. The current model consults word 9's channel routing and the unit's byte masks;
+a rejected section reaches neither the ring nor the guest dispatcher.
 
 #### The parser addresses in our own notes are COLD
 
@@ -5235,7 +5238,7 @@ still ahead, and the next rung is what `0xA1` carries.
 ### Table `0xA1` on PID `0x33`: the listings path, and the signature that gates it
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:f2d86d48db94d7abe4978a64943564ed93ccecdd348c338efe9fb757aeca2fe3 @ 2026-09-22 -->
+<!-- fingerprint: sha256:1510cbb0b6e9404746409cd9f7d1c61700fd9e31aae54e8e56d6ec77823dba7d @ 2026-09-23 -->
 
 `scripts/digibox-probes/what-is-on-0xa1.js`. Three controls, all of which went silent.
 
@@ -6224,7 +6227,7 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:d1f443f7143e0b22c463d24819cd1144dc9217f7edd100e870c9fb963582c295 @ 2026-09-22 -->
+<!-- fingerprint: sha256:530b2cf49f2174f75087aabb8192a2a43a8be344039e49292205b64d51e5c31a @ 2026-09-23 -->
 
 *Seven probe runs. Every number below is from `scripts/digibox-probes/`, and the four claims that
 retired earlier readings each retired them by measurement rather than by argument.*
@@ -7726,7 +7729,7 @@ provable. The census now accepts the whole OpenTV title family.
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:d1f443f7143e0b22c463d24819cd1144dc9217f7edd100e870c9fb963582c295 @ 2026-09-22 -->
+<!-- fingerprint: sha256:530b2cf49f2174f75087aabb8192a2a43a8be344039e49292205b64d51e5c31a @ 2026-09-23 -->
 
 *20 Sep 2026, in the Go port, against the real firmware. This is the answer to TASK-6.13, and the
 task's own title is wrong: nothing about it is a day-of-eight problem.*
@@ -7818,7 +7821,7 @@ active one. Two things cost time and are worth carrying:
 ## Addressing the listings: two masks, and two facts that came off the screen
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:f2d86d48db94d7abe4978a64943564ed93ccecdd348c338efe9fb757aeca2fe3 @ 2026-09-22 -->
+<!-- fingerprint: sha256:1510cbb0b6e9404746409cd9f7d1c61700fd9e31aae54e8e56d6ec77823dba7d @ 2026-09-23 -->
 
 *Measured 2026-09-20 while wiring the modelled multiplex into the running server. Everything here
 was found by being wrong first, and each wrong reading presented as **"the box is not asking"** —
@@ -7888,7 +7891,7 @@ re-taken with a census that assumes neither. **It survived unchanged**, and is n
 ## The handset map, swept exhaustively
 
 <!-- anchor: internal/device/csi/link.go -->
-<!-- fingerprint: sha256:24e974cad810e08e605cb4b6154b6406bbfd30789eb82cc272a0472e7205e8c9 @ 2026-09-22 -->
+<!-- fingerprint: sha256:43db4f837a55b7ce39bf344f0f2c01abcef8caa62ff8e0b2fd07118a9ccd221b @ 2026-09-24 -->
 
 *Measured 2026-09-20. Every raw code 0x00-0xFF pressed on its own restored box, nine million
 instructions to settle, framebuffer hashed. This replaces every partial key-map note above: it is
@@ -8862,6 +8865,10 @@ experiment that changes the broadcast needs an acceptance that does not assume t
 
 ## THE ALL CHANNELS GRID DRAWS ITS CHANNELS
 
+<!-- anchor: internal/broadcast/sections.go -->
+<!-- anchor: internal/multiplex/listings.go -->
+<!-- fingerprint: sha256:9580a272e61659562bc8ddee5eda7eac06f4351b457043ac694b688d24768087 @ 2026-09-24 -->
+
 *2026-09-22. Six rows, in channel order, with names.*
 
     101 Sky One        ..no listings available
@@ -9231,7 +9238,7 @@ executed a single instruction in this project's history.
 ## The `0xC1` differential, re-based on a delivery the box refuses
 
 <!-- anchor: internal/multiplex/firmwaretests/tablec1_signature_firmware_test.go -->
-<!-- fingerprint: sha256:8bc0524e4b919da57c8cf8e3f44349d9b0ecc9b30715566cf2280c6e1187b732 @ 2026-09-23 -->
+<!-- fingerprint: sha256:9529e14af6af513a062eee139fd485bd56f5f6d5866c9a62d0375c1994ed78f0 @ 2026-09-24 -->
 
 **The sweeps above were measured by differencing a box that was delivered a section against a box
 that was delivered NOTHING, and on 2026-09-23 that stopped being a measurement.** Broadcasting the
@@ -9379,7 +9386,7 @@ that would catch this returning.
 ## The ALL CHANNELS grid puts a blank row between genre groups
 
 <!-- anchor: internal/multiplex/firmwaretests/gridgaps_firmware_test.go -->
-<!-- fingerprint: sha256:7e0aac0664bbbc538a9fea462f01e5c94996fe64563fbd931794af7135b9a993 @ 2026-09-23 -->
+<!-- fingerprint: sha256:80c80bfe84cfcd723f6c347160d578e2d31d7313f8917495fc315acc506e5ef8 @ 2026-09-24 -->
 
 **Measured 2026-09-23.** The grid draws a BLANK ROW SLOT wherever the genre changes between one
 drawn channel and the next. With the demo's six channels — 101 g3, 121 g3, 251 g1, 301 g6, 401 g7,
@@ -9424,3 +9431,601 @@ one pair is drawn together. On the contiguous-numbers run EVERY pair was separat
 pitch WAS the gapped one and it reported a flat grid — the exact opposite of the truth. Only the
 raw pitches printed beside the verdict caught it. A plate's own height is the row unit whether or
 not any two rows touch, and that is what it measures now.
+
+## Every BAT section must declare the private namespace it uses
+
+<!-- anchor: internal/broadcast/sections.go -->
+<!-- fingerprint: sha256:9f7fc19f9f87679a0b49093b1f74f1f40fd8ebe0b10cbe13b2e5e37d1e3de14c @ 2026-09-24 -->
+
+**Measured 2026-09-23 on real firmware.** A 140-channel line-up stopped at exactly 84 channels:
+three 28-entry `0xB1` descriptors, which is precisely what fitted in BAT section 0. The SDT carried
+all 140 services correctly, so this was the BAT alone.
+
+All sixteen match units were read before attributing the loss to the parser. Unit 3 remained
+`4A/FF 10/FF 00/FF`: table `0x4A`, bouquet `0x1000`, with no section-number condition. This port's
+current section path is more permissive still and delivered every section on the armed PID. The
+second section was therefore reaching the guest rather than being filtered out.
+
+The defect was the scope of descriptor `0x5F`, not the repeated transport header. Sky's private
+data specifier appeared once at the start of section 0's transport descriptor loop. Section 1
+repeated the transport and its remaining `0xB1` descriptors, but began directly with `0xB1`.
+Private descriptor scope ends with the loop, so the guest correctly ignored all 56 entries in the
+second section: they had no declared private namespace there.
+
+The BAT builder now prefixes every continuation transport loop with private data specifier 2. A
+structural test walks each section and rejects any `0xB1` that appears before that declaration;
+the real-firmware acceptance then broadcasts 6, 40 and 140 channels and reads the guest's own
+bounds-checked channel-loop limit at `0x800A4B60`. It now reports all 140. No guest memory or
+firmware state is changed: the only change is the DVB signal presented to it.
+
+## A full title carousel must give the guest time between sections
+
+<!-- anchor: internal/multiplex/firmwaretests/production_lineup_test.go -->
+<!-- fingerprint: sha256:093b48e46cd7b061f6aaff51888cacaebdfa36f293abc844943db7b93846b2b9 @ 2026-09-24 -->
+
+**Measured 2026-09-23 on real firmware.** The 68 individually named television services in the
+Sky Digital launch table all reached the guest's channel loop after the BAT fix, but their
+programmes exposed a separate delivery limit. The guest programmed one title request whose
+extension `03FF/FC00` admitted all 68 listings ids. Addressing was therefore not the missing-data
+cause.
+
+The transmitter then placed every title section in one wave. `Pump` delivers a wave without
+retiring a guest instruction between its emissions, so 83 active-block programmes arrived as a
+burst and only 23 were registered. Sending one title section per scheduled wave raised that to 77
+inside a deliberately incomplete rotation, then all 83 after one complete four-block rotation.
+The four blocks remain on air: the guest's own table-id filter decides which it admits.
+
+This is the same hardware rule already measured for the A-Z index: a carousel is serial traffic,
+not an array of sections handed to the demux at once. The production cadence is now one section per
+two million retired instructions. The acceptance test waits for the box's own all-channel filter,
+counts the programmes registered by guest code, opens ALL CHANNELS through handset input, and reads
+the guest's bounds-checked channel-loop limit. It reports 68 channels and draws the sourced EPG
+numbers, including Page Up and Page Down. No RAM, firmware byte or guest control-flow state is
+changed.
+
+The unreconstructed rows deliberately do not enter the A-Z index. They are schedule sentinels, not
+programme titles; indexing their four block fillers on every channel made the letter L section
+2,277 bytes long, beyond DVB's 1,021-byte section limit, and stopped the carousel visibly. The
+production acceptance now runs the index rung too, so that failure is exercised against firmware
+rather than left to the browser demo.
+
+## The grid's forward limit is the current rows' last end minus its 90-minute window
+
+<!-- anchor: internal/multiplex/firmwaretests/scrollbound_firmware_test.go -->
+<!-- fingerprint: sha256:cbfd3d19b7df72a4a58bd831e38b48b02c787a627ce96702853c3cbbec46eb72 @ 2026-09-24 -->
+
+**Measured 2026-09-24 on real firmware.** Tomorrow's listings are already stored and drawable;
+the ALL CHANNELS grid refuses to scroll to them because its OpenTV application computes a limit
+from the rows in the current view. At 21:21 the box produced these two consecutive yellow-key
+paths on the same running machine:
+
+    current window start    latest end among current rows    result
+    21:00                   00:00 next day                   advance to 22:30
+    22:30                   00:00 next day                   refuse
+
+The relevant o-code routine is `0x9FC7A29A`. It walks the current row structures, finds the latest
+programme end, subtracts `0x1518` seconds (5,400 seconds, the grid's three 30-minute columns), and
+compares that last legal window start with `DS+0x02E1F0`, the current window start. The accepted
+trace reads epoch values `0x3682D580` (midnight) and `0x3682AB50` (21:00) before taking
+`0x9FC7A36B`. After the first scroll the same data-segment word is `0x3682C068` (22:30); equality
+takes `0x9FC7A367`, returns refusal, and the caller raises *Further schedule information is not
+available*.
+
+The asymmetry is therefore firmware policy, not a dropped section: opening the grid at 23:15
+draws Heat and Sky News Overnight in its midnight column from tomorrow's stored title block, while
+pressing yellow on that populated screen is refused. The scroll bound considers the current rows'
+end times and does not extend itself from tomorrow's stored rows. The emulator must preserve that
+guest behavior; changing RAM, patching o-code, or inventing another signal would hide what this
+firmware actually does.
+
+## Match-unit word 9 routes accepted sections to PID channels
+
+<!-- anchor: internal/device/demux/push.go -->
+<!-- anchor: internal/multiplex/firmwaretests/matchrouting_firmware_test.go -->
+<!-- fingerprint: sha256:a3e1318ac315d3325ad646c617681a0989e7c4c2812726ebaaa690fad121e922 @ 2026-09-24 -->
+
+**Measured 2026-09-24 from the guest's demux writes.** `Demux.Push` used to select the first armed
+channel with the requested PID and place every valid section in its ring. That bypassed the
+hardware byte rules completely, so a section could reach firmware even when the demux would have
+dropped it.
+
+The missing channel binding is match-unit word 9. A clean boot was observed from instruction zero,
+recording every write to `+0x148`, its following `+0x144` commit, the channel enables at `+0xD8`,
+and all 32 PID registers. The guest repeatedly performs this sequence:
+
+    unit 10, word 9 <- 04000000    enable <- 06000000    channel 26 <- 00011FFF
+    unit 11, word 9 <- 08000000    enable <- 0E000000    channel 27 <- 00011FFF
+    unit 12, word 9 <- 10000000    enable <- 1E000000    channel 28 <- 00011FFF
+    unit 13, word 9 <- 20000000    enable <- 3E000000    channel 29 <- 00011FFF
+    unit 14, word 9 <- 40000000    enable <- 7E000000    channel 30 <- 00011FFF
+    unit 15, word 9 <- 80000000    enable <- FE000000    channel 31 <- 00011FFF
+
+Each word-9 bit names the destination PID channel. This is an explicit guest-programmed mapping,
+not a join invented from unit and channel numbers. All sixteen words of all sixteen units are
+dumped unconditionally by the same instrument; word 8 is zero in the post-acquisition fixture,
+which withdraws the earlier suspicion that it carried this binding.
+
+The model now applies every unit routed to an armed PID channel. Match index 0 compares
+`table_id`; subsequent indices skip the two `section_length` bytes and continue at
+`table_id_extension`. Mask-zero bytes do not participate. If at least one routed unit accepts the
+section it reaches the channel ring; if routed units reject it, it disappears without an interrupt
+or an error, as broadcast hardware does. A channel with no routed unit remains unfiltered, which
+preserves the guest's own configuration rather than manufacturing a rule for it.
+
+The 68-channel production acceptance still registers every active-block programme and draws the
+ALL CHANNELS grid after this change. The boot gate and the handset/card/NVRAM links gate also pass.
+No guest memory or firmware is altered; this changes only whether the emulated demux admits an
+input section.
+
+## The no-signal banner is selected from a dequeued application event
+
+<!-- anchor: internal/multiplex/firmwaretests/nosignal_firmware_test.go -->
+<!-- fingerprint: sha256:34f4cecd90ba348210a0cf7fd036dbb248e480f5d03dd7b103768aabfebd8fee @ 2026-09-24 -->
+
+**Measured 2026-09-24 on real firmware.** The application chooses *No satellite signal is being
+received* from a status halfword in its channel object. O-code `0x9FC6ACC9` reads the halfword at
+`0x804306F4`, masks it with `3`, and branches around resource `0x51B66` only when the result is
+zero. The field is initially zero. O-code `0x9FC6BB09`, through the interpreter's
+`POPS_MM_IND_FP_NN` handler at MIPS `0x8006D0F8`, writes `1`; the next message pass reads that
+value and takes the no-signal path.
+
+The writer is part of the event dispatcher, not a demux or tuner read. The executed route is
+`0x9FC69D69` through `0x9FC69DF3` into handler `0x9FC6BA6B`. That handler reads an event member
+with `PUSH_M_IND_FP_N 0x2C`; catching the interpreter's subject read at MIPS `0x8006C0EE` gives
+`0x80494DD0 = 0x00000185`. It compares that value with literal `0x0107`; inequality selects status
+bit `1`, while other branches in the handler select bit `0x40`.
+
+The containing twelve-byte record is:
+
+    00800012 00070001 00000185
+
+It came through native `(1,0x22)` at `0x80084008`, which calls the VM event dequeuer
+`0x80083E20` and copies the returned twelve bytes into the o-code object. The final copy of
+`00 00 01 85` is made by MIPS `0x800FBDFA`, returning to `0x80084020`. Raw SELECT maps to logical
+key `0x000D` in the live firmware table, so `0x0185` is not the SELECT key code.
+
+Following the queue rather than naming the value settles its producer. The record is dequeued from
+VM module 1. Correlating module 1's producer and consumer ring indices ties this exact dequeue to
+`damage(rect, window)` at `0x80083830`, called from `apply(obj)` at `0x80082604` (return address
+`0x8008262C`). Its source is the screen rectangle at `obj+0x16`. The exact rectangle varies with
+which repaint is pending when the guide settles; the caller and ring route do not. The enqueue
+routine converts that eight-byte rectangle into the twelve-byte module event, so source and result
+cannot be matched byte-for-byte. Ring-slot identity is what proves the relationship. This is an
+application window invalidation, not a device or broadcast event. The status halfword was
+consequently named too early: the measured bit controls the message choice, but this path does not
+establish that the bit itself represents tuner lock or transport status.
+
+This withdraws the task's proposed PAT/PMT route more strongly than the absent filters already
+did. The box reaches this message through an application event it actually dequeued. The next
+measured question is what event `0x0107` represents and why the same handler maps it differently;
+only after that contrast names a device or broadcast input is there a hardware model to change.
+The probe changes no guest state.
+
+## The firmware drives an audio control block when Volume changes
+
+<!-- anchor: internal/multiplex/firmwaretests/audio_firmware_test.go -->
+<!-- fingerprint: sha256:7d767b702c5d6e6b56e1b0eca0e705c710c1587393511f44604cb84a4c51cde5 @ 2026-09-24 -->
+
+**Measured 2026-09-24 on real firmware.** The audio strings and registered `audio` and
+`audio_encoder` devices did not answer whether any audio hardware path executes. The measured route
+is the handset's SERVICES menu, three DOWN presses to SYSTEM SETUP, then SOUND SETTINGS. The screen
+offers Audio Output, Volume, Background Music, Beep and Save New Settings; the probe changes every
+control and saves them while observing guest bus writes without changing any read result.
+
+Changing Volume executes five consecutive MIPS16 stores from `0x8002BD00` through `0x8002BD12`:
+
+    B4080106 <- 00000010
+    B4080103 <- 00008235
+    B4080102 <- 00000082
+    B4080101 <- 0000000F
+    B4080100 <- 000000E7
+
+All six accesses are byte-wide. The driver immediately reads `+0x06` at `0x8002BD14`; the measured
+answer is zero. The model therefore records the five written bytes for the later audio path while
+continuing to return zero on reads. It deliberately does not make the registers read back their
+writes or invent meanings for individual bits. Opening SOUND SETTINGS sends the same sequence with
+`+0x00 = 0xDF`; moving Volume one step changes that byte to `0xE7`. No other control in the same
+walk writes this block. The answer to whether the firmware drives audio at all is therefore
+**yes: it drives an audio control register path**.
+
+The control block is mapped as a first-class device with reset and complete snapshot/restore
+state. Bus snapshots written before the device existed are migrated only for this named device by
+initialising its measured all-zero reset state; current snapshots still require it, preserving the
+exact-device-set completeness check.
+
+This does not yet prove decoded MPEG audio or samples. Across acquisition, guide entry and service
+viewing the only media-DMA channel armed is channel 12, the already established menu graphics path;
+viewing a service arms no additional channel. A census of every peripheral write found exactly one
+address used while viewing that was not used during acquisition or guide drawing:
+
+    PC 800030BE: B000A05C <- 00014012
+
+`0xB000A05C` is demux PID register 18 (`+0x14 + 4*18`), and `0x0012` is DVB EIT. The armed-filter
+census agrees: tuning adds PID `0x0012` on channel 18 and nothing else. All sixteen match units show
+that unit 4 requests present/following EIT for service `0x0064`. Thus the firmware asks for programme
+event data when viewing but does not yet ask the emulated hardware for an audio PID, PES path, or
+audio DMA channel. Feeding one anyway would be a guessed shortcut.
+
+Audio playback therefore remains separate work: trace the registered audio driver's start path and
+establish which missing firmware-visible prerequisite makes it request data. No RAM or firmware byte
+is changed by any of these probes.
+
+The live registered-device array gives that trace a firm entry point. Device 10 is
+`audio_encoder`; its descriptor at `0x803138F0` names MIPS16 dispatcher `0x8001C47D`, secondary
+entry `0x8001C529`, and driver state `0x80105A80`. SOUND SETTINGS reaches the dispatcher with
+command `1` for Audio Output and command `7` for Volume. Opening a viewed service reaches it zero
+times. This separates the working control path from the still-cold playback path without assigning
+semantics to nearby code.
+
+The similarly named device 11, `audio`, is not a second untraced playback path. Its live resource
+record at `0x803138C8` has zero in all three command-entry fields; `audio_encoder` is the executable
+driver. Disassembly separates its remaining path from the settings calls: `0x8001C604` consumes an
+18-byte configuration, rearranges it into five words and calls `0x800D48D0`; `0x8001C6C8` selects
+lower-level routines at `0x800D4A0C` and `0x800D4A6C`. Those lower routines are also referenced
+from the modem region around `0x800F8600`, so they cannot themselves be named audio start/stop or
+hardware access. The audio-specific evidence stops at the two `0x8001Cxxx` entries. A full
+acquisition, guide and viewing run reaches neither one.
+
+The same run carries a live positive control at the demux driver's configuration entry
+`0x80002E04`. The DVB/SI match-list routine at `0x800A915C` reaches the channel driver at
+`0x8001C908`, which calls the configurator from `0x8001C9F2` with a 36-byte configuration at
+`0x80110FE4` whose
+first halfword is PID `0x0012` and whose match word is the one-bit present/following EIT rule. The
+other calls configure the already established SI PIDs. Thus the service transition does execute
+its input setup and creates exactly the EIT section path already visible in the registers; it never
+creates a hidden PES configuration and never reaches the audio driver. The missing prerequisite is
+above both drivers and above this generic SI-filter machinery, in the service setup that decides
+which paths to create.
+
+Following that decision reaches a concrete lifecycle gate. O-code at `0x9FC6A73C` calls native
+`(7,0x07)` to create the viewed service and then `0x9FC6A957` calls native `(7,0x04)` to resolve it.
+The resulting type-13 object at `0x802B0840` contains service handle `0x0BB9`; its constructor
+`0x800AF49C` writes lifecycle state **4** at object `+0x0C`. The resolver's lock routine
+`0x800AE014` returns that state and only promotes **6 to 7**. Native `(7,0x04)` therefore returns
+without service details, and the o-code skips the playback setup. Across the complete acquisition,
+guide and viewing run, `0x800AF50C` is the only writer of that lifecycle word. No audio
+configuration or start entry executes.
+
+The code that can supply state 6 is equally specific. Completion callbacks `0x800A9C5C` and
+`0x800A9F70` walk the manager's linked service objects and change states 4 or 5 to 6. Their only
+registrations are in `0x800A9D9C` and `0x800AA0C8`, reached respectively at the ends of the
+firmware's table-0 and table-1 parsers (`0x800AFE50` and `0x800AFF1C`). The common SI callback
+`0x800ABB2C` passes completed section buffers to dispatcher `0x800AFD74`; a live trace sees real
+`0x40` NIT, `0x42` SDT, `0x4A` BAT and `0x73` TOT bytes at that boundary before and during viewing,
+but never table 0 or table 1. Neither completion callback runs, so the object remains at 4.
+
+This refines, rather than invalidates, the earlier negative PAT experiment. The ordinary
+application section-filter census still shows no PID 0 or PID 1 subscription, and `Demux.Push` must
+drop either before the guest sees it. The ROM briefly programs low transport channels 0 and 1 in
+its self-test; application initialisation then writes `0x1FFF` to all thirty-two PID channels and
+does not restore either low channel when a service is selected. The firmware demonstrably waits on
+its PAT/CAT manager, but the measured run has not yet established the hardware route by which a
+tuned transport should update that manager. Directly injecting either table or writing state 6
+would bypass the missing emulation and is not evidence. The remaining question is the real
+transport input path that feeds the already-executed SI callback after tuning.
+
+## The transport enable is guest state, and the ROM PSI window does not reach the application
+
+<!-- anchor: internal/device/demux/transport.go -->
+<!-- anchor: internal/multiplex/firmwaretests/bootpsi_firmware_test.go -->
+<!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
+<!-- fingerprint: sha256:930030decae1c58a4bf57dde7cb0fbc47543f0c5cdbc67c25c5e3b619ee16357 @ 2026-09-24 -->
+
+**Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
+instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
+bit per filter pair and writes it back. Returning zero from that read made each operation erase bit
+0, so the model itself disabled transport packets. The register now reads back its stored value,
+and the production multiplex carries every section as 188-byte TS packets through the guest's PID
+channels and match units. The real-firmware programme acquisition completes at instruction
+44,022,782 after seventeen serial title sections, with a 120-million-instruction stall ceiling.
+
+The cold ROM window was then measured without conflating it with the application. Channels 0 and 1
+are written as `0x00014000` and `0x00014001`; match-unit word 8 binds unit 0 to channel 0 and unit 1
+to channel 1; the remaining match words are programmed by ROM and the transport enable is set. At
+application initialisation, `0x80004FA6..0x80004FEC` writes `0x1FFF` to all thirty-two PID channels
+and clears the match state. A continuous application census through 700 million instructions opens
+only `0x10`, `0x11`, `0x14` and `0x52`. The old statement that acquisition transiently opens PID 0
+was a ROM/application conflation and is withdrawn.
+
+Sending a standards-shaped PAT and CAT as real TS packets once in the ROM window, then repeating
+them 47 times until immediately before application demux initialisation, produces the same result:
+the application demux-init PC executes, but parsers `0x800AFE50`/`0x800AFF1C` and completion
+callbacks `0x800A9C5C`/`0x800A9F70` execute zero times. The ROM ring is not the missing handoff.
+
+A debugger-only control promoted the viewed-service word from 4 to 6 after construction. This is
+not product behavior and changes no conclusion about the required input. It proves that state alone
+is insufficient: the resolver proceeds, but the firmware still makes zero calls to audio configure,
+or start entries (`0x8001C604`, `0x8001C6C8`). All sixteen
+match units were dumped after the experiment. The only service-specific request remains unit 4,
+`4E/FE 00/FF 64/FF`, routed to PID `0x0012`; there is still no PMT, audio PID or video PID. The
+PAT/CAT managers must populate service data as well as promote the lifecycle, so forcing the state
+cannot stand in for their input.
+
+The static SI initialisation table at `0x801019C0` is the next concrete lead. Its nine twelve-byte
+records include table identifiers 0 and 1 alongside the already working NIT/SDT/EIT paths, even
+though neither appears in the general PID-channel census. That points to a fixed PSI delivery path
+inside the demux host interface rather than an application-created general filter. The next probe
+must trace those two fixed registrations from `0x800AB740` through their completion entry, using a
+working NIT/SDT callback as the positive control, before adding any hardware behavior.
+
+That trace has now reached the demux driver's logical-channel assignment. At instruction 65,544,025
+on a warm boot, `0x800A7F5C` calls `0x8001CEF8` six times:
+
+    logical channel 33 <- PID 0000
+    logical channel 31 <- PID 0010
+    logical channel 30 <- PID 0011
+    logical channel 29 <- PID 0012
+    logical channel 28 <- PID 0001
+    logical channel 27 <- PID 0014
+
+So the application does record PAT and CAT PIDs after all; the earlier bus census saw only the
+subset subsequently activated in the hardware registers. This is not permission to manufacture a
+PID-0 write. It narrows the missing behavior to the driver's activation step between its internal
+`0x264`-byte logical-channel records and the physical PID/match registers. The next trace starts at
+`0x800A7DA8`, which sorts those records and applies flags `0x2000/0x4000/0x8000`, and compares a
+working NIT record with the dormant PAT and CAT records at the call to `0x8001CEF8`.
+
+The comparison now has both sides. The six static descriptors and their logical channels are:
+
+    PID 0000  flags 0200  logical 33   PAT   remains inactive
+    PID 0010  flags 0800  logical 31   NIT   activates physical channel 24
+    PID 0011  flags 2004  logical 30   SDT   activates physical channel 23
+    PID 0012  flags 8000  logical 29   EIT   remains inactive until a service is viewed
+    PID 0001  flags 0800  logical 28   CAT   remains inactive
+    PID 0014  flags 0200  logical 27   time  activates physical channel 22
+
+The equality of PAT/time and CAT/NIT flags rules out the descriptor flag itself as the selector.
+`0x8001CEF8` only stores the PID at record `+0x60`; it activates channels 0 and 1 only, which are
+the special audio/video paths. The general section-channel activation is a later call to
+`0x8001C908(channel,1)` from `0x800A9198`. In the measured initialisation it is called only for
+logical channels 31, 30 and 27. Those calls set record byte `+1`, construct the hardware request
+at `+0x3C`, and produce the three physical writes above. No equivalent call is made for PAT or CAT.
+
+This is a firmware selection, not a transport-routing failure and not licence to force PID 0 or 1
+into a general filter. PAT's logical channel number 33 also sits outside the 32 physical section
+rings. Any real delivery route for the fixed PSI must therefore be found in the demux host
+interface or its section manager rather than manufactured by treating the dormant records as
+ordinary armed filters. The next discriminating experiment is to trace the inputs to
+`0x800A915C`, whose successful branch is the one that calls `0x8001C908`, and identify whether the
+fixed PSI is consumed through another ingress or is waiting for a measured manager event.
+
+That input trace rules out an omitted ordinary activation call. The firmware registers group 1
+indices 0 through 8 with PIDs `0, 0x1FFF, 0x10, 0x11, 0x11, 0x12, 1, 0x10, 0x11`; index 9 adds
+PID `0x14`. Across acquisition and selecting a service, every actual call to `0x800A915C` was:
+
+    group 1  index 7       fixed NIT filter
+    group 1  index 8       fixed SDT filter
+    group 1  index 9       time filter
+    group 1  index 3       acquisition SDT/BAT filter
+    group 1  index 5       viewing EIT filter
+    group 2  indices 0..11 the other manager's complete bank
+
+Group 1 index 0 (PAT), index 1 (PMT) and index 6 (CAT) are never requested. This was measured at
+the manager entry and from the list words it consumes, including the viewing-only call; it is not
+an inference from the physical PID registers. The helper routines confirm their intended shapes:
+`0x800B0F2C` installs the unconstrained PAT index, `0x800B0F8C` installs a table-2 PMT match, and
+`0x800B1064` installs a table-1 CAT match. None executes in the measured run. Treating logical
+channel 33 as an ordinary channel and substituting it at the later `0x8001C908` call cannot test
+this: by then the match manager has already built the NIT rule, so the resulting PID-0 channel
+correctly rejects a table-0 section. That debugger experiment was removed rather than retained as
+misleading evidence.
+
+The NDS filters are now measured independently. The conditional-access driver reserves physical
+channels 25 through 31: one EMM channel and six ECM channels. All seven are deliberately configured
+with PID `0x1FFF`; the ECM records have notification ids `0x1A..0x1F` and route masks
+`0x04000000..0x80000000`. No later PID assignment occurs through 90 million instructions, and the
+ordinary SI PIDs remain the only armed non-null inputs. This is the shape expected before CAT and
+PMT have supplied EMM and ECM PIDs, so inventing either value would only move the unanswered
+question downstream.
+
+The byte at `0x80106220` is also no longer evidence that NDS is blocked on a section. A write trace
+shows NDS init set it to 1 at instruction 23,460,709 and clear it to 0 at 46,265,375; the EMM/ECM
+filter reservation happens later, around 55 million. No call to the front-end command routine
+`0x80032D0C` occurs in the same 90-million-instruction window. The earlier statement that a
+steady-state zero proves the NDS module is waiting for SI is therefore withdrawn: it is an init
+lifetime flag in this run, and the missing tuner request must be found at its caller rather than
+deduced from that byte.
+
+The fixed-PSI subscriber gate is now named too. Both the PAT starter `0x800A9D9C` and CAT starter
+`0x800AA0C8` test bit 1 of the parser status word at `0x80107064`; accepted SI drives that word
+through `0 -> 1 -> 3`, so the bit is present in the running firmware. It is a transient result from
+the common SI update path, not an always-false configuration flag. The starters still do not run.
+
+A fresh over-air SI version after selecting the channel does not change that. The test edits the
+file-backed line-up, lets the production transmitter detect it and bump its version, and delivers
+the rebuilt NIT, SDT and BAT as ordinary TS packets. The firmware reopens group 1 indices 3 and 5
+and refreshes the group 2 bank repeatedly, but still makes zero calls to the PAT, PMT or CAT
+subscription helpers, their parsers and completion callbacks, or the audio configuration/start
+path. Thus a stale cached SI version is not the missing trigger.
+
+Static reading explains what would request the dormant paths without authorising it. Native
+resolver `0x800AD928` calls the PAT helper when an API request of kind 0 creates or revives its
+object, and calls the CAT helper for kind 3. The measured channel-view route instead asks native
+module 7 to create a type-13 event object for the programme banner; no kind-0 or kind-3 request is
+made. The next trace belongs at the application event which should initiate tuning. In particular,
+the no-signal work already proved that the visible banner is selected by a module-1 window event
+and that `0x0107` is its unobserved contrast value. Finding the real producer of that event is a
+more discriminating next step than feeding dormant PSI or assigning an NDS PID.
+
+The selection-to-message trace now qualifies the last sentence. The contrast with `0x0107` does
+not identify a tuner input: the event actually reaching the handler is a module-1 window-damage
+record, so the unseen value has no device meaning from that comparison alone. A runtime walk of
+all twelve native-module tables (800 entries, with module 1's
+236-entry table as the control) instead records every application native from SELECT until the
+measured no-signal decision.
+
+The real selected-service route is exact. O-code `0x9FC6A73C` calls native `(7,0x07)` once with
+service handle `0x0BB9` and transition `9`; the MIPS dispatcher constructs the type-13 viewed
+service. The selected-service handler at `0x9FC6A8B1` runs twice, and `0x9FC6A957` calls native
+`(7,0x04)` once to resolve that object. The alternate typed-request call at `0x9FC6A8A9`, native
+`(7,0x08)`, never runs. This is measured at both the o-code fetch site and the runtime-derived
+native shim, so it is not a static unreachable-code conclusion.
+
+Eight calls do reach the underlying request resolver `0x800AD928`, all from `0x800A4260` and all
+with the same request words:
+
+    00000007 00200020 00640000 00000000
+
+The final scratch word varies as the caller reuses its frame; the stable fields are kind 7,
+network/transport `0x0020`, and service `0x0064`. There is no kind 0 or kind 3 request. Before the
+no-signal decision there are also zero frontend commands, PAT/PMT/CAT subscriber calls, audio
+configurations or audio starts. The firmware is therefore asking for
+the selected service's event data and resolving the viewed-service object, but it never makes the
+typed DVB request which would start the fixed PSI managers. That application request boundary is
+now the missing predecessor; a PAT packet, PID assignment, lifecycle write, or guessed audio stream
+would all bypass it.
+
+That last boundary changes when the input is complete. Repeating the same observation-only route
+with the present/following EIT actually on PID `0x0012` makes native `(7,0x04)` progress from
+status `2` to statuses `3` and `4`. The EIT-triggered o-code then exposes the resolved service as
+service `0x0064`, network `0x0020`, transport `0x0020` through native `(7,0x17)`. Thus EIT is a
+real prerequisite for resolving the viewed service, rather than merely banner decoration. It is
+not sufficient for playback: the audio configuration and start entries remain cold.
+
+The suspected `(7,0x08)` call is not the continuation of the normal television route. Its two
+direct callers first compare a byte copied by `(7,0x03)` with `5`; the live record contains `1`,
+written by o-code `0x9FC6A5D9`, so neither caller executes. The generic `0x0107` producer is cold
+too. Those paths must not be forced or used to justify fabricated PSI. The remaining trace starts
+from the real indirect callers of `0x8001C604` and `0x8001C6C8`, after the now-proven EIT
+resolution boundary.
+
+The post-EIT service lookup is complete too; it is not the playback gate. O-code `0x9FC9E10C`
+calls `(7,0x17)` with service/network/transport `0x0064/0x0020/0x0020`, receives status `4`, and
+therefore takes the success branch to `(7,0x18)` at `0x9FC9E132`. That query also returns status
+`4`, after which the o-code returns true. The probe records the returns at the native wrappers,
+rather than inferring success from later execution. The firmware can identify and query the
+resolved service record; what remains absent is the later request that turns that record into
+PAT/PMT/PES and decoder setup.
+
+Following that predicate to its executed return also separates UI work from playback. Its caller
+at `0x9FC9DCC3` returns through `0x9FC9DCC6`, maps a guide field, and falls into the application
+content-table scan at `0x9FC7F1F4`. The scan's count at data-segment offset `0x030F88` is zero, so
+it returns without an entry. That is the same empty guide/application registry measured elsewhere;
+it is an EIT-driven redraw path, not a transport request. Likewise, the resolved-service handler's
+field tested against values 3 and 5 is zero from its constructor and never receives a broadcast-
+driven write in this run. Zero takes the normal exit, so neither special-case arm is a missing
+tuner prerequisite.
+
+The hardware-side boundary is now direct. The front-end task at `0x80028530` is alive. During
+selection its receive wrapper `0x80028D00` returns only message code 2 while the task remains in
+state 0; that code runs an auxiliary handler and loops. The task never reaches any of the nine
+real call sites for front-end command `0x80032D0C`. More strongly, its request enqueue entry
+`0x800284D8` is cold, as are the normal request builder `0x8002F81C` and the alternate builder
+`0x800F8690`. The latter is identified by an exact function-pointer cross-reference: it constructs
+an 80-byte request and calls `0x800284D8` twice. Thus the front-end model is not swallowing or
+rejecting a tune command; no guest request is enqueued. Continue from the callers which construct
+the normal request, before PAT/PMT or audio/video decoding.
+
+The normal tune constructor now has an exact registered-device boundary. The live device-20
+`demodulator` descriptor at `0x802C1698` contains primary callback `0x80032D6D`, secondary callback
+`0x80032E35`, and state `0x800FD610`. The primary callback switches on operations 10 through 14;
+operation **12** calls `0x8002F1DC`, whose executed paths construct the front-end task request and
+call enqueue `0x800284D8`. This is an indirect callback relocated into the live registry, which is
+why a static literal-pool search for `0x80032D6D` has no caller.
+
+The selection trace observes the callback itself as well as its descendants. It receives zero calls
+through the no-signal decision, while the pinned live descriptor is the control. Thus the missing
+tune is now above the demodulator driver API: the application never sends operation 12. The generic
+registered-device sender is `0x8007E6D8`; it looks up a resource id, builds a message carrying the
+16-bit operation and payload, and submits it to the resource queue. The lower driver, tuner task,
+front-end command routine, request constructor and queue are all downstream of a call that is never
+made. The next trace must find the application owner of the demodulator request object; synthesising
+operation 12 or its request would bypass that owner and remains invalid evidence.
+
+The generic sender was then watched from the restored acquisition state through guide navigation and
+selection, not only at the demodulator callback. `0x8007E6D8` receives **zero calls** in that entire
+window. This rules out a resource-id mismatch or a message rejected between the generic API and the
+driver: the application does not attempt any registered-device send at all. The running image does
+contain the higher demodulator operation entries `0x8002FEAD`/`0x8002FF4D` at
+`0x800FD45C`/`0x800FD460`, but their registration handle at `0x80105C0C` is `0xFFFFFFFF`: that
+table is unregistered and is not a live alternate path. The physical callbacks
+`0x80032D6D`/`0x80032E35` sit at `0x800FD620`/`0x800FD624` and in the live device descriptor, whose
+handle at `0x80105C44` is device 20. The probe pins both handles so the dead table cannot become a
+lead again.
+
+There is also no contradiction in the missing retune itself. The selected service record resolves
+to service/network/transport `0x0064/0x0020/0x0020`, and acquisition has already put the receiver on
+transport `0x0020`. The absence of a demodulator request is therefore consistent with a
+same-transport service selection; it does not by itself identify the playback failure. The next
+boundary remains the audio stream interface.
+
+That interface is now located in live RAM. The registered `audio_encoder` state at `0x80105A80`
+holds the MIPS16 configuration callback `0x8001C605` at `0x80105A8C` and the
+start/stop/status callback `0x8001C6C9` at `0x80105A90`. The only other live reference to the latter
+is its own literal-pool word at `0x8001C720`; the configuration callback has no other RAM reference.
+These exact slots, rather than nearby audio names or lower shared routines, are the subjects for the
+next caller trace.
+
+The apparent second owner of the state pointer at `0x800FC358` is not a playback object. It sits in
+the static `audio_encoder` descriptor template: `0x800FC354` is the name pointer, `+8` is the state,
+`+0x0C` is mode 5, and `+0x10/+0x14` are the settings dispatcher and secondary entry. The live
+registry copies the same fields to `0x803138F0`. A restored-selection probe watches the template,
+the live state-pointer field, and the two callback slots. From SELECT through EIT resolution
+(`(7,04)` statuses `2 -> 3 -> 4`), successful `(7,17)` lookup and the no-signal decision, the guest
+reads none of them. The playback path therefore stops before resource lookup and before the audio
+interface; it is not a rejected audio configuration or start call. The stronger earlier wording
+that this excludes every audio-interface lookup is withdrawn below: initialisation registers a
+pointer to the callback pair, so later callers need not reread these descriptor fields.
+
+The byte which appeared to gate native `(7,08)` is now identified and rules that branch out. At
+o-code `0x9FC6A5BA`, native `(7,03)` writes byte `1` to its result at `0x804949AA`; the interpreter
+reads that exact byte at `0x9FC6A5CB` and copies it to the viewed-service record's `+0x88`. Native
+code `0x800AD1B8` obtains the byte from offset 2 of the service's descriptor `0x48`: the DVB
+`service_type`. The transmitter supplied the default type 1, digital television. The comparison
+with 5 therefore selects the DVB service type 5 special case; it is not the normal television
+playback gate. The real-firmware probe pins the native writer, interpreter read, value and copy so
+this branch cannot become a playback lead again. Continue from the ordinary type-1 service route;
+changing the SDT type to make `(7,08)` run would select a different service class rather than
+complete the television signal.
+
+The actual audio API above those callbacks is now named. Audio initialisation at `0x8001C5E0`
+passes the callback pair beginning at `0x80105A8C` to `0x8008890C`, which retains that pointer.
+The later wrappers are `0x80088A08` (configure, forwarding a buffer and length to callback zero),
+`0x80088970` (start, invoking callback one with operand 1), and `0x800889BC` (stop, invoking callback
+one with operand 0). A continuous census from restored acquisition through channel selection sees
+zero calls to all three wrappers. This is a firmer cold boundary than watching the original slots:
+the firmware does not make an audio request through its public audio API.
+
+The wrapper callers also locate the missing producer. All direct start/stop callers are in the
+`0x800387A0..0x80039C00` conditional-access stream glue. Its stream records hold a six-byte stream
+identity plus two one-byte classifications; records whose second classification is 1 call the
+audio start/stop wrapper. The sole external entry found so far is `0x800E8DE8`, called by
+`0x800DBF34`; that caller constructs the eight-byte identity from fields in its media object and
+passes bytes at object offsets 35 and 39 as the classifications. This does not yet prove their
+names, but it places the audio start decision downstream of creation of a real media-stream object,
+before the hardware callback. The next observation point is `0x800DBF34` and its caller at
+`0x800DB9F6`, with the audio wrapper as the live downstream control.
+
+That observation point is cold because its object does not yet exist. The owning module registers
+identifier `0x210` at `0x800DB7C0`, with event callback `0x800DB820` and object callback
+`0x800DB9CA`. The latter maps its input handle to one of twenty-eight 432-byte records, calls
+`0x800DBF34` only when record `+4` is zero and lifecycle word `+44` is not 2, then writes 2 and
+continues at `0x800DC014` after a successful adapter return. The restored machine has zero records
+with a non-zero 48-byte prefix in the pool at `0x8012B4D0`.
+
+A continuous real-firmware trace from restored acquisition through EIT resolution and channel
+selection reaches none of `0x800D5C8C` (the registered-module event dispatcher), `0x800D5D2C`
+(the registered object callback dispatcher), `0x800DB9CA`, `0x800DBF34`, `0x800E8DE8` or
+`0x800DC014`. The public audio configure/start/stop wrappers remain cold in the same run. This is
+not a rejected media object: the upstream module event which would create one is absent. Continue
+at the producer of the `0x210` module's event callback, retaining the empty pool and public audio
+wrapper census as controls; calling the object callback or constructing its record would bypass
+the missing input.
+
+The MPEG manager supplies the positive control above that cold object path. Its initialiser at
+`0x8009E9C0` installs callbacks `0x800A03B0`, `0x800A03D0`, `0x8009F878` and `0x8009F4EC` in the
+registered `mpeg` module. A normal type-1 service selection executes the first two callbacks once
+each. At `0x800A03D0`, the manager at `0x80163198` contains the selected service tuple
+network/transport/service `0x0020/0x0020/0x0064`, the frequency and symbol-rate values already
+announced by the NIT, and a pointer at `+0x128` to its six embedded component tables. Their first
+entry type bytes are all `0xFF`: the selected programme exists, but it has no video or audio
+component records. The component callbacks `0x8009F878` and `0x8009F4EC` consequently remain cold,
+as do the `0x210` callbacks and public audio API. This distinguishes a dead MPEG manager from the
+actual missing input: the manager and selected programme are live; the programme's component
+description is absent.
+
+The browser test-card prototype uses that measured `0x800A03D0` execution as its start signal. It
+does not claim that generated colour bars and a Web Audio tone are decoded guest media: they are a
+declared presentation substitute while the component input and `0x210` data path remain under
+measurement. The important boundary is nevertheless authentic—the host does not infer selection
+from a key or framebuffer hash; the firmware's own MPEG callback starts the presentation.

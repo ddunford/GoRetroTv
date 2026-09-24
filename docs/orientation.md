@@ -40,7 +40,7 @@ The words this codebase uses to mean something specific. Everything else is ordi
 
 <!-- anchor: internal/machine/handoff.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:372dda1af28cb39c7dc4d769c4e924467dc6b1c9807e2718eff30e9f7fe3f6b7 @ 2026-09-22 -->
+<!-- fingerprint: sha256:e3332f909f5cdc31e8d2145d5f1e1fc66785b8e50cc4bba9ea9746045c0ab65c @ 2026-09-24 -->
 
 ## A way to think about it
 

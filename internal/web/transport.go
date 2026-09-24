@@ -42,6 +42,7 @@ type frameData struct {
 type client struct {
 	latest chan *frameData
 	state  chan wire.StateMessage
+	media  chan wire.MediaMessage
 }
 
 // Transport broadcasts indexed OSD frames. A slow browser receives the newest
@@ -57,6 +58,30 @@ type Transport struct {
 	resets    chan struct{}
 	lastReset time.Time
 	state     *wire.StateMessage
+	media     *wire.MediaMessage
+}
+
+// PushMedia publishes the guest's measured MPEG-service selection. It carries no host control:
+// the instruction loop calls it only when the real firmware executes its MPEG callback.
+func (t *Transport) PushMedia(active bool, service string) {
+	next := wire.MediaMessage{Type: "media", Version: wire.Version, Service: service}
+	if active {
+		next.Active = 1
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.media != nil && *t.media == next {
+		return
+	}
+	t.media = &next
+	for c := range t.clients {
+		select {
+		case c.media <- next:
+		default:
+			<-c.media
+			c.media <- next
+		}
+	}
 }
 
 // PushState publishes the latest observed machine phase to current and future
@@ -210,7 +235,7 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusNormalClosure, "")
 	}()
 	conn.SetReadLimit(1024)
-	c := &client{latest: make(chan *frameData, 1), state: make(chan wire.StateMessage, 1)}
+	c := &client{latest: make(chan *frameData, 1), state: make(chan wire.StateMessage, 1), media: make(chan wire.MediaMessage, 1)}
 	t.mu.Lock()
 	t.clients[c] = struct{}{}
 	if t.latest != nil {
@@ -218,6 +243,9 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if t.state != nil {
 		c.state <- *t.state
+	}
+	if t.media != nil {
+		c.media <- *t.media
 	}
 	t.mu.Unlock()
 	defer func() {
@@ -283,6 +311,10 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		case state := <-c.state:
 			if err := writeJSON(sessionCtx, conn, state); err != nil {
+				return
+			}
+		case media := <-c.media:
+			if err := writeJSON(sessionCtx, conn, media); err != nil {
 				return
 			}
 		case pending = <-c.latest:

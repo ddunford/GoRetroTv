@@ -9,6 +9,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/cpu"
+	"github.com/ddunford/goretrotv/internal/device/audio"
 	"github.com/ddunford/goretrotv/internal/device/blitter"
 	"github.com/ddunford/goretrotv/internal/device/boardlatch"
 	"github.com/ddunford/goretrotv/internal/device/csi"
@@ -41,6 +42,7 @@ type Runtime struct {
 	IRQ       *irq.Controller
 	I2C       *i2c.Controller
 	DMA       *dma.Controller
+	Audio     *audio.Control
 	Timer     *hwtimer.Timer
 	hooks     StepHooks
 }
@@ -141,6 +143,10 @@ func New(images *firmware.Set, skyGates bool) (*Runtime, error) {
 	if err := board.Attach(dma.Base, dma.Size, r.DMA); err != nil {
 		return nil, err
 	}
+	r.Audio = audio.New()
+	if err := board.Attach(audio.Base, audio.Size, r.Audio); err != nil {
+		return nil, err
+	}
 
 	var handoff machine.Handoff
 	sky := machine.NewSkyGates(skyGates)
@@ -212,7 +218,7 @@ func (r *Runtime) StepWithHooks(hooks StepHooks) error {
 	// would be guarding against. The guard that does bite is
 	// TestStepDoesNotAllocate.
 	r.hooks = hooks
-	pump := func() error { return m.Clock.Advance(1) }
+	pump := func() error { return m.Clock.Tick() }
 	if !m.Core.HasPendingBranch() || m.Core.ISA {
 		if err := pump(); err != nil {
 			return fmt.Errorf("after %d instructions: %w", i, err)

@@ -18,6 +18,20 @@ func sampleService() Service {
 	return Service{ID: 100, Name: "Sky One"}
 }
 
+func TestCATBuildsAValidDescriptorLoop(t *testing.T) {
+	t.Parallel()
+	section, err := CAT(3, []byte{0x09, 0x04, 0x12, 0x34, 0xe1, 0x00})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if section[0] != 0x01 || dvb.MPEGCRC32(section) != 0 {
+		t.Fatalf("CAT table=%#x CRC=%#x", section[0], dvb.MPEGCRC32(section))
+	}
+	if _, err := CAT(0, []byte{0x09, 0x04, 0x12}); err == nil {
+		t.Fatal("malformed descriptor loop accepted")
+	}
+}
+
 func sampleTransport() Transport {
 	return Transport{ID: 0x20, NetworkID: 0x20, FrequencyMHz: 11778, OrbitTenths: 282,
 		SymbolRate: 27500, FEC: 2, Services: []Service{sampleService()}}

@@ -100,6 +100,33 @@ func TestTransportSendsFullThenDirtyThenPaletteRefresh(t *testing.T) {
 	}
 }
 
+func TestTransportSendsGuestSelectedMediaToCurrentAndFutureClients(t *testing.T) {
+	transport := NewTransport()
+	transport.PushMedia(true, "Test channel")
+	server := httptest.NewServer(transport)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	message := readMessage(t, conn)
+	if field[string](t, message, "type") != "media" || field[uint8](t, message, "active") != 1 ||
+		field[string](t, message, "service") != "Test channel" {
+		t.Fatalf("initial media message = %v", message)
+	}
+	transport.PushMedia(false, "")
+	message = readMessage(t, conn)
+	if field[uint8](t, message, "active") != 0 {
+		t.Fatalf("stopped media message = %v", message)
+	}
+}
+
 func TestTransportRejectsForeignBrowserOrigin(t *testing.T) {
 	server := httptest.NewServer(NewTransport())
 	defer server.Close()

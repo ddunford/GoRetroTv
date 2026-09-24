@@ -163,7 +163,7 @@ func TestEveryDescriptorTagTheGridLooksUp(t *testing.T) {
 	t.Logf("=== every descriptor tag looked up while the grid drew ===")
 	for _, tag := range tags {
 		v := byTag[tag]
-		var got []string
+		got := make([]string, 0, len(v.results))
 		for r, n := range v.results {
 			got = append(got, fmt.Sprintf("%d x%d", int32(r), n)) // #nosec G115 -- a status code
 		}

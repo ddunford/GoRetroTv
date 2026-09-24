@@ -37,6 +37,13 @@
         "reason": "string"
       }
     },
+    "media": {
+      "direction": "server",
+      "fields": {
+        "active": "uint8",
+        "service": "string"
+      }
+    },
     "key": {
       "direction": "client",
       "fields": {

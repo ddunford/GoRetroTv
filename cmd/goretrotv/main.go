@@ -163,7 +163,7 @@ func acquiredSnapshot(box *board.Runtime) (bool, error) {
 	if err := hasher.Err(); err != nil {
 		return false, err
 	}
-	return got == 0x04E99A24, nil
+	return got == 0x8B2A7E0B, nil
 }
 
 // broadcast is everything the modelled multiplex needs, loaded once and shared
@@ -204,7 +204,9 @@ type broadcastConfig struct {
 var airSchedule = bcast.Schedule{
 	ClockPeriod:  20_000_000,
 	LineupPeriod: 60_000_000,
-	TitlePeriod:  60_000_000,
+	// Title waves carry one section so the guest can drain each delivery before the next. At two
+	// million instructions the complete launch line-up turns over promptly without bursting.
+	TitlePeriod:  2_000_000,
 	IndexPeriod:  2_000_000,
 	EventPeriod:  8_000_000,
 	ClockSettle:  8_000_000,
@@ -455,6 +457,8 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	nextFrame := align(start, frameInterval)
 	nextState := align(start, stateInterval)
 	nextProgress := align(start, progressInterval)
+	mediaActive := false
+	transport.PushMedia(false, "")
 	for {
 		count := box.Machine.Retired
 		if count >= nextInput {
@@ -489,6 +493,14 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		}
 		if err := box.Step(); err != nil {
 			return stopHalt, err
+		}
+		// 0x800A03D0 is the measured MPEG service callback. Its live object names service 0x0064
+		// (Sky News) after the guest resolves and selects it; the browser media follows that guest
+		// decision rather than a host-side key or framebuffer guess.
+		if !mediaActive && box.Machine.Core.PC == 0x800A03D0 {
+			mediaActive = true
+			transport.PushMedia(true, "Test channel")
+			logger.Info("guest selected media service", "pc", "800A03D0")
 		}
 		count = box.Machine.Retired
 		if count >= nextProgress {

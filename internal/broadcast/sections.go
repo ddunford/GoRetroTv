@@ -373,13 +373,23 @@ func BAT(bouquetID uint16, version byte, name string, transports []Transport) ([
 			return nil, fmt.Errorf("broadcast: the bouquet loop leaves no room for a transport")
 		}
 		for start := 0; start < len(descriptors) || start == 0; {
-			end := min(start+budget, len(descriptors))
+			// A private_data_specifier is scoped to one descriptor loop. When one
+			// transport's private line-up spans sections, each repeated transport
+			// loop therefore needs its own namespace declaration; carrying it only
+			// in section zero makes every 0xB1 in later sections invisible to the
+			// guest even though the section itself is well formed and delivered.
+			var prefix []byte
+			if start > 0 {
+				prefix = []byte{0x5f, 4, 0x00, 0x00, 0x00, skyPrivateDataSpecifier}
+			}
+			end := min(start+budget-len(prefix), len(descriptors))
 			end = descriptorBoundary(descriptors, start, end)
 			if end == start && len(descriptors) > 0 {
 				return nil, fmt.Errorf("broadcast: transport %d has a descriptor too large for a "+
 					"section", tr.ID)
 			}
-			chunk := descriptors[start:end]
+			chunk := append([]byte{}, prefix...)
+			chunk = append(chunk, descriptors[start:end]...)
 			piece := appendU16(nil, tr.ID)
 			piece = appendU16(piece, tr.NetworkID)
 			piece = append(piece, 0xf0|byte(len(chunk)>>8), byte(len(chunk))) // #nosec G115 -- bounded by budget
@@ -790,17 +800,10 @@ type Programme struct {
 // PAT builds a programme association table (table 0x00), the root of a transport
 // stream: it says which programmes exist and where each one's map table is found.
 //
-// THIS BOX ASKS FOR IT AND HAS NEVER BEEN ANSWERED. PID 0x0000 is armed during
-// acquisition -- transiently, which is why a single sample of the demux missed it
-// and a continuous watch across a session found it -- and a section on a PID with
-// no armed filter is dropped by the hardware before any code sees it. So the PAT
-// is not a guess about what the firmware might like; it is the one table the box
-// demonstrably opens a filter for and receives nothing on.
-//
-// The layout is ISO/IEC 13818-1, which is why this can be built rather than
-// measured: phase 7's rule is not to guess a format, and this format is specified.
-// What is NOT assumed is what the box does with it -- that is measured by watching
-// which PID it arms next.
+// The layout is ISO/IEC 13818-1. The boot ROM briefly opens PID 0 during its demux
+// setup, but the application clears that channel and has not been observed opening
+// it again; callers must still establish a real guest-programmed route before a PAT
+// can be treated as an input the running application requested.
 func PAT(transportStreamID uint16, version byte, programmes []Programme) ([]byte, error) {
 	if len(programmes) == 0 {
 		return nil, fmt.Errorf("broadcast: a PAT with no programmes announces nothing")
@@ -818,6 +821,23 @@ func PAT(transportStreamID uint16, version byte, programmes []Programme) ([]byte
 		loop = appendU16(loop, 0xe000|p.MapPID)
 	}
 	return longSection(0x00, transportStreamID, version, loop)
+}
+
+// CAT builds a conditional-access table (table 0x01). Descriptors use their complete DVB TLV
+// encoding; an empty loop is valid and describes a transport with no conditional-access system.
+func CAT(version byte, descriptors []byte) ([]byte, error) {
+	for at := 0; at < len(descriptors); {
+		remaining := descriptors[at:]
+		if len(remaining) < 2 {
+			return nil, fmt.Errorf("broadcast: malformed CAT descriptor loop")
+		}
+		next := at + 2 + int(remaining[1])
+		if next > len(descriptors) {
+			return nil, fmt.Errorf("broadcast: malformed CAT descriptor loop")
+		}
+		at = next
+	}
+	return longSection(0x01, 1, version, descriptors)
 }
 
 // IndexRecord is one nine-byte entry of a table 0xC1 A-Z index section.
@@ -1063,7 +1083,7 @@ func eventRecord(event Event) ([]byte, error) {
 	record = append(record, hours, minutes, remainder)
 	// running_status, then free_CA_mode clear -- nothing this port broadcasts is scrambled -- then
 	// the twelve-bit descriptor loop length.
-	record = append(record, event.Running<<5|byte(len(descriptors)>>8), byte(len(descriptors)))
+	record = append(record, event.Running<<5|byte((len(descriptors)>>8)&0xff), byte(len(descriptors)&0xff))
 	return append(record, descriptors...), nil
 }
 

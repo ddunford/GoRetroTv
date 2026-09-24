@@ -14,7 +14,7 @@ read-only mounts; neither is in the build context or published image.
 ## Start and verify
 
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:2354998bdaf4f513fd9a6d494b1035e8336e6b66ef746f2d70b176f7a2b82d8e @ 2026-09-22 -->
+<!-- fingerprint: sha256:a8a5c43ff5fffcdba834a3bd79b0507237b1c9fc9199c281d139c2e9674a87d3 @ 2026-09-24 -->
 
 From the repository owner account, with the private firmware files and
 `snapshots/post-acquisition.snapshot` present:
@@ -87,7 +87,7 @@ The public overlay publishes no host port, and the runtime image contains only `
 ## Stop or roll back
 
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:2354998bdaf4f513fd9a6d494b1035e8336e6b66ef746f2d70b176f7a2b82d8e @ 2026-09-22 -->
+<!-- fingerprint: sha256:a8a5c43ff5fffcdba834a3bd79b0507237b1c9fc9199c281d139c2e9674a87d3 @ 2026-09-24 -->
 
 `./ctl.sh down-public` removes the route and container while preserving the private files. To
 restore a previous release, check out that release and run `./ctl.sh up-public`; the firmware and

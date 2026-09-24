@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/ddunford/goretrotv/internal/bus"
-	"github.com/ddunford/goretrotv/internal/dvb"
 )
 
 const (
@@ -57,8 +56,13 @@ func (d *Demux) pushTransportPacket(packet []byte) error {
 			return fmt.Errorf("demux: invalid adaptation length")
 		}
 	}
-	for channel := uint8(0); channel < 2; channel++ {
-		if !d.pidWritten[channel] || d.pidChannels[channel]&0x1fff != uint32(pid) || d.matchWords[channel][8]&(1<<channel) == 0 {
+	for channel := uint8(0); channel < FilterCount; channel++ {
+		if !d.pidWritten[channel] || d.pidChannels[channel]&0x1fff != uint32(pid) {
+			continue
+		}
+		applicationRoute := d.enable[2]&(1<<channel) != 0
+		romRoute := channel < 2 && d.matchWords[channel][8]&(1<<channel) != 0
+		if !applicationRoute && !romRoute {
 			continue
 		}
 		payload := packet[pos:]
@@ -132,9 +136,34 @@ func (d *Demux) continueTransport(channel uint8, payload []byte) error {
 }
 
 func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
-	if dvb.MPEGCRC32(section) != 0 {
+	if err := validateSection(section); err != nil {
+		return nil //nolint:nilerr // hardware silently drops malformed transport sections
+	}
+	if channel < 2 && d.enable[2]&(1<<channel) == 0 &&
+		d.matchWords[channel][8]&(1<<channel) != 0 {
+		return d.acceptROMTransportSection(channel, section)
+	}
+	routed := false
+	for unit := uint8(0); unit < 16; unit++ {
+		if d.matchWords[unit][9]&(uint32(1)<<channel) == 0 {
+			continue
+		}
+		routed = true
+		if d.sectionMatches(unit, section) {
+			return d.pushFilter(channel, section)
+		}
+	}
+	if routed {
 		return nil
 	}
+	return d.pushFilter(channel, section)
+}
+
+// acceptROMTransportSection implements the boot ROM's two temporary PSI channels. The ROM binds
+// unit 0 to channel 0 and unit 1 to channel 1 in match word 8, but does not use the application's
+// channel-enable register or section rings. It instead programs four indirect words per channel
+// and polls the write pointer in the shared transport RAM.
+func (d *Demux) acceptROMTransportSection(channel uint8, section []byte) error {
 	for i, offset := range [...]int{0, 3, 4} {
 		word := d.matchWords[0][i]
 		if channel == 1 {
@@ -147,13 +176,15 @@ func (d *Demux) acceptTransportSection(channel uint8, section []byte) error {
 	}
 	start, end := d.indirect[uint32(channel)*4], d.indirect[uint32(channel)*4+3]
 	ptr := d.writePointer[channel]
-	if ptr < start || uint64(ptr)+uint64(len(section))+1 > uint64(end)+1 || uint64(ptr)+uint64(len(section))+1 > 0x1fffff || uint64(transportRAMOffset)+uint64(ptr)+uint64(len(section))+1 > uint64(d.ram.Size()) {
-		return fmt.Errorf("demux: transport section exceeds configured ring")
+	if ptr < start || uint64(ptr)+uint64(len(section))+1 > uint64(end)+1 ||
+		uint64(ptr)+uint64(len(section))+1 > 0x1fffff ||
+		uint64(transportRAMOffset)+uint64(ptr)+uint64(len(section))+1 > uint64(d.ram.Size()) {
+		return fmt.Errorf("demux: ROM transport section exceeds configured ring")
 	}
 	for i, b := range section {
-		d.ram.Write(transportRAMOffset+ptr+uint32(i), bus.Byte, uint32(b)) // #nosec G115 -- section length bounded above.
+		d.ram.Write(transportRAMOffset+ptr+uint32(i), bus.Byte, uint32(b)) // #nosec G115 -- bounded above.
 	}
-	d.ram.Write(transportRAMOffset+ptr+uint32(len(section)), bus.Byte, uint32(channel)) // #nosec G115 -- length and channel bounded above.
-	d.writePointer[channel] += uint32(len(section)) + 1                                 // #nosec G115 -- checked against ring limit above.
+	d.ram.Write(transportRAMOffset+ptr+uint32(len(section)), bus.Byte, uint32(channel)) // #nosec G115 -- bounded above.
+	d.writePointer[channel] += uint32(len(section)) + 1                                 // #nosec G115 -- checked above.
 	return nil
 }

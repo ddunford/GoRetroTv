@@ -163,7 +163,8 @@ func sizeBytes(size bus.Size) int {
 		return 1
 	case bus.Half:
 		return 2
-	default:
+	case bus.Word:
 		return 4
 	}
+	return 0
 }

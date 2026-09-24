@@ -35,9 +35,42 @@ func (d *Demux) Push(pid uint16, section []byte) error {
 			d.pidChannels[filter]&0x1fff != uint32(pid) {
 			continue
 		}
+		routed := false
+		for unit := uint8(0); unit < 16; unit++ {
+			if d.matchWords[unit][9]&(uint32(1)<<filter) == 0 {
+				continue
+			}
+			routed = true
+			if d.sectionMatches(unit, section) {
+				return d.pushFilter(filter, section)
+			}
+		}
+		if routed {
+			return nil // The PID arrived, but the hardware match units dropped this section.
+		}
 		return d.pushFilter(filter, section)
 	}
 	return fmt.Errorf("demux: no armed filter requested PID %#x", pid)
+}
+
+func (d *Demux) sectionMatches(unit uint8, section []byte) bool {
+	// Match index 0 is table_id. The section_length bytes at section[1:3] are skipped, so the
+	// remaining match indices continue at table_id_extension in section[3]. Index 9 is the
+	// routing matrix rather than a byte rule.
+	for index := uint8(0); index < 9; index++ {
+		rule, _ := d.Match(unit, index)
+		if rule.Mask == 0 {
+			continue
+		}
+		offset := int(index)
+		if index > 0 {
+			offset += 2
+		}
+		if offset >= len(section) || section[offset]&rule.Mask != rule.Value&rule.Mask {
+			return false
+		}
+	}
+	return true
 }
 
 func validateSection(section []byte) error {

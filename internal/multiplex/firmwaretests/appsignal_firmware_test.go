@@ -14,9 +14,11 @@ import (
 // "an OpenTV flow always contains a directory module, which is automatically
 // downloaded (before any other module) by a STB when an application is
 // signalled in the programme stream" (Fagerqvist & Marcussen, LTU 2000:075,
-// sections 3.3-3.6). We signal no application anywhere, and every carousel-side
-// function in this box is cold: 0x800BECF0, the Huffman decompressor, has never
-// executed once and is the cleanest marker that a module was accepted.
+// sections 3.3-3.6). We signal no application anywhere. The later firmware
+// trace established that this box runs its EPG from flash and never calls
+// getCodeModule at 0x8008E7C8; that is the application-module marker.
+// 0x800BECF0 is not one: the same Huffman decoder also expands ordinary title
+// and 0xB2 guide-row text, and those paths now execute in the shipped signal.
 //
 // On a standard DVB receiver an application is signalled in the service's PMT,
 // which the receiver finds through the PAT on PID 0x00. WE BROADCAST NEITHER.

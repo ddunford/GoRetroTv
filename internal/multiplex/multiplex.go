@@ -6,6 +6,7 @@ import (
 
 	"github.com/ddunford/goretrotv/internal/board"
 	"github.com/ddunford/goretrotv/internal/broadcast"
+	"github.com/ddunford/goretrotv/internal/dvb"
 )
 
 // The transmitter.
@@ -55,12 +56,17 @@ type Multiplex struct {
 	// indexCursor is which letter the next index wave carries. The A-Z index goes out one letter
 	// at a time, so the transmitter has to remember where it had got to.
 	indexCursor int
+	// titleCursor is which title section the next title wave carries. The demux can admit a large
+	// set of channel extensions with one match unit, but the guest still has to drain each admitted
+	// section before another overwrites its delivery slot.
+	titleCursor int
 	// indexVersion is bumped once per full pass of the alphabet so each pass is a fresh delivery
 	// rather than a repeat the guest deduplicates away.
 	indexVersion byte
 	// eventVersion is bumped every present/following wave. Unlike the line-up, what is on now
 	// changes with the clock, so a frozen version would freeze the box's idea of what is on.
 	eventVersion byte
+	continuity   map[uint16]byte
 
 	// lastSubscriptionErr is remembered so the driver can report a box that
 	// stopped asking, without logging the same line thousands of times.
@@ -170,7 +176,8 @@ func New(box *board.Runtime, guide *Guide, dict *broadcast.HuffmanDictionary,
 	case clock == nil:
 		return nil, fmt.Errorf("multiplex: no in-world clock, so the broadcast has no date to claim")
 	}
-	m := &Multiplex{box: box, guide: guide, dict: dict, clock: clock, version: 1}
+	m := &Multiplex{box: box, guide: guide, dict: dict, clock: clock, version: 1,
+		continuity: make(map[uint16]byte)}
 	source := broadcast.Source{
 		Clock:  m.clockWave,
 		Lineup: m.lineupWave,
@@ -263,7 +270,9 @@ func (m *Multiplex) Pump(now uint64) error {
 		return err
 	}
 	for _, emission := range wave {
-		if err := m.box.Demux.Push(emission.PID, emission.Section); err != nil {
+		packets := dvb.PacketizeSection(emission.PID, emission.Section, m.continuity[emission.PID])
+		m.continuity[emission.PID] = (m.continuity[emission.PID] + byte((len(packets)/188)&0xff)) & 0x0f
+		if err := m.box.Demux.PushTransport(packets); err != nil {
 			return fmt.Errorf("multiplex: transmit on PID %#02x: %w", emission.PID, err)
 		}
 	}
@@ -541,6 +550,13 @@ func (m *Multiplex) titleWave(uint64) ([]broadcast.Emission, error) {
 	}
 	wave = append(wave, tomorrow...)
 	if len(wave) > 0 {
+		// ONE TITLE SECTION PER WAVE. Pump delivers every emission in a wave without running a guest
+		// instruction between them. A six-channel fixture hid that distinction; the launch line-up
+		// exposed it when a burst of 83 sections left only 23 programmes in the guest store. A real
+		// carousel serialises sections, and the A-Z rung already follows the same measured rule.
+		section := wave[m.titleCursor%len(wave)]
+		m.titleCursor = (m.titleCursor + 1) % len(wave)
+		wave = []broadcast.Emission{section}
 		m.sent.Titles++
 	}
 	return wave, nil
@@ -797,6 +813,10 @@ const (
 // no records, because a section that announces nothing is indistinguishable at the screen from one
 // that never arrived.
 func (m *Multiplex) indexWave(uint64) ([]broadcast.Emission, error) {
+	sub, asking := m.subscription()
+	if !asking || !sub.IndexArmed {
+		return nil, nil
+	}
 	listings := m.listings()
 	if listings == nil || len(listings.Services) == 0 {
 		return nil, nil
@@ -806,6 +826,14 @@ func (m *Multiplex) indexWave(uint64) ([]broadcast.Emission, error) {
 		service := &listings.Services[i]
 		for n := range service.Programmes {
 			programme := &service.Programmes[n]
+			// This literal is the schedule's explicit statement that no programme has been
+			// reconstructed. It keeps the grid populated honestly, but it is not a programme title
+			// and must not be advertised four times per channel in ALL PROGRAMMES A-Z. Besides making
+			// that search useless, 68 channels would turn the L index into an invalid oversized DVB
+			// section. Real reconstructed titles continue through the ordinary signal path below.
+			if programme.Title == "Listings not yet reconstructed" {
+				continue
+			}
 			letter, ok := indexInitial(programme.Title)
 			if !ok {
 				continue

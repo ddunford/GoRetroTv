@@ -211,3 +211,6 @@ Three other things wear the same hat and are real:
 - **Pin the screen you select FROM, not the one you land on**, whenever the destination is the thing
   under test. ALL PROGRAMMES A-Z opens empty with no index and already filled with one, so pinning
   it cost a run; the category menu before it is stable.
+### Continue means pursue the visible outcome
+
+When the owner says to keep going toward test video and audio on a channel, an investigation boundary is not a handoff boundary. Keep the bead active and continue through the measured implementation and browser proof; do not offer to stop merely because the next missing predecessor has been identified.

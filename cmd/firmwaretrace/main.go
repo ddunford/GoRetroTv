@@ -13,6 +13,7 @@ import (
 	"github.com/ddunford/goretrotv/internal/bus"
 	"github.com/ddunford/goretrotv/internal/device/csi"
 	"github.com/ddunford/goretrotv/internal/device/demux"
+	"github.com/ddunford/goretrotv/internal/dvb"
 	"github.com/ddunford/goretrotv/internal/firmware"
 	"github.com/ddunford/goretrotv/internal/gdbstub"
 	"github.com/ddunford/goretrotv/internal/platform/instrument"
@@ -31,6 +32,7 @@ func run() error {
 	var histogramRanges, readRanges, writeRanges instrumentRanges
 	var histogramControls, callTargets pcHits
 	var sections sectionInputs
+	sectionContinuity := make(map[uint16]byte)
 	dir := flag.String("firmware", "firmware", "verified firmware directory")
 	steps := flag.Uint64("steps", 100000, "maximum retired instructions")
 	interval := flag.Uint64("interval", 1000, "instructions between checkpoints")
@@ -351,7 +353,9 @@ func run() error {
 				if err != nil {
 					return err
 				}
-				if err := sectionDemux.Push(event.PID, bytes); err != nil {
+				packets := dvb.PacketizeSection(event.PID, bytes, sectionContinuity[event.PID])
+				sectionContinuity[event.PID] = (sectionContinuity[event.PID] + byte((len(packets)/188)&0xff)) & 0x0f
+				if err := sectionDemux.PushTransport(packets); err != nil {
 					return fmt.Errorf("recorded section after %d guest instructions: %w", i, err)
 				}
 			}
@@ -370,10 +374,13 @@ func run() error {
 				}
 			}
 			section := sections[nextSection]
-			if err := sectionDemux.Push(section.pid, section.bytes); err != nil {
+			packets := dvb.PacketizeSection(section.pid, section.bytes, sectionContinuity[section.pid])
+			sectionContinuity[section.pid] = (sectionContinuity[section.pid] + byte((len(packets)/188)&0xff)) & 0x0f
+			if err := sectionDemux.PushTransport(packets); err != nil {
 				return fmt.Errorf("section delivery after %d guest instructions: %w", i, err)
 			}
-			fmt.Fprintf(os.Stderr, "section-inject icount=%d pid=%s bytes=%d\n", i, wireHalf(section.pid), len(section.bytes))
+			fmt.Fprintf(os.Stderr, "section-on-wire icount=%d pid=%s section-bytes=%d packets=%d\n",
+				i, wireHalf(section.pid), len(section.bytes), len(packets)/188)
 			nextSection++
 		}
 		if err := advance(i, nil); err != nil {

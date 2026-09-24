@@ -38,7 +38,7 @@ been sufficient.
 
 <!-- anchor: go.mod -->
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:3c32887eea1f4472d96b89ee894a64102528f6cff65a4227d6c77f4576dd1df1 @ 2026-09-22 -->
+<!-- fingerprint: sha256:12ecafdeb0e16a55f337bae2080aa18f230120cc3f0cef41dff3c6ac3e03d80c @ 2026-09-24 -->
 
 **One module at the repository root** (`github.com/ddunford/goretrotv`, lowercased from the git
 remote), with binaries under `cmd/` sharing `internal/`. The `cmd/` shape rather than the root shape
@@ -77,7 +77,7 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 <!-- anchor: internal/wire/wire.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:18124d1bf4d96aeb2c9aa367f1f55df119f8b05836495dc2d360eeaab427d04c @ 2026-09-22 -->
+<!-- fingerprint: sha256:ad39d88e895448da3b332d2e8a9cddd917937d8f642c65b56d431963777a1c71 @ 2026-09-24 -->
 
 The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
 Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt

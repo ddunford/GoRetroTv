@@ -2,15 +2,17 @@ import { decodeServerMessage, encodeKeyMessage, encodeResetMessage } from './wir
 import { describeScreen, unknownScreen } from './screen.js';
 
 const canvasNode = document.querySelector<HTMLCanvasElement>('#screen');
+const programmeNode = document.querySelector<HTMLCanvasElement>('#programme');
 const statusNode = document.querySelector<HTMLElement>('#box-status');
 const feedbackNode = document.querySelector<HTMLElement>('#key-feedback');
 const resetNode = document.querySelector<HTMLButtonElement>('#reset-box');
 const resetFeedbackNode = document.querySelector<HTMLElement>('#reset-feedback');
 const keys = Array.from(document.querySelectorAll<HTMLButtonElement>('#handset button[data-raw]'));
-if (!canvasNode || !statusNode || !feedbackNode || !resetNode || !resetFeedbackNode) {
+if (!canvasNode || !programmeNode || !statusNode || !feedbackNode || !resetNode || !resetFeedbackNode) {
   throw new Error('Digibox page is missing its screen, status, handset feedback, or reset control');
 }
 const canvas: HTMLCanvasElement = canvasNode;
+const programme: HTMLCanvasElement = programmeNode;
 const statusLine: HTMLElement = statusNode;
 const keyFeedback: HTMLElement = feedbackNode;
 const resetButton: HTMLButtonElement = resetNode;
@@ -19,11 +21,14 @@ const resetFeedback: HTMLElement = resetFeedbackNode;
 // Mirrors the server's own minimum gap between restores, so the page never
 // sends a reset the host would silently fold into the previous one.
 const resetCooldown = 3000;
-const drawingContext = canvas.getContext('2d', { alpha: false });
+const drawingContext = canvas.getContext('2d');
 if (!drawingContext) {
   throw new Error('This browser cannot display the Digibox framebuffer');
 }
 const context: CanvasRenderingContext2D = drawingContext;
+const programmeDrawingContext = programme.getContext('2d');
+if (!programmeDrawingContext) throw new Error('This browser cannot display the test channel');
+const programmeContext: CanvasRenderingContext2D = programmeDrawingContext;
 
 const width = canvas.width;
 const height = canvas.height;
@@ -41,6 +46,49 @@ let haltReason = '';
 let screenRevision = 0;
 let resetPending = false;
 let resetTimer: ReturnType<typeof setTimeout> | null = null;
+let mediaActive = false;
+let audioContext: AudioContext | null = null;
+let toneGain: GainNode | null = null;
+
+function ensureAudio(): void {
+  if (!audioContext) {
+    audioContext = new AudioContext();
+    const oscillator = audioContext.createOscillator();
+    toneGain = audioContext.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = 440;
+    toneGain.gain.value = mediaActive ? 0.055 : 0;
+    oscillator.connect(toneGain).connect(audioContext.destination);
+    oscillator.start();
+    audioContext.addEventListener('statechange', () => {
+      document.body.dataset.audio = audioContext?.state || 'closed';
+    });
+  }
+  document.body.dataset.audio = audioContext.state;
+  if (audioContext.state === 'suspended') void audioContext.resume().then(() => {
+    document.body.dataset.audio = audioContext?.state || 'closed';
+  });
+}
+
+function drawProgramme(now: number): void {
+  const bars = ['#f4f4f4', '#e5e53d', '#32d8d8', '#45d34d', '#d946d9', '#df4141', '#3e4bd8'];
+  const barWidth = programme.width / bars.length;
+  for (let i = 0; i < bars.length; i++) {
+    programmeContext.fillStyle = bars[i];
+    programmeContext.fillRect(i * barWidth, 0, Math.ceil(barWidth), programme.height * 0.72);
+  }
+  programmeContext.fillStyle = '#10141b';
+  programmeContext.fillRect(0, programme.height * 0.72, programme.width, programme.height * 0.28);
+  const x = (now / 7) % (programme.width + 180) - 180;
+  programmeContext.fillStyle = '#fff';
+  programmeContext.fillRect(x, programme.height * 0.77, 180, 12);
+  programmeContext.font = 'bold 34px system-ui, sans-serif';
+  programmeContext.fillText('GORETROTV TEST CHANNEL', 42, programme.height - 62);
+  programmeContext.font = '22px ui-monospace, monospace';
+  programmeContext.fillText(new Date().toISOString().slice(11, 19) + ' UTC', 42, programme.height - 25);
+  requestAnimationFrame(drawProgramme);
+}
+requestAnimationFrame(drawProgramme);
 
 function setKeysEnabled(enabled: boolean): void {
   for (const key of keys) key.disabled = !enabled;
@@ -88,7 +136,8 @@ function paint(x: number, y: number, w: number, h: number): void {
       image.data[target] = palette[source];
       image.data[target + 1] = palette[source + 1];
       image.data[target + 2] = palette[source + 2];
-      image.data[target + 3] = 255;
+      image.data[target + 3] = mediaActive && palette[source] === 0 &&
+        palette[source + 1] === 5 && palette[source + 2] === 69 ? 0 : 255;
     }
   }
   context.putImageData(image, x, y);
@@ -96,6 +145,16 @@ function paint(x: number, y: number, w: number, h: number): void {
 
 function handleMessage(payload: string): void {
   const message = decodeServerMessage(payload);
+  if (message.type === 'media') {
+    mediaActive = message.active === 1;
+    document.body.dataset.media = mediaActive ? 'active' : 'inactive';
+    if (toneGain) toneGain.gain.value = mediaActive ? 0.055 : 0;
+    if (mediaActive) {
+      paint(0, 0, width, height);
+      showStatus('ready', `${message.service || 'Test channel'} selected — test video and audio are playing.`);
+    }
+    return;
+  }
   if (message.type === 'palette') {
     if (message.epoch !== paletteEpoch) {
       awaitingFullFrame = true;
@@ -147,6 +206,7 @@ function handleMessage(payload: string): void {
   machineReady = message.phase === 'ready';
   updateKeys();
   showStatus(message.phase, message.reason || phaseText[message.phase] || 'The box is working…');
+  if (mediaActive) showStatus('ready', 'Test channel selected — test video and audio are playing.');
   keyFeedback.textContent = ready ? 'The handset is ready.' :
     machineReady ? 'Waiting for the box to send its screen.' : 'The handset will wake when the box is ready.';
 }
@@ -236,6 +296,7 @@ for (const key of keys) {
     }
     const raw = Number(key.dataset.raw);
     socket.send(encodeKeyMessage(raw, 0));
+    ensureAudio();
     keyFeedback.textContent = `${key.getAttribute('aria-label') || key.textContent?.trim() || 'Key'} sent to the box.`;
   });
 }

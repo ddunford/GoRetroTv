@@ -112,6 +112,53 @@ func TestPushRejectsUnrequestedAndMalformedSections(t *testing.T) {
 	}
 }
 
+func TestPushAppliesMatchUnitsRoutedToThePIDChannel(t *testing.T) {
+	t.Parallel()
+	ram, err := memory.NewRAM("dram", memory.DRAMSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := New()
+	if err := d.BindRAM(ram); err != nil {
+		t.Fatal(err)
+	}
+	const channel = uint32(22)
+	d.Write(0xD8, bus.Word, 1<<channel)
+	d.Write(0x14+4*channel, bus.Word, 0x14014)
+	// Unit 5 asks for table 0x70 and explicitly routes its result to channel 22.
+	d.Write(0x148, bus.Word, 0x70ff)
+	d.Write(0x144, bus.Word, 0xc005)
+	d.Write(0x148, bus.Word, 1<<channel)
+	d.Write(0x144, bus.Word, 0xc095)
+	ring, err := ringOffset(uint8(channel))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rejected := []byte{0x71, 0x70, 0x05, 0xc3, 0x50, 0, 0, 0}
+	if err := d.Push(0x14, rejected); err != nil {
+		t.Fatalf("hardware drop returned an input error: %v", err)
+	}
+	if got := d.Read(0xB8, bus.Word); got != 0 {
+		t.Fatalf("rejected table raised completion %#x", got)
+	}
+	if got := ram.Read(ring, bus.Byte); got != 0 {
+		t.Fatalf("rejected table reached ring as %#x", got)
+	}
+
+	accepted := append([]byte(nil), rejected...)
+	accepted[0] = 0x70
+	if err := d.Push(0x14, accepted); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Read(0xB8, bus.Word); got != 1<<channel {
+		t.Fatalf("matching table completion = %#x", got)
+	}
+	if got := ram.Read(ring, bus.Byte); got != 0x70 {
+		t.Fatalf("matching table ring byte = %#x", got)
+	}
+}
+
 func TestSectionRingWrapKeepsWholeSectionTogether(t *testing.T) {
 	t.Parallel()
 	ram, err := memory.NewRAM("dram", memory.DRAMSize)

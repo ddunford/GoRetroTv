@@ -60,7 +60,7 @@ func TestWhatPutsTheBlankRowsInTheGrid(t *testing.T) {
 		if adjust != nil {
 			adjust(listings)
 		}
-		var shape []string
+		shape := make([]string, 0, len(listings.Services))
 		for _, s := range listings.Services {
 			shape = append(shape, fmt.Sprintf("%d/g%d", s.Channel, s.Genre))
 		}

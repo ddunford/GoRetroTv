@@ -80,6 +80,8 @@ func TestWhoSetsTheTypeTheGridsRowsInherit(t *testing.T) {
 		// reported thirteen writes of ZERO into a field that demonstrably reads 1.
 		width := uint32(1)
 		switch a.Size {
+		case bus.Byte:
+			// width already describes a byte access
 		case bus.Half:
 			width = 2
 		case bus.Word:

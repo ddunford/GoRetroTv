@@ -65,6 +65,11 @@ func (d *Demux) Read(off uint32, size bus.Size) uint32 {
 		word = d.enable[(reg-0xD0)/4]
 	case reg == 0x128:
 		word = d.writePointer[d.selectedFilter] & 0x1fffff
+	case reg == 0x140:
+		// The application changes the per-pair mode bits with a read-modify-write. Returning
+		// zero here made that operation erase bit 0, which the ROM and application initialization
+		// both leave set. This register is storage, unlike the command ports at +0x124/+0x144.
+		word = d.control140
 	default:
 		return 0
 	}
@@ -232,6 +237,16 @@ func (d *Demux) Match(unit, byteIndex uint8) (MatchByte, bool) {
 		word >>= 16
 	}
 	return MatchByte{Value: uint8((word >> 8) & 0xff), Mask: uint8(word & 0xff)}, true // #nosec G115 -- masked to bytes.
+}
+
+// MatchWord returns the complete value written for one match-unit index. Most indices pack the
+// byte value and mask into one halfword; routing index 9 uses the full word, so reducing it to a
+// MatchByte would discard the channel binding that diagnostic instruments need to observe.
+func (d *Demux) MatchWord(unit, byteIndex uint8) (uint32, bool) {
+	if unit >= 16 || byteIndex >= 16 {
+		return 0, false
+	}
+	return d.matchWords[unit][byteIndex], true
 }
 
 func widthMask(size bus.Size) uint32 {

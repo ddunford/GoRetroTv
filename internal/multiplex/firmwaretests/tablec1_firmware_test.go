@@ -79,7 +79,10 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 		}
 		want := programmesInTheBlock(t, guide, day)
 		registered := 0
-		if at := runUntil(t, box, transmitter, 15_000_000,
+		// Title sections are now a real serial carousel rather than one burst. Allow a complete
+		// rotation before probing C1 so this instrument measures its subject instead of timing out
+		// while the guest is still acquiring its ordinary programmes.
+		if at := runUntil(t, box, transmitter, 60_000_000,
 			registeringProgrammes(box, want, &registered)); at < 0 {
 			t.Fatalf("harness: only %d of %d programmes registered", registered, want)
 		}
@@ -115,9 +118,9 @@ func TestWhetherAnythingWantsTableC1(t *testing.T) {
 	sort.Slice(only, func(a, b int) bool { return only[a] < only[b] })
 
 	if len(only) == 0 {
-		t.Log("VERDICT: the 0xC1 section woke NOTHING. It was delivered to an armed filter and no guest")
-		t.Log("         code ran that does not run without it. Unit 10 wants a 0xC1 section, but either")
-		t.Log("         not on PID 0x52, or not with this extension, or not in this state.")
+		t.Log("VERDICT: the 0xC1 section woke NOTHING. PID 0x52 is armed, but its routed match unit")
+		t.Log("         rejects this table before the ring, so no guest code runs that does not run")
+		t.Log("         without it. The old permissive Push path made the opposite result a false positive.")
 		return
 	}
 	t.Logf("VERDICT: %d guest PCs ran ONLY when the 0xC1 section was delivered", len(only))

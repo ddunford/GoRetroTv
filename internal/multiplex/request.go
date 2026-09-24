@@ -43,6 +43,10 @@ type Subscription struct {
 	// present/following section sent before it would be refused by the demux and reported as a
 	// transmitter fault.
 	EITArmed bool
+	// IndexArmed reports whether the box currently has the OpenTV index PID armed. The guest
+	// briefly removes it while rebuilding subscriptions during menu changes; that is an ordinary
+	// receiver state in which a broadcast section passes by, not a transmitter failure.
+	IndexArmed bool
 	// ListingsPIDs are the title PIDs the box has armed, in ascending order.
 	//
 	// THERE IS USUALLY MORE THAN ONE, AND TAKING WHICHEVER CAME LAST IS A COIN
@@ -254,6 +258,9 @@ func Read(d *demux.Demux) (Subscription, error) {
 		}
 		if pid == broadcast.EventPID {
 			sub.EITArmed = true
+		}
+		if pid == indexPID {
+			sub.IndexArmed = true
 		}
 		if !standardPIDs[pid] {
 			sub.ListingsPIDs = append(sub.ListingsPIDs, pid)

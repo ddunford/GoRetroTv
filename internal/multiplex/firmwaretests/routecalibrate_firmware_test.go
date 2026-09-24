@@ -66,7 +66,8 @@ func TestWhatTheRouteToAllChannelsActuallyReaches(t *testing.T) {
 	// the SERVICES menu and finally SERVICES' own HELP INFORMATION page. So the TV GUIDE menu is
 	// ONE LEFT from box office; route_test.go's second LEFT was compensating for the first press
 	// being read mid-paint, and with the paint tail it walks straight past the menu it wanted.
-	seen := []uint32{walk(keyBoxOffice, "boxoffice"), walk(keyLeft, "left1")}
+	seen := make([]uint32, 0, 4)
+	seen = append(seen, walk(keyBoxOffice, "boxoffice"), walk(keyLeft, "left1"))
 	seen = append(seen, walk(keySelect, "select"))
 	// THE GRID OPENS ON "SEARCHING FOR LISTINGS" and fills afterwards, so the screen a press
 	// returns is not the screen a probe wants to measure. Give it time and photograph both.

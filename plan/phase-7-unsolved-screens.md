@@ -14,7 +14,7 @@ rule for this phase: **do not guess a format** — let the box name what it want
 
 ## Tasks (mirror — bd epic `gort-qxl` is the source of truth; never hand-ticked)
 
-- [ ] `TASK-7.1` **Premise corrected 2026-09-22 — the four flash addresses this task was written
+- [x] `TASK-7.1` **Premise corrected 2026-09-22 — the four flash addresses this task was written
   around do not exist in this port's execution OR its data flow.** `0x9FC75F2F`, `0x9FC75F7B`,
   `0x9FC762FD` and `0x9FC77D41` never execute (6,488,065 instructions during the draw, every one in
   RAM) and are never read either — the grid is interpreted OpenTV o-code, so the reconciliation that
@@ -25,7 +25,7 @@ rule for this phase: **do not guess a format** — let the box name what it want
   (17,025 over 325), and the o-code itself at `0x9FC5D000` (6,188 over 381). Ruled out by
   measurement and not to be re-run: the box holds six service records matching the broadcast, the
   grid reads none of them, and it never handles our channel numbers at all → `/go-engineer` [TC-7.1]
-- [ ] `TASK-7.2` Determine whether the loop runs and draws nothing, or never runs. Different faults, same blank screen; the widget count per iteration separates them → `/go-engineer` [TC-7.1]
+- [x] `TASK-7.2` Determine whether the loop runs and draws nothing, or never runs. Different faults, same blank screen; the widget count per iteration separates them → `/go-engineer` [TC-7.1]
 - [x] `TASK-7.3` **Premise corrected 2026-09-21 — do not "feed PID `0x52`".** The record already
   settles it: `0x52` is transient, opens in response to our own NIT and closes again, and is the
   box's OWN subtable registration for network `0x20`; the earlier "nothing feeds PID `0x52`"
@@ -35,12 +35,12 @@ rule for this phase: **do not guess a format** — let the box name what it want
   stream" (LTU 2000:075 §3.3–3.6), and we signal none. PAT/PMT is the cheap standard-DVB first
   attempt, NOT a diagnosis — the record mentions PAT and PMT zero times and no observation shows a
   PID `0x00` filter. Pass/fail is `0x800BECF0` executing once → `/go-engineer` [TC-7.2]
-- [ ] `TASK-7.4` Establish what makes the box ask for a carousel at all. Every carousel-side function is currently cold; `0x800BECF0`, the Huffman decompressor, **has never executed once** and is the cleanest marker that a module was accepted → `/go-engineer` [TC-7.3]
-- [ ] `TASK-7.5` Once it asks: the module format, read off the parser the way the `0xB1` entry layout
+- [x] `TASK-7.4` Establish what makes the box ask for a carousel at all. Every carousel-side function is currently cold; `0x800BECF0`, the Huffman decompressor, **has never executed once** and is the cleanest marker that a module was accepted → `/go-engineer` [TC-7.3]
+- [x] `TASK-7.5` Once it asks: the module format, read off the parser the way the `0xB1` entry layout
   was read. **Not DSM-CC — corrected 2026-09-21.** OpenTV 1.x uses module "flows" with a directory
   module, not a DSM-CC object carousel (LTU 2000:075). Building to DSM-CC would be the guessed
   fifth format this phase's own rule forbids → `/go-engineer` [TC-7.4]
-- [ ] `TASK-7.6` Establish whether the firmware drives audio at all — a measurement, not an implementation task → `/go-engineer` [TC-7.5]
+- [x] `TASK-7.6` Establish whether the firmware drives audio at all — a measurement, not an implementation task → `/go-engineer` [TC-7.5]
 - [ ] `TASK-7.7` Implement whatever 7.1–7.6 prove is needed; the shape cannot honestly be planned before they run → `/go-engineer` [TC-7.1, TC-7.2, TC-7.3]
 - [ ] `TASK-7.8` ⫘ Playwright: navigate sky → TV GUIDE → ALL CHANNELS and assert channels with programmes → `/qa-test-engineer` [TC-7.6]
 - [x] `TASK-7.10` **Answered 2026-09-22: SIX, matching the broadcast exactly.** The box's own
@@ -48,13 +48,22 @@ rule for this phase: **do not guess a format** — let the box name what it want
   and the broadcast line-up do NOT disagree and the twelve-against-six hypothesis is dead. "Twelve"
   is the oracle's number in the oracle's address space. The grid does not iterate them in any case:
   zero reads of those records in 488,551 during the draw → `/go-engineer` [TC-7.7]
-- [ ] `TASK-7.11` Broadcast the genre index so the TV GUIDE's eight category screens fill. The A-Z
+- [x] `TASK-7.11` Broadcast the genre index so the TV GUIDE's eight category screens fill. The A-Z
   index ships and works; the SAME table feeds the genre screens and they are unfed. Table `0xC1` on
   PID `0x52`, fourth dispatch arm `0x0100..0x01CF`, slot `(ext & 0x0F) * 4 + ((ext & 0xC0) >> 6)` —
   sixteen categories by four six-hour blocks, boundaries measured on the box. **Which number is
   which genre is NOT established and must not be guessed from the menu's order**: open a genre
   screen and watch which slot it READS, the way the A-Z screen was solved in one run rather than
   ninety-two sweeps → `/go-engineer` [no-test: the acceptance IS a firmware probe + screenshot]
+- [ ] `TASK-7.12` Consolidate the duplicate ALL CHANNELS route helpers now that their screen pins
+  agree; retain the shared route and preserve the measured post-open fill wait → `/go-engineer`
+  [no-test: the existing firmware acceptance suite passes unchanged]
+- [x] `TASK-7.13` Re-base the table `0xC1` extension differential on rejected deliveries so the
+  instrument has a measured zero floor after the `0xB2` broadcast changed background work →
+  `/go-engineer` [no-test: the acceptance is the discriminating firmware probe]
+- [x] `TASK-7.14` Fix the first key lost after idle: a smartcard heartbeat reply was spliced into
+  the handset frame at its escaped zero; preserve the one-press idle regression probe →
+  `/go-engineer` [no-test: the acceptance is the firmware probe at five idle lengths]
 - [ ] `TASK-7.9` ⫘ Security audit → `/security-reviewer` [no-test: audit produces its own report]
 
 ## Closing gates

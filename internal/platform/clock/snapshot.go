@@ -113,5 +113,6 @@ func (c *Clock) Restore(blob []byte, handlers map[string]Handler) error {
 	}
 	heap.Init(&queue)
 	c.icount, c.nextID, c.nextSeq, c.queue, c.live = icount, nextID, nextSeq, queue, live
+	c.refreshNextDue()
 	return nil
 }

@@ -128,7 +128,7 @@ test('firmware selection exposes only the guide-configured programme without a b
   await press('select');
 
   await expect(page.locator('body')).toHaveAttribute('data-media', 'active', { timeout: 60_000 });
-  await expect(page.locator('#box-status')).toHaveText('Sky One — Dream Team is playing.');
+  await expect(page.locator('#box-status')).toHaveText('BBC One — Listings not yet reconstructed is playing.');
   await expect.poll(() => page.locator('#screen').evaluate((canvas: HTMLCanvasElement) => {
     const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
     for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] !== 0) return false;

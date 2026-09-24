@@ -398,6 +398,9 @@
       "channel": 101,
       "serviceId": 1000,
       "listingsId": 101,
+      "media": {
+        "kind": "test-pattern"
+      },
       "programmes": [
         {
           "start": "00:00",

@@ -359,6 +359,12 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		t.Fatalf("read post-tune subscription: %v", err)
 	}
 	t.Logf("post-tune armed filters=%#v subscription=%#v", box.Demux.ArmedFilters(), postTuneSubscription)
+	videoPID, audioPID, programmeReady := box.Demux.ProgrammePIDs()
+	t.Logf("post-tune decoder PIDs video=%04X audio=%04X ready=%t", videoPID, audioPID, programmeReady)
+	if !programmeReady || videoPID != 0x0101 || audioPID != 0x0102 {
+		t.Fatalf("PMT component selection did not program the measured decoder inputs: video=%04X audio=%04X ready=%t",
+			videoPID, audioPID, programmeReady)
+	}
 	for unit := uint8(0); unit < 16; unit++ {
 		var matches [10]demux.MatchByte
 		for index := uint8(0); index < 10; index++ {

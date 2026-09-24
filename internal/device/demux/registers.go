@@ -14,7 +14,7 @@ const (
 	MMIOBase = 0xB000A000
 	// MMIOSize is the demux register window attached to the physical bus.
 	MMIOSize             = 0x1000
-	demuxSnapshotVersion = 5
+	demuxSnapshotVersion = 6
 )
 
 // Demux owns the status and enable state of four EMMA interrupt groups.
@@ -28,6 +28,7 @@ type Demux struct {
 	writePointer     [FilterCount]uint32
 	pidChannels      [FilterCount]uint32
 	pidWritten       [FilterCount]bool
+	programmePIDs    [2]uint32
 	matchValue       uint32
 	matchUnit        uint8
 	matchIndex       uint8
@@ -109,6 +110,14 @@ func (d *Demux) Write(off uint32, size bus.Size, value uint32) {
 		d.indirectData = value
 	case reg == 0x140:
 		d.control140 = value
+	case reg == 0x94:
+		// These two registers follow the 32 section-channel PID words. The real
+		// firmware programs them only after accepting a PMT: +0x94 receives the
+		// MPEG video PID and +0x98 the MPEG audio PID. They are decoder inputs,
+		// not two more section rings, so keep them outside pidChannels.
+		d.programmePIDs[0] = value
+	case reg == 0x98:
+		d.programmePIDs[1] = value
 	case reg >= 0x14 && reg < 0x14+4*FilterCount:
 		channel := (reg - 0x14) / 4
 		d.pidChannels[channel] = value
@@ -199,6 +208,17 @@ func (d *Demux) ArmedFilters() []ArmedFilter {
 // not enabled it gets no signal at all that its packets went nowhere, which is exactly the kind of
 // confident silence this project keeps having to unpick.
 func (d *Demux) TransportEnabled() bool { return d.control140&1 != 0 }
+
+// ProgrammePIDs reports the elementary streams the guest has connected to the
+// hardware video and audio inputs. The boolean is false until both inputs carry
+// the enable bit observed on the running firmware and a non-null DVB PID.
+func (d *Demux) ProgrammePIDs() (video, audio uint16, ok bool) {
+	videoWord, audioWord := d.programmePIDs[0], d.programmePIDs[1]
+	video, audio = uint16(videoWord&0x1fff), uint16(audioWord&0x1fff) // #nosec G115 -- masked.
+	ok = videoWord&0x4000 != 0 && audioWord&0x4000 != 0 &&
+		video != 0x1fff && audio != 0x1fff
+	return video, audio, ok
+}
 
 // ArmedPIDs returns the PIDs in enabled, programmed channels. The channel index is a
 // section filter index; the independent 16 match units do not select a PID channel.
@@ -312,6 +332,7 @@ func (d *Demux) Reset() {
 	d.writePointer = [FilterCount]uint32{}
 	d.pidChannels = [FilterCount]uint32{}
 	d.pidWritten = [FilterCount]bool{}
+	d.programmePIDs = [2]uint32{}
 	d.matchValue = 0
 	d.matchUnit, d.matchIndex = 0, 0
 	d.matchWords = [16][16]uint32{}
@@ -333,6 +354,7 @@ func (d *Demux) Snapshot() ([]byte, error) {
 	for _, written := range d.pidWritten {
 		w.Bool(written)
 	}
+	w.Words(d.programmePIDs[:])
 	w.Words([]uint32{d.matchValue, uint32(d.matchUnit), uint32(d.matchIndex)})
 	for _, unit := range d.matchWords {
 		w.Words(unit[:])
@@ -352,7 +374,7 @@ func (d *Demux) Restore(blob []byte) error {
 	if err != nil {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
-	if err := r.Expect(d.name, demuxSnapshotVersion, demuxSnapshotVersion); err != nil {
+	if err := r.Expect(d.name, 5, demuxSnapshotVersion); err != nil {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
 	status, enable := r.Words(), r.Words()
@@ -362,6 +384,14 @@ func (d *Demux) Restore(blob []byte) error {
 	var written [FilterCount]bool
 	for i := range written {
 		written[i] = r.Bool()
+	}
+	var programmePIDs [2]uint32
+	if r.Version() >= 6 {
+		values := r.Words()
+		if len(values) != len(programmePIDs) {
+			return fmt.Errorf("demux: restore: invalid programme PID register count")
+		}
+		copy(programmePIDs[:], values)
 	}
 	matchState := r.Words()
 	var matches [16][16]uint32
@@ -411,6 +441,7 @@ func (d *Demux) Restore(blob []byte) error {
 	copy(d.writePointer[:], pointers)
 	copy(d.pidChannels[:], channels)
 	d.pidWritten = written
+	d.programmePIDs = programmePIDs
 	d.matchValue = matchState[0]
 	d.matchUnit, d.matchIndex = uint8(matchState[1]), uint8(matchState[2]) // #nosec G115 -- range checked above.
 	d.matchWords = matches

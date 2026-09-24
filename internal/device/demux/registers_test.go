@@ -48,6 +48,8 @@ func TestDemuxHoldsTheDeviceContract(t *testing.T) {
 			d.writePointer[22] = 0x45c24
 			d.Write(0x124, bus.Word, 0x4000|(22<<2))
 			d.Write(0x6c, bus.Word, 0x14014)
+			d.Write(0x94, bus.Word, 0x4101)
+			d.Write(0x98, bus.Word, 0x4102)
 			d.Write(0x148, bus.Word, 0x4aff)
 			d.Write(0x144, bus.Word, 0xc000)
 			d.Write(0x140, bus.Word, 1)
@@ -96,6 +98,26 @@ func TestPIDChannelsAndMatchUnitsAreIndependent(t *testing.T) {
 	d.Write(0x14+4*23, bus.Word, 0x1fff)
 	if got := d.ArmedPIDs(); !reflect.DeepEqual(got, []uint16{0x14}) {
 		t.Fatalf("disabled channel still armed: %v", got)
+	}
+}
+
+func TestProgrammePIDsAreSeparateDecoderInputs(t *testing.T) {
+	t.Parallel()
+	d := New()
+	d.Write(0x94, bus.Word, 0x4101)
+	if video, audio, ok := d.ProgrammePIDs(); ok || video != 0x101 || audio != 0 {
+		t.Fatalf("one programme PID = video %#x audio %#x ready %t", video, audio, ok)
+	}
+	d.Write(0x98, bus.Word, 0x4102)
+	if video, audio, ok := d.ProgrammePIDs(); !ok || video != 0x101 || audio != 0x102 {
+		t.Fatalf("programme PIDs = video %#x audio %#x ready %t", video, audio, ok)
+	}
+	if got := d.ArmedPIDs(); len(got) != 0 {
+		t.Fatalf("decoder PIDs appeared as section filters: %v", got)
+	}
+	d.Reset()
+	if video, audio, ok := d.ProgrammePIDs(); ok || video != 0 || audio != 0 {
+		t.Fatalf("reset programme PIDs = video %#x audio %#x ready %t", video, audio, ok)
 	}
 }
 

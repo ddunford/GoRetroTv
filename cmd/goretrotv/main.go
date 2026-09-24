@@ -495,13 +495,16 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		if err := box.Step(); err != nil {
 			return stopHalt, err
 		}
-		// 0x800A03D0 is the measured MPEG service callback. Its live object names service 0x0064
-		// (Sky News) after the guest resolves and selects it; the browser media follows that guest
-		// decision rather than a host-side key or framebuffer guess.
-		if !mediaActive && box.Machine.Core.PC == 0x800A03D0 {
+		// The two decoder PID registers are the measured hardware boundary beyond service
+		// selection. The guest writes them only after the PAT and PMT have arrived and its MPEG
+		// manager has selected video and audio components. Starting the presentation at the older
+		// 0x800A03D0 service callback put bars behind the still-pending no-signal screen; that
+		// callback proves only that a row was selected, not that a programme signal exists.
+		if _, _, requested := box.Demux.ProgrammePIDs(); !mediaActive && requested {
 			mediaActive = true
 			transport.PushMedia(true, "Test channel")
-			logger.Info("guest selected media service", "pc", "800A03D0")
+			videoPID, audioPID, _ := box.Demux.ProgrammePIDs()
+			logger.Info("guest requested programme streams", "video_pid", videoPID, "audio_pid", audioPID)
 		}
 		count = box.Machine.Retired
 		if count >= nextProgress {

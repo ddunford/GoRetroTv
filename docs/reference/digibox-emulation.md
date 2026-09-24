@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:e644e47439edf46852b0f593fade298d16e6cb5944cd19bbde545f0bc76c405a @ 2026-09-24 -->
+<!-- fingerprint: sha256:c2b96205338701d51c3d8908d5b6535bc69204b1b99496c6eab224a6e97f9562 @ 2026-09-24 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:e644e47439edf46852b0f593fade298d16e6cb5944cd19bbde545f0bc76c405a @ 2026-09-24 -->
+<!-- fingerprint: sha256:c2b96205338701d51c3d8908d5b6535bc69204b1b99496c6eab224a6e97f9562 @ 2026-09-24 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -4703,7 +4703,7 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:2b4f9f3881201f81c196020436bae137ea51a943a1693f11bf65a6acdfa3c7cc @ 2026-09-24 -->
+<!-- fingerprint: sha256:3f207595b687cc1500f9b9e77fd29a4ddb1edc1b7d71ac6a0e487a520b18c891 @ 2026-09-24 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -4787,7 +4787,7 @@ fall out of that, and neither needs to be guessed.
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:65c1ca4990c70ebdd1aa8b5784a7becdceb7892c94f9a49a4862d7e6c02838da @ 2026-09-24 -->
+<!-- fingerprint: sha256:c05fcc6cf77f51975ce22649f598b8c556642a473ebf747b89995b1e239619bf @ 2026-09-24 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
@@ -10061,3 +10061,19 @@ Start wrapper `0x80088970`, the `0x210` object path and the lower audio driver r
 withdraws the earlier claim that the public audio API is wholly cold: PMT component publication
 reaches its stop decision. The next measured boundary is elementary-stream delivery and the
 condition which changes that decision from stop to start.
+
+The PMT also crosses a more direct hardware boundary which the earlier DMA census logged without
+identifying. The guest writes `0x00004101` to demux `+0x94` and `0x00004102` to `+0x98`. These
+addresses immediately follow the thirty-two section PID registers (`+0x14..+0x90`) but are not
+section channels: `0x8001CEF8` treats logical channels 0 and 1 specially, and these two words are
+the video and audio decoder PID inputs. A real-firmware acceptance test now requires both writes
+after the PMT component rebuild and reads their low thirteen bits as `0x0101/0x0102`; neither is
+reported by the section-filter census.
+
+This is also the correct presentation boundary. The earlier browser prototype started at MPEG
+service callback `0x800A03D0`, before PAT or PMT, so it could put colour bars behind a firmware
+screen which was still reporting no signal. The presentation now starts only when the guest has
+programmed both decoder PID inputs. The now/next selector is still expected to be visible briefly:
+the firmware itself dismisses it after its timer (the post-selection probe reaches the plain video
+plane after forty million more instructions). A selector which never dismisses would be a timer
+fault; its transient presence immediately after tuning is the box's real behaviour.

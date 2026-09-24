@@ -9711,7 +9711,7 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/audiodriver_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
-<!-- fingerprint: sha256:4db414ad288f83328a96759b8af52885c94cdc17639edd205ad7727f93d71944 @ 2026-09-24 -->
+<!-- fingerprint: sha256:93500c0d3fa8e3054d836a0cebbc353820cc48bfd7a6319a2ae7b54036152b44 @ 2026-09-24 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10117,6 +10117,18 @@ subtracts base `0x00010010` and handles the measured ids `0x10010`, `0x10020`, `
 registered events; a generic demux decoder interrupt does not substitute for it. In particular,
 wrappers `0x800DA436` and `0x800DA452` call the class-1 dispatcher with `0x100B0` and `0x10140`;
 both remain cold in the tuned run and are the next caller boundary.
+
+Those wrappers now have a measured owner; they are not low-level demux interrupt handlers. Module
+initialisation at `0x800DAA04` registers four callbacks in the fourteen-entry table at `0x8012E548`
+through `0x800DC750`: callback types 1, 3, 4 and 5 receive `0x800DA3A5`, `0x800DA437`,
+`0x800DA453` and `0x800DA409` respectively. The type-3 and type-4 adapter entries
+`0x800DC648/0x800DC67C` retrieve and invoke the two event wrappers. Their live callers are instead
+inside the elementary-stream manager at `0x800EEE68`, reached through the public stream entry
+`0x800E8B18`. An observation-only tuned run reaches none of the public entry, manager, adapters or
+wrappers. This moves the missing boundary upstream again: the current transport implementation
+reassembles only PSI/SI section channels and never delivers transport packets on the guest-selected
+video/audio PIDs (`0x0101/0x0102`) to a programme-stream path. A general demux interrupt cannot
+stand in for that absent delivery.
 
 A second observation-only contrast supplied standards-shaped CA descriptors using News Datacom
 system id `0x0960` (the official DVB allocation table assigns `0x0900..0x09FF` to News Datacom:

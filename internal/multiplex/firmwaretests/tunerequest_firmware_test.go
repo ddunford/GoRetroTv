@@ -176,7 +176,9 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 				pc == 0x8009E140 || pc == 0x8009E250 || pc == 0x8009E290 ||
 				pc == 0x8009E47C || pc == 0x800A127C || pc == 0x800A1A48 || pc == 0x8009E764 ||
 				pc == 0x8009F4EC || pc == 0x8009F878 || pc == 0x800A03B0 || pc == 0x800A03D0 ||
-				pc == 0x800DA436 || pc == 0x800DA452 || pc == 0x800D5C8C || pc == 0x800D5D2C ||
+				pc == 0x800DA436 || pc == 0x800DA452 ||
+				pc == 0x800DC648 || pc == 0x800DC67C || pc == 0x800E8B18 || pc == 0x800EEE68 ||
+				pc == 0x800D5C8C || pc == 0x800D5D2C ||
 				pc == 0x800DB9CA || pc == 0x800DBF34 || pc == 0x800E8DE8 || pc == 0x800DC014 {
 				c := mediaCall{call: call{pc: pc,
 					ra: state.GPR[31] &^ 1, a0: state.GPR[4], a1: state.GPR[5],
@@ -504,7 +506,8 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	if stopCalls == 0 {
 		t.Fatalf("PMT component publication did not reach the measured audio stop decision: %#v", allAudioAPICalls)
 	}
-	for _, pc := range []uint32{0x800DA436, 0x800DA452, 0x800D5C8C, 0x800D5D2C,
+	for _, pc := range []uint32{0x800DA436, 0x800DA452, 0x800DC648, 0x800DC67C,
+		0x800E8B18, 0x800EEE68, 0x800D5C8C, 0x800D5D2C,
 		0x800DB9CA, 0x800DBF34, 0x800E8DE8, 0x800DC014} {
 		if mediaHits[pc] != 0 {
 			t.Fatalf("media program/stream path %08X unexpectedly became live before the no-signal decision: %#v", pc, mediaCalls)

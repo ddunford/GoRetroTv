@@ -35,12 +35,15 @@ The words this codebase uses to mean something specific. Everything else is ordi
 5. **The RTOS creates its tasks** — around forty-two of them when the box is healthy.
 6. **Optionally, the Sky gates fire**, answering two application checks so the menus present.
 7. **The firmware draws**, through the on-screen-display and blitter models, into a framebuffer.
-8. **The browser gets pixels and sends back key presses**, over a WebSocket, outside the
+8. **The browser gets OSD pixels and sends back key presses**, over a WebSocket, outside the
    instruction loop so the emulation stays deterministic. → `internal/web/transport.go`
+9. **For a tuned programme, media packets cross the guest-programmed decoder PIDs.** A supervised
+   ffmpeg process decodes only those admitted packets; its picture sits below the transparent OSD
+   and its PCM audio is played by the browser. → `internal/media/`, `cmd/goretrotv/playout.go`
 
 <!-- anchor: internal/machine/handoff.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:dac8cc9ffb578caab7a51635df6165723d8c089087a1d093835ea17001e581a5 @ 2026-09-24 -->
+<!-- fingerprint: sha256:e110529491f945c6a1dccb541eece6f7cf5d4476ffdc23e8645d7068ca253912 @ 2026-09-25 -->
 
 ## A way to think about it
 

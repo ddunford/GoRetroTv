@@ -21,6 +21,7 @@ services:
       # and a clone without it broadcasts nothing rather than failing to build.
       GORETROTV_LISTINGS_PATH: /listings
       GORETROTV_DICTIONARY_PATH: /dictionaries/skyuk.dict
+      GORETROTV_MEDIA_ROOT: /media
       # "now" runs the box on real London wall-clock time: today's date on screen and the
       # schedule playing at the hour it actually is. It became a sensible default only when the
       # day started going out in its four six-hour blocks (TASK-6.13) -- before that the guide
@@ -49,4 +50,6 @@ services:
       # The schedules are mounted rather than baked in so they can be edited, and dated files
       # added, on the host without a rebuild.
       - ./listings:/listings:ro
+      # Programme media is operator-owned and mounted read-only; it is never baked into the image.
+      - ./media:/media:ro
     restart: unless-stopped

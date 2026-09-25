@@ -264,6 +264,16 @@ first divergence the two arms' schedules differ and the diff is a schedule, not 
 divergence with both halves controlled, and the byte-level proof of the frame splice that the
 change exposed in this port's own link.
 
+### File-backed broadcast media — 2026-09-25
+
+Programme media paths are schedule-owned and relative to one read-only media root. A file is one
+timeline; a folder is a lexically ordered playlist whose exact durations come from ffprobe.
+Playout always seeks to in-world time minus programme start, and looping is explicit. FFmpeg runs
+as supervised encode and decode subprocesses at the host edge; the Go core remains CGo-free, and
+transport must pass the guest-programmed decoder PIDs before decoding. The runtime image therefore
+uses Debian slim plus its ffmpeg package instead of distroless. Operator media is mounted at run
+time and excluded from the image context. Last web-verified: 2026-09.
+
 ### Deployment and access
 - **Public**, at `goretrotv.demosrv.uk`, TLS via the existing Traefik, as the predecessor did.
 - **Developer surfaces are not exposed.** The gdb stub and the instrument endpoints bind to

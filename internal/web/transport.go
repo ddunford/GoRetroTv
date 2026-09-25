@@ -5,6 +5,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -44,6 +45,43 @@ type client struct {
 	latest chan *frameData
 	state  chan wire.StateMessage
 	media  chan wire.MediaMessage
+	video  chan []byte
+	audio  chan []byte
+}
+
+const mediaWireHeader = 16
+
+// PushVideo publishes the latest decoded 352x288 RGBA frame. Slow viewers skip frames rather than
+// holding up the emulated receiver.
+func (t *Transport) PushVideo(sequence uint64, rgba []byte) {
+	t.pushBinary(1, sequence, rgba, true)
+}
+
+// PushAudio publishes one 48 kHz stereo signed-16 PCM chunk.
+func (t *Transport) PushAudio(sequence uint64, pcm []byte) {
+	t.pushBinary(2, sequence, pcm, false)
+}
+
+func (t *Transport) pushBinary(kind byte, sequence uint64, payload []byte, latest bool) {
+	message := make([]byte, mediaWireHeader+len(payload))
+	copy(message, "GRTV")
+	message[4], message[5] = 1, kind
+	binary.BigEndian.PutUint64(message[8:16], sequence)
+	copy(message[mediaWireHeader:], payload)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for c := range t.clients {
+		queue := c.audio
+		if latest {
+			queue = c.video
+		}
+		select {
+		case queue <- message:
+		default:
+			<-queue
+			queue <- message
+		}
+	}
 }
 
 // Transport broadcasts indexed OSD frames. A slow browser receives the newest
@@ -239,7 +277,8 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close(websocket.StatusNormalClosure, "")
 	}()
 	conn.SetReadLimit(1024)
-	c := &client{latest: make(chan *frameData, 1), state: make(chan wire.StateMessage, 1), media: make(chan wire.MediaMessage, 1)}
+	c := &client{latest: make(chan *frameData, 1), state: make(chan wire.StateMessage, 1),
+		media: make(chan wire.MediaMessage, 1), video: make(chan []byte, 1), audio: make(chan []byte, 64)}
 	t.mu.Lock()
 	t.clients[c] = struct{}{}
 	if t.latest != nil {
@@ -319,6 +358,14 @@ func (t *Transport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		case media := <-c.media:
 			if err := writeJSON(sessionCtx, conn, media); err != nil {
+				return
+			}
+		case video := <-c.video:
+			if err := conn.Write(sessionCtx, websocket.MessageBinary, video); err != nil {
+				return
+			}
+		case audio := <-c.audio:
+			if err := conn.Write(sessionCtx, websocket.MessageBinary, audio); err != nil {
 				return
 			}
 		case pending = <-c.latest:

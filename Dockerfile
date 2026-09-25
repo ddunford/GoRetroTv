@@ -28,8 +28,7 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 
-# CGO_ENABLED=0 is mandatory for the distroless static base, which has no libc. It is also the
-# recorded decision for the core: no CGo (CLAUDE.md -> Stack).
+# CGO_ENABLED=0 keeps the emulator core independent of the host decoder and its shared libraries.
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
     -ldflags="-s -w \
@@ -38,8 +37,11 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
       -X github.com/ddunford/goretrotv/internal/version.Date=${BUILD_DATE}" \
     -o /out/ ./cmd/...
 
-# Linux/amd64 image manifest from the distroless registry. Debian 13 is the supported runtime line.
-FROM gcr.io/distroless/static-debian13:nonroot@sha256:2293b36c7c9082bf4115aab724b4d2cddec82c8eba39bf27ac0517e159acf150 AS runtime
+# FFmpeg is an explicit subprocess boundary, not linked into the emulator. Debian 13 supplies both
+# ffmpeg and ffprobe from one maintained package while the Go binary itself remains static/no-CGo.
+FROM debian:13.1-slim@sha256:a347fd7510ee31a84387619a492ad6c8eb0af2f2682b916ff3e643eb076f925a AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/goretrotv /goretrotv
 COPY web/index.html web/styles.css web/favicon.svg /web/
 COPY --from=web-builder /src/web/dist /web/dist
@@ -48,8 +50,8 @@ COPY --from=web-builder /src/web/dist /web/dist
 # matches the browser oracle's (SPEC FR-6). Shipping it here removes the version-skew question -
 # "was that stream produced by this build?" - which is exactly the kind of doubt that turns a
 # divergence into an afternoon. Run it with `--entrypoint /oraclecmp`; it is inert otherwise, and
-# the base has no shell for it to be reachable from.
+# it is inert unless selected as the container entrypoint.
 COPY --from=builder /out/oraclecmp /oraclecmp
-USER nonroot:nonroot
+USER 65532:65532
 EXPOSE 8099
 ENTRYPOINT ["/goretrotv"]

@@ -51,18 +51,11 @@ let mediaActive = false;
 let mediaService = '';
 let mediaProgramme = '';
 let audioContext: AudioContext | null = null;
-let toneGain: GainNode | null = null;
+let nextAudioTime = 0;
 
 function ensureAudio(): void {
   if (!audioContext) {
     audioContext = new AudioContext();
-    const oscillator = audioContext.createOscillator();
-    toneGain = audioContext.createGain();
-    oscillator.type = 'sine';
-    oscillator.frequency.value = 440;
-    toneGain.gain.value = mediaActive ? 0.055 : 0;
-    oscillator.connect(toneGain).connect(audioContext.destination);
-    oscillator.start();
     audioContext.addEventListener('statechange', () => {
       document.body.dataset.audio = audioContext?.state || 'closed';
     });
@@ -73,26 +66,40 @@ function ensureAudio(): void {
   });
 }
 
-function drawProgramme(now: number): void {
-  const bars = ['#f4f4f4', '#e5e53d', '#32d8d8', '#45d34d', '#d946d9', '#df4141', '#3e4bd8'];
-  const barWidth = programme.width / bars.length;
-  for (let i = 0; i < bars.length; i++) {
-    programmeContext.fillStyle = bars[i];
-    programmeContext.fillRect(i * barWidth, 0, Math.ceil(barWidth), programme.height * 0.72);
+const videoBuffer = document.createElement('canvas');
+videoBuffer.width = 352;
+videoBuffer.height = 288;
+const videoDrawingContext = videoBuffer.getContext('2d');
+if (!videoDrawingContext) throw new Error('This browser cannot display decoded programme video');
+const videoContext: CanvasRenderingContext2D = videoDrawingContext;
+
+function handleBinary(data: ArrayBuffer): void {
+  const bytes = new Uint8Array(data);
+  if (bytes.length < 16 || new TextDecoder().decode(bytes.subarray(0, 4)) !== 'GRTV' || bytes[4] !== 1) {
+    throw new Error('The box sent an unsupported programme stream');
   }
-  programmeContext.fillStyle = '#10141b';
-  programmeContext.fillRect(0, programme.height * 0.72, programme.width, programme.height * 0.28);
-  const x = (now / 7) % (programme.width + 180) - 180;
-  programmeContext.fillStyle = '#fff';
-  programmeContext.fillRect(x, programme.height * 0.77, 180, 12);
-  programmeContext.font = 'bold 34px system-ui, sans-serif';
-  programmeContext.fillText(mediaService || 'NO PROGRAMME SOURCE', 42, programme.height - 62);
-  programmeContext.font = '22px ui-monospace, monospace';
-  programmeContext.fillText(mediaProgramme || new Date().toISOString().slice(11, 19) + ' UTC', 42,
-    programme.height - 25);
-  requestAnimationFrame(drawProgramme);
+  const payload = bytes.subarray(16);
+  if (bytes[5] === 1) {
+    if (payload.length !== 352 * 288 * 4) throw new Error('The programme video frame has the wrong size');
+    videoContext.putImageData(new ImageData(new Uint8ClampedArray(payload), 352, 288), 0, 0);
+    programmeContext.drawImage(videoBuffer, 0, 0, programme.width, programme.height);
+    return;
+  }
+  if (bytes[5] !== 2 || payload.length % 4 !== 0 || !audioContext || audioContext.state !== 'running') return;
+  const samples = payload.length / 4;
+  const buffer = audioContext.createBuffer(2, samples, 48_000);
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  for (let sample = 0; sample < samples; sample++) {
+    buffer.getChannelData(0)[sample] = view.getInt16(sample * 4, true) / 32768;
+    buffer.getChannelData(1)[sample] = view.getInt16(sample * 4 + 2, true) / 32768;
+  }
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioContext.destination);
+  nextAudioTime = Math.max(nextAudioTime, audioContext.currentTime + 0.04);
+  source.start(nextAudioTime);
+  nextAudioTime += buffer.duration;
 }
-requestAnimationFrame(drawProgramme);
 
 function setKeysEnabled(enabled: boolean): void {
   for (const key of keys) key.disabled = !enabled;
@@ -153,7 +160,6 @@ function handleMessage(payload: string): void {
     mediaService = message.service;
     mediaProgramme = message.programme;
     document.body.dataset.media = mediaActive ? 'active' : 'inactive';
-    if (toneGain) toneGain.gain.value = mediaActive ? 0.055 : 0;
     if (mediaActive) {
       paint(0, 0, width, height);
       showStatus('ready', `${message.service} — ${message.programme} is playing.`);
@@ -231,6 +237,7 @@ function connect(): void {
   }
   const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const next = new WebSocket(`${scheme}//${window.location.host}/ws`);
+  next.binaryType = 'arraybuffer';
   let openedAt = 0;
   socket = next;
   connected = false;
@@ -249,10 +256,11 @@ function connect(): void {
     if (!resetPending) resetFeedback.textContent = '';
     showStatus('booting', 'Connected. Waiting for the box to report its state…');
   });
-  next.addEventListener('message', (event: MessageEvent<string>) => {
+  next.addEventListener('message', (event: MessageEvent<string | ArrayBuffer>) => {
     if (socket !== next) return;
     try {
-      handleMessage(event.data);
+      if (typeof event.data === 'string') handleMessage(event.data);
+      else handleBinary(event.data);
     } catch (error) {
       machineReady = false;
       updateKeys();

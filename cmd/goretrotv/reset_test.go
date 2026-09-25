@@ -98,7 +98,7 @@ func TestResetRestartsAHaltedBoxAndSaysWhatItDid(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	go runMachine(ctx, box, ready, images, snapshot, transport, logger, nil)
+	go runMachine(ctx, box, ready, images, snapshot, "", transport, logger, nil)
 
 	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
 	if err != nil {
@@ -153,7 +153,7 @@ func TestResetRebuildsARunningBoxAndItKeepsRetiring(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	go runMachine(ctx, box, ready, images, snapshot, transport, logger, nil)
+	go runMachine(ctx, box, ready, images, snapshot, "", transport, logger, nil)
 
 	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
 	if err != nil {

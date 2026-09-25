@@ -68,6 +68,10 @@ type Config struct {
 	// no schedule at all.
 	DictionaryPath string `env:"GORETROTV_DICTIONARY_PATH"`
 
+	// MediaRoot contains operator-supplied programme files. Schedule paths are resolved beneath
+	// this root and may never escape it. Empty keeps file/folder sources unavailable.
+	MediaRoot string `env:"GORETROTV_MEDIA_ROOT"`
+
 	// BroadcastDate is the day and time the broadcast claims it is.
 	//
 	// "now" follows the real clock: the box shows today's date and the actual

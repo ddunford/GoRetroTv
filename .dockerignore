@@ -13,3 +13,4 @@ web/dist
 node_modules
 .playwright-mcp
 test-results
+media

@@ -25,3 +25,10 @@
   differ only for the configured current programme, verifies non-silent audio samples through the
   wire/control surface, and screenshots desktop/mobile light and dark states for inspection.
   Boot, oracle, snapshot, replay, guide and security gates remain green.
+- **TC-8.7: Scheduled file and folder playout** (covers: Phase 8 task 7) — two services resolve to
+  different configured media sources; selecting either halfway through its programme begins at the
+  same broadcast-relative media offset a continuously tuned receiver would have reached. A folder
+  advances across lexically ordered files by their probed durations. Traversal outside the media
+  root, missing/unsupported files, ambiguous or empty folders, insufficient non-looping duration,
+  and changed files fail visibly. Looping wraps by the exact probed playlist duration, and a
+  reconnect derives the current offset again rather than restarting at zero.

@@ -77,7 +77,7 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 <!-- anchor: internal/wire/wire.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:0cb25dfbfaee747b32a7041ceb434956a33b9af10e32334fcdf5c3c4dbe8845f @ 2026-09-24 -->
+<!-- fingerprint: sha256:a032bc1bb8aeb163e59d627f6c75bb1e2e817e7549172712cd5f56a38d0bb334 @ 2026-09-25 -->
 
 The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
 Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt
@@ -90,6 +90,12 @@ WebSocket code enters the emulator core.
 `ARCH-MODULE-1` accepts exactly this module at this version and rejects any other `require` or
 `replace` directive. A version change or new dependency needs another recorded decision and an
 updated conformance rule. Last web-verified: 2026-09.
+
+The Video phase also adds an operating-system executable, not a Go module: the runtime image is
+Debian slim with the distribution `ffmpeg` package. Go remains statically built with CGo disabled;
+ffmpeg is a supervised edge subprocess used for MPEG-2/MP2 transcoding and decoding. This replaces
+the distroless runtime because a file-backed broadcast cannot execute a binary absent from the
+image. Operator media is mounted read-only and excluded from the image build context.
 
 ## Alternatives rejected
 

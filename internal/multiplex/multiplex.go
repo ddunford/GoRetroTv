@@ -259,15 +259,25 @@ func (m *Multiplex) listings() *Listings { return m.guide.On(m.clock.Now()) }
 // Decoder PID programming is checked separately by the instruction loop; this method answers only
 // which configured source, if any, that guest-selected service owns at the in-world time.
 func (m *Multiplex) MediaSelection() (serviceName, programmeName, kind string, ok bool) {
+	playout, ok := m.MediaPlayout()
+	if !ok {
+		return "", "", "", false
+	}
+	return playout.Service, playout.Programme, playout.Media.Kind, true
+}
+
+// MediaPlayout resolves the guest-selected service to its current source and live programme
+// offset. A receiver which tunes later therefore joins the broadcast in progress.
+func (m *Multiplex) MediaPlayout() (ProgrammePlayout, bool) {
 	sub, asking := m.subscription()
 	if !asking || !sub.EITArmed || sub.TunedServiceID == 0 {
-		return "", "", "", false
+		return ProgrammePlayout{}, false
 	}
 	listings := m.listings()
 	if listings == nil {
-		return "", "", "", false
+		return ProgrammePlayout{}, false
 	}
-	return listings.MediaFor(sub.TunedServiceID, m.clock.Now())
+	return listings.PlayoutFor(sub.TunedServiceID, m.clock.Now())
 }
 
 // OnAir is called once, the first time programmes are actually transmitted to

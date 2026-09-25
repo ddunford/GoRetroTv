@@ -38,6 +38,11 @@ node_modules/
 # listings feed, supplied locally, never committed. See dictionaries/MANIFEST.md.
 /dictionaries/*.dict
 
+# Operator programme media can be large and may carry its own redistribution terms. Keep the
+# provenance manifest, but mount the actual files at runtime rather than committing or baking them.
+/media/*
+!/media/MANIFEST.md
+
 # The Ghidra analysis database and the staged application image: derived, large, and the
 # image is the non-redistributable firmware under another name.
 /ghidra/

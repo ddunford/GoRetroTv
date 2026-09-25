@@ -408,23 +408,29 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		}
 	}
 	programmeTransport := box.Demux.TakeProgrammeTransport()
-	if len(programmeTransport) != 2*188 {
-		t.Fatalf("scheduled media transport length = %d, want %d", len(programmeTransport), 2*188)
+	if len(programmeTransport) != 4*188 {
+		t.Fatalf("scheduled media transport length = %d, want %d", len(programmeTransport), 4*188)
 	}
 	packetPID := func(packet []byte) uint16 {
 		return uint16(packet[1]&0x1f)<<8 | uint16(packet[2])
 	}
-	if got := packetPID(programmeTransport[:188]); got != videoPID {
+	if got := packetPID(programmeTransport[:188]); got != 0 {
+		t.Fatalf("first admitted media PID = %04X, want PAT", got)
+	}
+	if got := packetPID(programmeTransport[188:]); got != 0x100 {
+		t.Fatalf("second admitted media PID = %04X, want PMT PID 0100", got)
+	}
+	if got := packetPID(programmeTransport[2*188:]); got != videoPID {
 		t.Fatalf("first admitted media PID = %04X, want video PID %04X", got, videoPID)
 	}
-	if got := packetPID(programmeTransport[188:]); got != audioPID {
+	if got := packetPID(programmeTransport[3*188:]); got != audioPID {
 		t.Fatalf("second admitted media PID = %04X, want audio PID %04X", got, audioPID)
 	}
 	serviceName, programmeName, source, configured := transmitter.MediaSelection()
 	if !configured || serviceName != "Sky One" || programmeName != "Dream Team" ||
-		source != multiplex.MediaKindTestPattern {
+		source != multiplex.MediaKindFile {
 		t.Fatalf("firmware-selected programme media = %q %q %q configured=%t, want Sky One / "+
-			"Dream Team / test-pattern", serviceName, programmeName, source, configured)
+			"Dream Team / file", serviceName, programmeName, source, configured)
 	}
 	for unit := uint8(0); unit < 16; unit++ {
 		var matches [10]demux.MatchByte

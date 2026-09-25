@@ -49,6 +49,12 @@ func TestASchedulesFaultsAreRefusedAndNamed(t *testing.T) {
 			"lists no channels"},
 		{"a field nobody reads", strings.Replace(good, `"bouquet":`, `"day":"1998-06-15","bouquet":`, 1),
 			"unknown field"},
+		{"a file source with no path", strings.Replace(good, `"programmes":`, `"media":{"kind":"file"},"programmes":`, 1),
+			"needs a path"},
+		{"a source escaping the media root", strings.Replace(good, `"programmes":`, `"media":{"kind":"folder","path":"../outside","loop":true},"programmes":`, 1),
+			"must stay beneath"},
+		{"an absolute source path", strings.Replace(good, `"programmes":`, `"media":{"kind":"file","path":"/tmp/movie.mp4"},"programmes":`, 1),
+			"must stay beneath"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "listings.json")

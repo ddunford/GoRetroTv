@@ -106,7 +106,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	go runMachine(ctx, box, ready, fw, cfg.SnapshotPath, transport, logger, air)
+	go runMachine(ctx, box, ready, fw, cfg.SnapshotPath, cfg.MediaRoot, transport, logger, air)
 
 	if err := httpx.NewServer(cfg.HTTPAddr, handler, logger).Run(ctx); err != nil {
 		return err
@@ -376,9 +376,9 @@ const (
 // restart is the one case the reset control exists for, so the halt path waits
 // for a reset instead of returning.
 func runMachine(ctx context.Context, box *board.Runtime, ready bool, images *firmware.Set,
-	snapshotPath string, transport *web.Transport, logger *slog.Logger, air *broadcastConfig) {
+	snapshotPath, mediaRoot string, transport *web.Transport, logger *slog.Logger, air *broadcastConfig) {
 	for {
-		cause, err := runInstructions(ctx, box, ready, transport, logger, transmitterFor(air, box, logger))
+		cause, err := runInstructions(ctx, box, ready, transport, logger, transmitterFor(air, box, logger), mediaRoot)
 		switch cause {
 		case stopContext:
 			return
@@ -433,7 +433,7 @@ func resetState(ready bool) (string, string) {
 // runInstructions drives one board until the process stops, a reset is asked
 // for, or the guest halts. It is the board's only owner for that lifetime.
 func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
-	transport *web.Transport, logger *slog.Logger, transmitter *multiplex.Multiplex) (stopCause, error) {
+	transport *web.Transport, logger *slog.Logger, transmitter *multiplex.Multiplex, mediaRoot string) (stopCause, error) {
 	const inputInterval = 1024
 	const frameInterval = 500_000
 	const stateInterval = 4_000_000
@@ -460,6 +460,8 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	nextProgress := align(start, progressInterval)
 	mediaService, mediaProgramme, mediaSource := "", "", ""
 	mediaRequested := false
+	var playout *playoutSession
+	defer func() { playout.close(logger) }()
 	transport.PushMedia(false, "", "", "")
 	for {
 		count := box.Machine.Retired
@@ -492,6 +494,9 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 					return stopHalt, err
 				}
 			}
+			if err := box.Demux.Pump(count); err != nil {
+				return stopHalt, fmt.Errorf("pump programme transport: %w", err)
+			}
 		}
 		if err := box.Step(); err != nil {
 			return stopHalt, err
@@ -503,8 +508,31 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		// callback proves only that a row was selected, not that a programme signal exists.
 		videoPID, audioPID, requested := box.Demux.ProgrammePIDs()
 		service, programme, source, configured := "", "", "", false
+		var selected multiplex.ProgrammePlayout
 		if requested && transmitter != nil {
-			service, programme, source, configured = transmitter.MediaSelection()
+			selected, configured = transmitter.MediaPlayout()
+			if configured {
+				service, programme, source = selected.Service, selected.Programme, selected.Media.Kind
+			}
+		}
+		if configured && selected.Media.Kind != multiplex.MediaKindTestPattern &&
+			(playout == nil || playout.key != playoutKey(selected)) {
+			playout.close(logger)
+			var startErr error
+			playout, startErr = startPlayout(ctx, mediaRoot, selected)
+			if startErr != nil {
+				return stopHalt, fmt.Errorf("start scheduled programme media: %w", startErr)
+			}
+			logger.Info("scheduled programme playout started", "service", service, "programme", programme,
+				"path", selected.Media.Path, "offset", selected.Elapsed)
+		} else if (!configured || selected.Media.Kind == multiplex.MediaKindTestPattern) && playout != nil {
+			playout.close(logger)
+			playout = nil
+		}
+		if playout != nil {
+			if err := playout.pump(box.Demux, box.Machine.Retired, transport); err != nil {
+				return stopHalt, fmt.Errorf("programme playout: %w", err)
+			}
 		}
 		if requested != mediaRequested {
 			mediaRequested = requested

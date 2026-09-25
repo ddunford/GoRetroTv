@@ -136,10 +136,21 @@ type ListedProgramme struct {
 // explicit source rather than a fallback: an event without media must remain without host video.
 type ProgrammeMedia struct {
 	Kind string `json:"kind"`
+	// Path is relative to the configured media root. It is required for file and folder sources
+	// and absent for generated sources.
+	Path string `json:"path,omitempty"`
+	// Loop explicitly permits media shorter than the scheduled programme to wrap.
+	Loop bool `json:"loop,omitempty"`
 }
 
-// MediaKindTestPattern is the deterministic generated bars-and-tone source.
-const MediaKindTestPattern = "test-pattern"
+const (
+	// MediaKindTestPattern is the deterministic generated bars-and-tone source.
+	MediaKindTestPattern = "test-pattern"
+	// MediaKindFile is one operator-supplied audio/video file.
+	MediaKindFile = "file"
+	// MediaKindFolder is a lexically ordered playlist of files in one directory.
+	MediaKindFolder = "folder"
+)
 
 // StartSeconds is the programme's start as seconds into the day.
 //
@@ -434,10 +445,61 @@ func (l *Listings) validate() error {
 }
 
 func validateMedia(media *ProgrammeMedia) error {
-	if media != nil && media.Kind != MediaKindTestPattern {
+	if media == nil {
+		return nil
+	}
+	switch media.Kind {
+	case MediaKindTestPattern:
+		if media.Path != "" || media.Loop {
+			return fmt.Errorf("test-pattern media does not accept path or loop")
+		}
+	case MediaKindFile, MediaKindFolder:
+		if media.Path == "" {
+			return fmt.Errorf("%s media needs a path", media.Kind)
+		}
+		clean := filepath.Clean(media.Path)
+		if filepath.IsAbs(media.Path) || clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("media path %q must stay beneath the media root", media.Path)
+		}
+	default:
 		return fmt.Errorf("unsupported media kind %q", media.Kind)
 	}
 	return nil
+}
+
+// ProgrammePlayout is the schedule-owned media source and its position on the live timeline.
+type ProgrammePlayout struct {
+	Service, Programme string
+	Media              ProgrammeMedia
+	Elapsed            time.Duration
+	Duration           time.Duration
+}
+
+// PlayoutFor returns the source and broadcast-relative playhead for the programme on air.
+func (l *Listings) PlayoutFor(serviceID uint16, now time.Time) (ProgrammePlayout, bool) {
+	service, found := l.ServiceByID(serviceID)
+	if !found {
+		return ProgrammePlayout{}, false
+	}
+	seconds := secondsOfDay(now)
+	for i := range service.Programmes {
+		programme := &service.Programmes[i]
+		start, err := programme.StartSeconds()
+		if err != nil || seconds < start || seconds >= start+programme.Minutes*60 {
+			continue
+		}
+		source := programme.Media
+		if source == nil {
+			source = service.Media
+		}
+		if source == nil {
+			return ProgrammePlayout{}, false
+		}
+		return ProgrammePlayout{Service: service.Name, Programme: programme.Title, Media: *source,
+			Elapsed:  time.Duration(seconds-start) * time.Second,
+			Duration: time.Duration(programme.Minutes) * time.Minute}, true
+	}
+	return ProgrammePlayout{}, false
 }
 
 // Service returns the channel whose listings id the box asked about, which is
@@ -463,27 +525,9 @@ func (l *Listings) ServiceByID(serviceID uint16) (*ListedService, bool) {
 
 // MediaFor returns the configured source for the programme on air on a DVB service.
 func (l *Listings) MediaFor(serviceID uint16, now time.Time) (serviceName, programmeName, kind string, ok bool) {
-	service, found := l.ServiceByID(serviceID)
+	playout, found := l.PlayoutFor(serviceID, now)
 	if !found {
 		return "", "", "", false
 	}
-	seconds := secondsOfDay(now)
-	for i := range service.Programmes {
-		programme := &service.Programmes[i]
-		start, err := programme.StartSeconds()
-		if err != nil {
-			return "", "", "", false // LoadListings validates this before a Listings reaches runtime.
-		}
-		if seconds >= start && seconds < start+programme.Minutes*60 {
-			media := programme.Media
-			if media == nil {
-				media = service.Media
-			}
-			if media == nil {
-				return "", "", "", false
-			}
-			return service.Name, programme.Title, media.Kind, true
-		}
-	}
-	return "", "", "", false
+	return playout.Service, playout.Programme, playout.Media.Kind, true
 }

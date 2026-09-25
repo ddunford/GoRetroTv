@@ -77,7 +77,9 @@
           "minutes": 60,
           "title": "Dream Team",
           "media": {
-            "kind": "test-pattern"
+            "kind": "file",
+            "path": "sintel-trailer.mp4",
+            "loop": true
           }
         },
         {
@@ -398,6 +400,11 @@
       "channel": 101,
       "serviceId": 1000,
       "listingsId": 101,
+      "media": {
+        "kind": "file",
+        "path": "big-buck-bunny.mp4",
+        "loop": true
+      },
       "programmes": [
         {
           "start": "00:00",

@@ -5238,7 +5238,7 @@ still ahead, and the next rung is what `0xA1` carries.
 ### Table `0xA1` on PID `0x33`: the listings path, and the signature that gates it
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:40a6a06f4d2ca5b107c7e978492d9ff7c72901f0131e57eaf9b6fe17533ae282 @ 2026-09-24 -->
+<!-- fingerprint: sha256:bc1fe6c74f43648a07ab572bb60f51206669eb5edcf6e104b05df9bbcfb4289b @ 2026-09-25 -->
 
 `scripts/digibox-probes/what-is-on-0xa1.js`. Three controls, all of which went silent.
 
@@ -6227,7 +6227,7 @@ it did not draw. Fifth time here that a verdict string was cruder than the table
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:fee4bd84540b9c0429a7c3c59fcf542c27b43ad8e5099d8725fd22e966154fdd @ 2026-09-24 -->
+<!-- fingerprint: sha256:f9fd0503688fecaeda9012859ac21326dc98eadf4cbf52dbc9d06a91ce0936ae @ 2026-09-25 -->
 
 *Seven probe runs. Every number below is from `scripts/digibox-probes/`, and the four claims that
 retired earlier readings each retired them by measurement rather than by argument.*
@@ -7729,7 +7729,7 @@ provable. The census now accepts the whole OpenTV title family.
 
 <!-- anchor: internal/broadcast/titles.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:fee4bd84540b9c0429a7c3c59fcf542c27b43ad8e5099d8725fd22e966154fdd @ 2026-09-24 -->
+<!-- fingerprint: sha256:f9fd0503688fecaeda9012859ac21326dc98eadf4cbf52dbc9d06a91ce0936ae @ 2026-09-25 -->
 
 *20 Sep 2026, in the Go port, against the real firmware. This is the answer to TASK-6.13, and the
 task's own title is wrong: nothing about it is a day-of-eight problem.*
@@ -7821,7 +7821,7 @@ active one. Two things cost time and are worth carrying:
 ## Addressing the listings: two masks, and two facts that came off the screen
 
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:40a6a06f4d2ca5b107c7e978492d9ff7c72901f0131e57eaf9b6fe17533ae282 @ 2026-09-24 -->
+<!-- fingerprint: sha256:bc1fe6c74f43648a07ab572bb60f51206669eb5edcf6e104b05df9bbcfb4289b @ 2026-09-25 -->
 
 *Measured 2026-09-20 while wiring the modelled multiplex into the running server. Everything here
 was found by being wrong first, and each wrong reading presented as **"the box is not asking"** —
@@ -8867,7 +8867,7 @@ experiment that changes the broadcast needs an acceptance that does not assume t
 
 <!-- anchor: internal/broadcast/sections.go -->
 <!-- anchor: internal/multiplex/listings.go -->
-<!-- fingerprint: sha256:e6aafe64491132baf2305a502e4b425389c03a3b37c7c3faf6cf96dcc6e05cf0 @ 2026-09-24 -->
+<!-- fingerprint: sha256:caeae21d5d49c1c16bfa1abf73380a4525619285d4682df8d3588f1f9339528c @ 2026-09-25 -->
 
 *2026-09-22. Six rows, in channel order, with names.*
 
@@ -9715,8 +9715,13 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/multiplex/media.go -->
 <!-- anchor: internal/board/runtime.go -->
 <!-- anchor: internal/media/decoder.go -->
+<!-- anchor: internal/media/encoder.go -->
+<!-- anchor: internal/media/playlist.go -->
+<!-- anchor: cmd/goretrotv/playout.go -->
+<!-- anchor: internal/web/transport.go -->
+<!-- anchor: web/app.ts -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:2b91ec56b6756699be7928b96db26331441e502054a550305b4b79118ba07768 @ 2026-09-25 -->
+<!-- fingerprint: sha256:9ea023dd8a5bd0479dda1fb848a0d5d2ed33abbbb085876edc565a6ae11728f0 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10199,9 +10204,10 @@ event producer or a complete NDS entitlement path; neither may be replaced by a 
 The admitted programme transport is now clocked rather than injected as one host-side burst. Once
 the firmware has selected a service, accepted its PMT and programmed both dedicated decoder PID
 inputs, the multiplex may schedule the complete PAT/PMT/PES transport on the machine clock. The
-board pump presents due 188-byte packets to the same demux input used by the section carousel; PAT
-and PMT are ignored by the programme queue, while only the guest-selected video and audio PIDs are
-retained, in transport order. The pending bytes, cursor, next deadline and period are all part of
+board pump presents due 188-byte packets to the same demux input used by the section carousel. Once
+both guest decoder inputs are valid, the programme queue retains their video/audio packets plus the
+PAT/PMT metadata the host transport decoder needs to identify those selected streams; unrelated
+PIDs remain excluded. The pending bytes, cursor, next deadline and period are all part of
 demux snapshot version 8, so restoring midway through a burst reproduces the same remaining packet
 order and instruction deadlines. The real-firmware selection trace proves the join end to end with
 service `0x64`: guide selection produces decoder inputs `0x0101/0x0102`, then scheduled packets on
@@ -10220,5 +10226,20 @@ instead of silently dropping frames or throttling the instruction loop, while ma
 oversized transport is refused before it reaches the child. Process exit and stderr are likewise
 reported. An acceptance test generates a standards-shaped service independently, decodes real
 non-zero video and audio through this boundary, and proves an undrained one-slot output queue fails
-visibly. The decoded planes are not yet published by the browser; compositing and timestamped audio
-transport remain the next presentation task.
+visibly.
+
+The presentation boundary is now connected. A programme `file` or `folder` is resolved beneath the
+configured media root, with symlinks confined to that root and folder entries sorted lexically.
+ffprobe supplies the durations used for the timeline. The playhead is the in-world clock minus the
+listed programme start, so tuning at 16:30 to a 16:00 event seeks to 30 minutes rather than starting
+the file. Short sources wrap only when the schedule explicitly says `loop`; otherwise startup
+refuses a playlist that cannot cover the event.
+
+A supervised source ffmpeg seeks that timeline and emits real MPEG-2 video and MP2 audio in an
+MPEG transport stream. Those packets enter the instruction-counted demux scheduler and only the
+guest-programmed `0x0101/0x0102` PIDs reach the decoder process. Decoded 352x288 RGBA and 48 kHz
+stereo PCM cross a versioned binary WebSocket envelope. The browser scales the video below the
+firmware OSD and schedules PCM through Web Audio after a handset gesture unlocks it. The former
+browser-generated colour bars and oscillator are gone: changing channel changes the firmware's
+service selection, which changes the schedule-owned source and restarts at that programme's live
+offset.

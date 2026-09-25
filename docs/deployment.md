@@ -2,14 +2,15 @@
 
 <!-- anchor: docker-compose.traefik.yml -->
 <!-- anchor: Dockerfile -->
-<!-- fingerprint: sha256:e3a537279acd1c3ee5e6c48e03462668f8efcb341dd3997be4c1abb74f5c352f @ 2026-09-22 -->
+<!-- fingerprint: sha256:891bf23008ffa89132eead222693661633f0fb350c7870e81d20e5011b3a382b @ 2026-09-25 -->
 
 The public route is hosted on the `*.demosrv.uk` origin described in the machine's private
 `~/.claude/local/traefik.md`. The base compose file remains a local loopback stack. The
 `docker-compose.traefik.yml` overlay joins the shared Traefik network, routes
 `goretrotv.demosrv.uk` over TLS, and removes the base stack's host port. The browser page and Go
-binary are built into the image. The firmware and post-acquisition snapshot stay on this host as
-read-only mounts; neither is in the build context or published image.
+binary and ffmpeg runtime are built into the image. The firmware, post-acquisition snapshot and
+operator media directory stay on this host as read-only mounts; none is in the build context or
+published image. Schedule media paths are relative to `/media` in the container.
 
 ## Start and verify
 

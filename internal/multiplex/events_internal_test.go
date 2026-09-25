@@ -151,3 +151,19 @@ func TestProgrammeMediaIsSelectedByServiceAndInWorldTime(t *testing.T) {
 		t.Fatalf("service-default selection = %q %q %q %t", service, programme, kind, ok)
 	}
 }
+
+func TestProgrammePlayoutStartsAtTheLiveBroadcastOffset(t *testing.T) {
+	t.Parallel()
+	listings := &Listings{Services: []ListedService{{Name: "Film Four", ServiceID: 104,
+		Programmes: []ListedProgramme{{Start: "16:00", Minutes: 60, Title: "Open Movie",
+			Media: &ProgrammeMedia{Kind: MediaKindFile, Path: "sintel.mp4", Loop: true}}}}}}
+	when := time.Date(1998, 12, 24, 16, 30, 0, 0, time.UTC)
+	playout, ok := listings.PlayoutFor(104, when)
+	if !ok {
+		t.Fatal("configured programme did not resolve")
+	}
+	if playout.Elapsed != 30*time.Minute || playout.Duration != time.Hour ||
+		playout.Media.Path != "sintel.mp4" || !playout.Media.Loop {
+		t.Fatalf("playout = %#v, want +30m of a one-hour looping programme", playout)
+	}
+}

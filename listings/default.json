@@ -7,7 +7,9 @@
       "serviceId": 100,
       "listingsId": 106,
       "media": {
-        "kind": "test-pattern"
+        "kind": "file",
+        "path": "sintel-trailer.mp4",
+        "loop": true
       },
       "programmes": [
         {
@@ -399,7 +401,9 @@
       "serviceId": 1000,
       "listingsId": 101,
       "media": {
-        "kind": "test-pattern"
+        "kind": "file",
+        "path": "big-buck-bunny.mp4",
+        "loop": true
       },
       "programmes": [
         {

@@ -15,6 +15,9 @@ const (
 // ScheduleTransport replaces the pending transport with complete packets which enter the demux at
 // an instruction-counted cadence. The input is copied so its caller cannot mutate future state.
 func (d *Demux) ScheduleTransport(data []byte, first, period uint64) error {
+	if d.programmeScheduled {
+		return fmt.Errorf("demux: programme transport is already scheduled")
+	}
 	if period == 0 {
 		return fmt.Errorf("demux: programme transport period is zero")
 	}
@@ -33,6 +36,10 @@ func (d *Demux) ScheduleTransport(data []byte, first, period uint64) error {
 	d.programmeScheduled = true
 	return nil
 }
+
+// TransportPending reports whether an instruction-counted programme burst is still entering the
+// device. It lets the edge producer apply backpressure without replacing packets already in flight.
+func (d *Demux) TransportPending() bool { return d.programmeScheduled }
 
 // Pump admits every packet whose instruction-count deadline has passed. The board invokes this
 // from the same deterministic clock pump as the hardware timer and serial links.
@@ -98,7 +105,11 @@ func (d *Demux) pushTransportPacket(packet []byte) error {
 		}
 	}
 	videoPID, audioPID, programmeReady := d.ProgrammePIDs()
-	if programmeReady && (pid == videoPID || pid == audioPID) {
+	// The host decoder consumes a transport stream, not the receiver's internal elementary-stream
+	// bus, so retain the PAT and the announced PMT alongside the two PIDs the guest selected. They
+	// are admitted only after both decoder inputs are valid; they cannot create a selection.
+	const programmeMapPID = 0x100
+	if programmeReady && (pid == 0 || pid == programmeMapPID || pid == videoPID || pid == audioPID) {
 		if len(d.programmeTransport)+len(packet) > maxProgrammeTransport {
 			return fmt.Errorf("demux: programme transport queue exceeds %d bytes", maxProgrammeTransport)
 		}
@@ -141,8 +152,9 @@ func (d *Demux) pushTransportPacket(packet []byte) error {
 }
 
 // TakeProgrammeTransport drains transport packets admitted by the two decoder PIDs the guest
-// programmed at +0x94/+0x98. No general DMA channel is implied: the measured tuned firmware arms
-// none for media, so this is the dedicated decoder input boundary and nothing more.
+// programmed at +0x94/+0x98, plus PAT/PMT metadata needed to describe those streams to the host
+// transport decoder. No general DMA channel is implied: the measured tuned firmware arms none for
+// media, so this is the dedicated decoder input boundary and nothing more.
 func (d *Demux) TakeProgrammeTransport() []byte {
 	packets := append([]byte(nil), d.programmeTransport...)
 	d.programmeTransport = nil

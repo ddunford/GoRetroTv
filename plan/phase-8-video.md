@@ -56,6 +56,14 @@ explicit.
    unconfigured channels, observe media only on the matching current programme, hear the cadence,
    retain responsive layout, and preserve boot/oracle/replay gates.
    `[TC-8.6]`
+- [x] TASK-8.7 — Extend the existing programme-owned media source with sandboxed file and folder paths beneath a
+   configured media root. Resolve folders as a deterministic lexical playlist with probed
+   durations. On tune or reconnect, derive the playhead from the in-world broadcast clock minus
+   the scheduled programme start—not from when the viewer selected the channel—and seek before
+   transcoding. An explicit loop option may wrap short demo media; without it, configuration whose
+   playable duration cannot cover the programme is refused. FFmpeg input `-ss` uses accurate seek
+   while transcoding, and concat duration metadata is required for seeking a folder as one timeline:
+   <https://ffmpeg.org/ffmpeg.html>, <https://ffmpeg.org/ffmpeg-all.html#concat>. `[TC-8.7]`
 
 ## Ordering
 

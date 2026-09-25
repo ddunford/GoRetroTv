@@ -122,3 +122,7 @@ digest: ad38ce4cf3c17446398fa4f5303aa78f8fc063a50cfeeda43699d317b0103a3e
   when: 2026-09-24T22:48:53Z
    why: add the missing public-log diagnostic required to verify a failed published firmware transition
 
+digest: 8907d8e02581239d114a1da10f7208c8998156103905d0fd097175e2c925151b
+  when: 2026-09-25T10:10:41Z
+   why: Phase 8 file-backed broadcasts require ffmpeg in the runtime image and a read-only operator media mount excluded from the build context.
+

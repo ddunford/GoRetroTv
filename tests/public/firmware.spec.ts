@@ -110,6 +110,15 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
 
 test('firmware selection exposes only the guide-configured programme without a browser colour key', async ({ page }, testInfo) => {
   test.setTimeout(150_000);
+  let videoFrames = 0;
+  let audioChunks = 0;
+  page.on('websocket', socket => socket.on('framereceived', frame => {
+    if (typeof frame.payload === 'string') return;
+    const payload = Buffer.from(frame.payload);
+    if (payload.subarray(0, 4).toString() !== 'GRTV' || payload[4] !== 1) return;
+    if (payload[5] === 1) videoFrames++;
+    if (payload[5] === 2) audioChunks++;
+  }));
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Reset the box' }).click();
@@ -129,12 +138,13 @@ test('firmware selection exposes only the guide-configured programme without a b
 
   await expect(page.locator('body')).toHaveAttribute('data-media', 'active', { timeout: 60_000 });
   await expect(page.locator('#box-status')).toHaveText('BBC One — Listings not yet reconstructed is playing.');
-  await expect.poll(() => page.locator('#screen').evaluate((canvas: HTMLCanvasElement) => {
-    const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
-    for (let offset = 3; offset < pixels.length; offset += 4) if (pixels[offset] !== 0) return false;
-    return true;
-  }), { timeout: 60_000, intervals: [1_000] }).toBe(true);
   await expect(page.locator('#programme')).toHaveCSS('visibility', 'visible');
+  await expect.poll(() => videoFrames, { timeout: 60_000 }).toBeGreaterThan(1);
+  await expect.poll(() => audioChunks, { timeout: 60_000 }).toBeGreaterThan(1);
+  const firstVideo = await page.locator('#programme').evaluate((canvas: HTMLCanvasElement) =>
+    canvas.toDataURL());
+  await expect.poll(() => page.locator('#programme').evaluate((canvas: HTMLCanvasElement) =>
+    canvas.toDataURL()), { timeout: 10_000 }).not.toBe(firstVideo);
 
   await page.screenshot({ path: testInfo.outputPath('programme-light.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });

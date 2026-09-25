@@ -30,10 +30,15 @@ Deleting it would make every later "is this right?" unanswerable.
 Not in the repository and not redistributable — see `firmware/MANIFEST.md`. A clone is inert until
 someone supplies the images.
 
+## Licence
+
+GoRetroTV is free software under the GNU General Public License version 2. See `LICENSE`. The
+included Sky/OpenTV Huffman dictionary is derived from `jcdutton/loadepg`; its origin and the local
+correction are recorded in `THIRD_PARTY_NOTICES.md` and `dictionaries/MANIFEST.md`.
+
 ## Lineage
 
 This replaces an earlier project in which the emulator began as one epic among many. That work —
 610 commits, a FastAPI backend, the listings-reconstruction pipeline, ErsatzTV playout, 464 tests
-and a conformance harness — is preserved whole at
-`/opt/workspaces/development/archive/skytv.demosrv.uk-2026-09-16`. The listings reconstruction is
-planned to return as a later phase; the playout stack stays archived unless video lands.
+and a conformance harness — is preserved separately by the maintainer. The listings reconstruction
+is planned to return as a later phase; the playout stack stays archived unless video lands.

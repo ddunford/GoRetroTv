@@ -101,13 +101,19 @@ public_env() {
     GORETROTV_RUNTIME_UID="$(id -u)"
     GORETROTV_RUNTIME_GID="$(id -g)"
     [[ "$GORETROTV_RUNTIME_UID" != 0 ]] || die "public container must run as a non-root snapshot owner"
+    [[ -n "${GORETROTV_DOMAIN:-}" ]] || die "GORETROTV_DOMAIN must name the public host (set it in .env)"
     GORETROTV_ENV=production
-    export GORETROTV_RUNTIME_UID GORETROTV_RUNTIME_GID GORETROTV_ENV
+    export GORETROTV_RUNTIME_UID GORETROTV_RUNTIME_GID GORETROTV_DOMAIN GORETROTV_ENV
 }
 
 cmd_public_config() {
     public_env
     public_compose config "$@"
+}
+
+cmd_public_domain() {
+    public_env
+    printf '%s\n' "$GORETROTV_DOMAIN"
 }
 
 cmd_up_public() {
@@ -139,8 +145,8 @@ cmd_restart_public() {
 }
 
 cmd_public_health() {
-    local domain="${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}"
-    local url="https://${domain}/health"
+    public_env
+    local url="https://${GORETROTV_DOMAIN}/health"
     for ((i = 1; i <= 90; i++)); do
         if curl -fsS --max-time 3 "$url" >/dev/null 2>&1; then
             ok "healthy through Traefik: $url"
@@ -421,6 +427,7 @@ Running
   up             Build and start the compose stack, then wait for health
   up-public      Build and start the real HTTPS Traefik route with private data mounted read-only
   config-public  Print the effective public compose configuration
+  public-domain  Print the configured public hostname for browser tooling
   down           Stop the compose stack
   down-public    Stop the public compose stack
   restart-public Restart the published box from its private snapshot, then wait for HTTPS health
@@ -477,6 +484,7 @@ main() {
         up)      cmd_up "$@" ;;
         up-public) cmd_up_public "$@" ;;
         config-public) cmd_public_config "$@" ;;
+        public-domain) cmd_public_domain "$@" ;;
         down)    cmd_down "$@" ;;
         down-public) cmd_down_public "$@" ;;
         restart-public) cmd_restart_public "$@" ;;

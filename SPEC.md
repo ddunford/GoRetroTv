@@ -208,8 +208,7 @@ One Go binary. The browser is a display and a keypad, not a participant.
 
 ## 10. Repository topology
 
-Single repo, `github.com/ddunford/GoRetroTv`, working at
-`/opt/workspaces/development/goretrotv.demosrv.uk`.
+Single repo, `github.com/ddunford/GoRetroTv`.
 
 ## 11. Constraints & preferences
 
@@ -218,7 +217,7 @@ Go for the core (stated). Browser output first, HDMI/Pi later (stated). The brow
 
 ## 12. Deployment & access
 
-`goretrotv.demosrv.uk`, public, TLS via the existing Traefik. A **demonstration host with no real
+`<configured-public-host>`, public, TLS via the existing Traefik. A **demonstration host with no real
 users**: findings there are real, incidents there are not. Developer surfaces are not exposed.
 
 ## 13. Risks & open questions
@@ -257,7 +256,7 @@ users**: findings there are real, incidents there are not. Developer surfaces ar
 1. A cold boot to 42 tasks agrees with the oracle: matching state-hash checkpoints end to end, with tier-2 localisation demonstrated against an injected divergence.
 2. That boot takes **under 30 seconds** (spike 001), and a snapshot restore makes it a once-per-session cost rather than a per-experiment one.
 3. A snapshot restores to a pressable, acquired box in under a second.
-4. A visitor at `goretrotv.demosrv.uk` reaches a guide showing correct now-and-next, with no
+4. A visitor at `<configured-public-host>` reaches a guide showing correct now-and-next, with no
    explanation and no local install.
 5. The ALL CHANNELS grid lists channels and programmes.
 6. `gdb` attaches and breaks on a firmware address.
@@ -278,8 +277,7 @@ users**: findings there are real, incidents there are not. Developer surfaces ar
 - `docs/reference/digibox-emulator-skill.md` — CPU reference, firmware conventions, measurement rules.
 - `docs/reference/lessons-from-the-browser-emulator.md` — mistakes already paid for.
 - `reference/digibox-boot.html` — the oracle.
-- Full history of the predecessor: `/opt/workspaces/development/archive/skytv.demosrv.uk-2026-09-16`
-  (610 commits, the FastAPI backend, the listings pipeline, ErsatzTV playout, 464 tests, the
-  conformance harness).
+- The predecessor is archived separately by the maintainer (610 commits, the FastAPI backend, the
+  listings pipeline, ErsatzTV playout, 464 tests, and the conformance harness).
 - NEC VR4111 User's Manual, µPD30111, U13137EJ2V0UM00 2nd ed., April 1998.
 - tvheadend `src/epggrab/module/opentv.c`; `dave-p/openTVtoXML`; `jcdutton/loadepg`.

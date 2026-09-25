@@ -38,7 +38,7 @@ been sufficient.
 
 <!-- anchor: go.mod -->
 <!-- anchor: ctl.sh -->
-<!-- fingerprint: sha256:52da3957e68e2ee8aa0f777ab8849840c0ef8ea81e08208d820da9849b993dbf @ 2026-09-24 -->
+<!-- fingerprint: sha256:dff7e50b634bb579ec94d7aeb12bb23caa83641479484bcca159b8247eb14033 @ 2026-09-25 -->
 
 **One module at the repository root** (`github.com/ddunford/goretrotv`, lowercased from the git
 remote), with binaries under `cmd/` sharing `internal/`. The `cmd/` shape rather than the root shape
@@ -77,7 +77,7 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 <!-- anchor: internal/wire/wire.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:35e0f225f8376113c62426208d33850f6077dd4571da814cb6ab545a95cec3ea @ 2026-09-25 -->
+<!-- fingerprint: sha256:d197725c89853d122b2f5a5d6b19d1ca0f7ac161cc2a4292bcadad0dc5b88890 @ 2026-09-25 -->
 
 The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
 Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt
@@ -90,6 +90,9 @@ WebSocket code enters the emulator core.
 Programme audio uses the same outward connection, but its binary header carries the guest
 instruction count rather than a host or decoder clock. Browser reconnect, autoplay unlock and mute
 are presentation states only; none feeds time or channel selection back into the emulator.
+The JSON media state separately reports whether the guest requested decoder streams and whether
+that request resolves to a configured source, so startup, guide navigation and an unconfigured
+channel are not collapsed into the same browser state.
 
 `ARCH-MODULE-1` accepts exactly this module at this version and rejects any other `require` or
 `replace` directive. A version change or new dependency needs another recorded decision and an

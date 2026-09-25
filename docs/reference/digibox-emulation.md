@@ -4487,7 +4487,7 @@ The firmware had been drawing this the whole time.
 **Load the page, let it boot, and press the handset button marked `sky` (raw `7D`).** The menu
 appears with no probe and no pokes -- `scripts/digibox-probes/plain-key-press.js` is the version
 of the run that does nothing but boot, press and look, and it produces the same 37-colour surface
-as the instrumented one. Verified on `https://retrotv.demosrv.uk/digibox-boot.html` as well as
+as the instrumented one. Verified on `https://<configured-predecessor-host>/digibox-boot.html` as well as
 locally.
 
 **The gate answers are a DECLARED FICTION and they wait for the boot.** `skyGatesTick()` patches
@@ -4512,7 +4512,7 @@ the development stack -- restarting the wrong one changes nothing and looks iden
 
 #### What still is not there
 
-**Nothing here changes what a visitor to `https://retrotv.demosrv.uk/digibox-boot.html` sees.** The
+**Nothing here changes what a visitor to `https://<configured-predecessor-host>/digibox-boot.html` sees.** The
 blitter fix is live on the demo host -- verified by fetching the page and finding
 `blitSideLooksReal` in it -- but the menu appears only when a probe pokes the two gate values
 first. Left alone, the firmware still clears its own screen and the box is blue exactly as before.
@@ -7942,7 +7942,7 @@ menu: `0x60`, `0x61`, `0x62` and `0x81` move the highlight or open a sub-screen,
 ## The Huffman dictionary is a DECODER'S table, and two readings of it were wrong
 
 <!-- anchor: internal/broadcast/huffman.go -->
-<!-- fingerprint: sha256:67ecc5798cc8a1f686c6808ac3d0e2b2989e25c0f2844778417b55e1632e8c92 @ 2026-09-22 -->
+<!-- fingerprint: sha256:3665d5151e8093414ff579136e92a005de824313f469b38f87bb95ebf36eeb66 @ 2026-09-25 -->
 
 *Measured 2026-09-20, against the box's screen. Both defects had been in every title section this
 project ever broadcast, and both survived a byte-for-byte reference-vector test — because the
@@ -9721,7 +9721,7 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/web/transport.go -->
 <!-- anchor: web/app.ts -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:b8201491cd0288ae4fdcbf07e5d70bb2ca9d37019bfb635b9916126f573b8e51 @ 2026-09-25 -->
+<!-- fingerprint: sha256:ec8efd816df6bf22df4a04157627e98ee285053c47b60430959f2f4fd280ab73 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -9730,6 +9730,10 @@ bit per filter pair and writes it back. Returning zero from that read made each 
 and the production multiplex carries every section as 188-byte TS packets through the guest's PID
 channels and match units. The real-firmware programme acquisition completes at instruction
 44,022,782 after seventeen serial title sections, with a 120-million-instruction stall ceiling.
+For programme playout, those same 188-byte packets still enter the demux on the instruction-count
+schedule. Only packets already admitted by the guest-programmed decoder PIDs are batched before the
+host ffmpeg decoder; batching there prevents one bounded queue slot being consumed per individual
+packet without moving the guest-visible transport deadline.
 
 The cold ROM window was then measured without conflating it with the application. Channels 0 and 1
 are written as `0x00014000` and `0x00014001`; match-unit word 8 binds unit 0 to channel 0 and unit 1

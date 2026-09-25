@@ -1,15 +1,15 @@
-# Dictionaries — what belongs here, and why it is not in git
+# Dictionaries — provenance and format
 
 The Sky/OpenTV EPG carries its programme text Huffman-compressed against a dictionary the box
 already holds. Writing that stream — which is what a listings feed has to do — needs the same
-dictionary, and **this one is not ours to redistribute**.
+dictionary. The included UK dictionary comes from the GPL-2.0 `jcdutton/loadepg` project and may be
+redistributed under those terms.
 
-Every public implementation that ships such a file (`jcdutton/loadepg`, `dave-p/openTVtoXML`,
-`vdr-projects/vdr-plugin-eepg`, `tvheadend`) is GPL, and the copy in use here carries no licence
-header, so its provenance cannot be established from the file itself. It is therefore handled the
-way the flash images are: **required, local, gitignored, never committed and never baked into a
-published image.** `internal/broadcast` builds title sections only when it is present, and its
-tests skip rather than fail when it is not — the same contract the firmware tests use.
+The exact source is `jcdutton/loadepg`, commit `74267d7089d1b8e4fb1c88f710af1666b9a907ed`,
+`conf/sky_uk.dict`. GoRetroTV removes the leading space from its ` =0001000` entry so that it is
+parsed as the empty terminator rather than another SPACE leaf. That modified form has SHA-256
+`c05d288d9d22403f97e5caade329579c5124cb180790bf726e62cca792cb300b`. The upstream project and this
+modified copy are distributed under GPL-2.0; see `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
 ## What must be here
 
@@ -39,10 +39,7 @@ One entry per line, `<value>=<bits>`, parsed by three attempts **in this order**
 The ordering is load-bearing. Splitting naively on `=` mis-parses both the space line and any
 phrase containing `=`.
 
-## Getting one
+## Alternative source
 
-It is not downloaded by anything here on purpose. Take it from a GPL EPG reader that ships one, or
-extract it from your own box's flash — the strings are plain and NUL-terminated at `0xC8408` in
-`FLASH_U202.bin`, alphabetised, though the code table after them is undocumented and nobody has
-reversed it yet. Doing so would remove the third-party dependency entirely and is worth its own
-task.
+The strings are also plain and NUL-terminated at `0xC8408` in `FLASH_U202.bin`, alphabetised,
+though the code table after them is undocumented and nobody has reversed it yet.

@@ -79,7 +79,7 @@ python3 scripts/docs-anchors.py --repo . --docs docs stamp --section '<heading>'
 Stamping without re-reading is the one move that breaks this — a fingerprint nobody earned reads as
 verified for ever and takes the section out of the queue permanently. A section that makes no claim
 about code declares that instead, with a reason: `<!-- anchor: none - why -->`.
-<!-- fingerprint: sha256:086fee4ff3bafbc98dde9e8a3cfcd85fe9053eab75a30f9c9b74bf013a61d999 @ 2026-09-24 -->
+<!-- fingerprint: sha256:e41fb86444b0135ae643798e3950bb16dff33d8aa340ec5b38a3b93078fa1759 @ 2026-09-25 -->
 
 ## The site
 

@@ -23,7 +23,8 @@ const examplePath = "../../.env.example"
 // a heuristic exemption grows quietly, and an exemption that grows quietly is how a variable stops
 // being checked. Adding one means editing this line.
 var ctlOnlyVars = map[string]bool{
-	"GORETROTV_PORT": true,
+	"GORETROTV_DOMAIN": true,
+	"GORETROTV_PORT":   true,
 }
 
 // setEnv installs a complete, valid environment and clears everything else the binary reads, so a

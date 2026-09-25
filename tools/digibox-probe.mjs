@@ -27,7 +27,7 @@
 // measurement read from a half-booted machine reports on a state nobody chose.
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
-const { chromium } = createRequire(new URL('/opt/workspaces/development/skytv.demosrv.uk/frontend/package.json', import.meta.url))('playwright');
+const { chromium } = createRequire(import.meta.url)('playwright');
 
 const urlIx = process.argv.indexOf('--url');
 // `--url VALUE` takes an argument, so VALUE is not a probe file. Filtering only on a leading `--`

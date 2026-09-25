@@ -70,7 +70,8 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
 
   const response = await page.goto('/');
   expect(response?.status()).toBe(200);
-  await expect.poll(() => websocketURL).toBe('wss://goretrotv.demosrv.uk/ws');
+  const expectedWebSocketURL = new URL('/ws', response!.url()).toString().replace(/^http/, 'ws');
+  await expect.poll(() => websocketURL).toBe(expectedWebSocketURL);
   const sky = page.getByRole('button', { name: 'box office', exact: true });
   await expect(sky).toBeEnabled();
   await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide on the handset.');
@@ -95,7 +96,7 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
 
   await sky.click();
   await expect.poll(() => sent.length).toBe(1);
-  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 3, raw: 125, source: 0 });
+  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 4, raw: 125, source: 0 });
   await expect.poll(() => indexedHash(pixels), { timeout: 45_000, intervals: [500, 1000] })
     .toBe(0xFE8D1CCC);
   await expect(page.locator('#box-status')).toContainText('ready');
@@ -109,31 +110,55 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
 });
 
 test('firmware selection exposes only the guide-configured programme without a browser colour key', async ({ page }, testInfo) => {
-  test.setTimeout(150_000);
+  test.setTimeout(270_000);
   let videoFrames = 0;
   let audioChunks = 0;
+  const pixels = Buffer.alloc(720 * 576);
   page.on('websocket', socket => socket.on('framereceived', frame => {
-    if (typeof frame.payload === 'string') return;
+    if (typeof frame.payload === 'string') {
+      const message = JSON.parse(frame.payload) as { type: string; pixels?: string;
+        x?: number; y?: number; w?: number; h?: number };
+      if (message.type === 'frame' && message.pixels && message.x !== undefined && message.y !== undefined &&
+          message.w !== undefined && message.h !== undefined) {
+        const patch = Buffer.from(message.pixels, 'base64');
+        for (let y = 0; y < message.h; y++) {
+          patch.copy(pixels, (message.y + y) * 720 + message.x, y * message.w, (y + 1) * message.w);
+        }
+      }
+      return;
+    }
     const payload = Buffer.from(frame.payload);
-    if (payload.subarray(0, 4).toString() !== 'GRTV' || payload[4] !== 1) return;
+    if (payload.subarray(0, 4).toString() !== 'GRTV' || payload[4] !== 2) return;
     if (payload[5] === 1) videoFrames++;
     if (payload[5] === 2) audioChunks++;
   }));
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Reset the box' })).toBeEnabled({ timeout: 15_000 });
   await page.getByRole('button', { name: 'Reset the box' }).click();
-  await expect(page.locator('#reset-feedback')).toHaveText('The box was reset.', { timeout: 30_000 });
-  await expect(page.locator('#box-status')).toContainText('restored to its startup state');
-  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
+  await expect.poll(() => indexedHash(pixels), { timeout: 30_000, intervals: [250, 500] })
+    .toBe(0xA6A21DC5);
+  await expect(page.getByRole('button', { name: 'Reset the box' })).toBeEnabled({ timeout: 15_000 });
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled({ timeout: 30_000 });
+  await expect(page.locator('#reset-feedback')).toBeEmpty();
 
-  const press = async (name: string) => {
+  const press = async (name: string, expectedHash?: number) => {
     await page.getByRole('button', { name, exact: true }).click();
-    await page.waitForTimeout(4_000);
+    if (expectedHash !== undefined) {
+      await expect.poll(() => indexedHash(pixels), { timeout: 20_000, intervals: [250, 500] })
+        .toBe(expectedHash);
+    } else {
+      await page.waitForTimeout(1_000);
+    }
   };
-  await press('box office');
+  await press('box office', 0xFE8D1CCC);
   await press('Left');
+  await page.waitForTimeout(12_000);
   await press('select');
-  await page.waitForTimeout(10_000);
+  // The grid can hold a plausible, half-painted frame for several seconds while listings fill.
+  // A SELECT in that interval is swallowed by the real firmware; wait through the measured paint
+  // tail rather than treating the first stable-looking canvas as an operable row.
+  await page.waitForTimeout(25_000);
   await press('select');
 
   await expect(page.locator('body')).toHaveAttribute('data-media', 'active', { timeout: 60_000 });
@@ -145,11 +170,30 @@ test('firmware selection exposes only the guide-configured programme without a b
     canvas.toDataURL());
   await expect.poll(() => page.locator('#programme').evaluate((canvas: HTMLCanvasElement) =>
     canvas.toDataURL()), { timeout: 10_000 }).not.toBe(firstVideo);
+  await page.waitForTimeout(12_000);
+  await expect(page.getByRole('button', { name: 'box office', exact: true })).toBeEnabled();
+  await page.screenshot({ path: testInfo.outputPath('programme-configured-light.png'), fullPage: true });
 
-  await page.screenshot({ path: testInfo.outputPath('programme-light.png'), fullPage: true });
+  // Re-enter the firmware-owned guide, move from BBC One to ITV (two rows down), and tune it.
+  // ITV has listings but no media source. The browser is only observing the resulting service;
+  // it neither names ITV nor chooses the source itself.
+  await press('box office', 0xFE8D1CCC);
+  await press('Left');
+  await page.waitForTimeout(12_000);
+  await press('select');
+  await page.waitForTimeout(25_000);
+  await press('Down');
+  await press('Down');
+  await press('select');
+  await expect(page.locator('body')).toHaveAttribute('data-media', 'inactive', { timeout: 60_000 });
+  await expect(page.locator('#programme')).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('#box-status'))
+    .toHaveText('The selected channel has no configured programme source.');
+
+  await page.screenshot({ path: testInfo.outputPath('programme-unconfigured-light.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: testInfo.outputPath('programme-dark.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('programme-unconfigured-dark.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  await page.screenshot({ path: testInfo.outputPath('programme-mobile-dark.png'), fullPage: true });
+  await page.screenshot({ path: testInfo.outputPath('programme-unconfigured-mobile-dark.png'), fullPage: true });
 });

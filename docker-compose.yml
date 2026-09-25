@@ -16,9 +16,8 @@ services:
       # that set one would have turned this into a wrong-or-absent ROM, which is the very failure
       # the manifest verification exists to catch.
       GORETROTV_FIRMWARE_DIR: /firmware
-      # The modelled broadcast. The schedule is ours and is committed; the Huffman dictionary is
-      # third-party data that is NOT redistributable, so it is mounted exactly as the firmware is
-      # and a clone without it broadcasts nothing rather than failing to build.
+      # The modelled broadcast. The schedule is ours and is committed; the GPL-2.0 Huffman
+      # dictionary is attributed in THIRD_PARTY_NOTICES.md and mounted for runtime configuration.
       GORETROTV_LISTINGS_PATH: /listings
       GORETROTV_DICTIONARY_PATH: /dictionaries/skyuk.dict
       GORETROTV_MEDIA_ROOT: /media
@@ -29,7 +28,7 @@ services:
       # for the other eighteen hours, which is why this used to pin an evening. Set the variable
       # to a YYYY-MM-DD date to pin one again; a pinned date is the only way to reach a dated
       # schedule in listings/, since "now" will not be 1998.
-      GORETROTV_BROADCAST_DATE: ${GORETROTV_BROADCAST_DATE:-now}
+      GORETROTV_BROADCAST_DATE: ${GORETROTV_BROADCAST_DATE:-1998-12-24}
       GORETROTV_LOG_LEVEL: ${GORETROTV_LOG_LEVEL:-debug}
       GORETROTV_LOG_FORMAT: ${GORETROTV_LOG_FORMAT:-json}
       # Inside the container the listener must accept the published mapping, so it binds all
@@ -45,7 +44,7 @@ services:
       # THE FIRMWARE IS NOT REDISTRIBUTABLE and is never baked into the image. It is mounted
       # read-only from the working copy; a clone without it is inert by design.
       - ./firmware:/firmware:ro
-      # THE HUFFMAN DICTIONARY IS NOT REDISTRIBUTABLE either — same treatment, same reason.
+      # The attributed GPL-2.0 Huffman dictionary is mounted read-only.
       - ./dictionaries:/dictionaries:ro
       # The schedules are mounted rather than baked in so they can be edited, and dated files
       # added, on the host without a rebuild.

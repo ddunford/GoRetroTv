@@ -15,9 +15,8 @@ import (
 // against the decoder it is meant to feed. So both halves live here and the
 // round trip is the test.
 //
-// The dictionary itself is not in this repository. It is third-party data of
-// uncertain provenance and is handled like the firmware: local, gitignored,
-// and described in dictionaries/MANIFEST.md.
+// The attributed GPL-2.0 dictionary is included in this repository and its
+// provenance and one-line correction are described in dictionaries/MANIFEST.md.
 
 // HuffmanDictionary is one loaded Sky EPG code table.
 type HuffmanDictionary struct {
@@ -49,7 +48,7 @@ type HuffmanDictionary struct {
 // Both are fixed here: a single-character value is recognised first, and a
 // value already seen keeps its SHORTER code.
 func LoadHuffmanDictionary(path string) (*HuffmanDictionary, error) {
-	file, err := os.Open(path) // #nosec G304 -- operator-supplied dictionary, like the firmware
+	file, err := os.Open(path) // #nosec G304 -- configured local dictionary path
 	if err != nil {
 		return nil, fmt.Errorf("broadcast: huffman dictionary: %w", err)
 	}

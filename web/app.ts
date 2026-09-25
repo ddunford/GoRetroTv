@@ -200,6 +200,8 @@ function handleMessage(payload: string): void {
     if (mediaActive) {
       paint(0, 0, width, height);
       showStatus('ready', `${message.service} — ${message.programme} is playing.`);
+    } else if (message.requested === 1 && machineReady) {
+      showStatus('ready', 'The selected channel has no configured programme source.');
     }
     return;
   }

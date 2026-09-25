@@ -145,7 +145,7 @@ slot layout at `0x80165048`. `sky-02me.17`, `.18`, `.20` and `.21` are closed.
 
 <!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
-**The box shows the Sky interface.** Load `https://retrotv.demosrv.uk/digibox-boot.html`, let it
+**The box shows the Sky interface.** Load `https://<configured-predecessor-host>/digibox-boot.html`, let it
 boot, press the handset button marked **sky** (raw `0x7D`), and the real Box Office menu appears --
 the TV GUIDE / BOX OFFICE / SERVICES / INTERACTIVE tab bar with icons, and six menu rows with
 MOVIES BY START TIME highlighted. No probe and no pokes;
@@ -523,7 +523,7 @@ close reason. `sky-02me.18` is answered in `digibox-emulation.md` and retitled.
 - **Run `./ctl.sh digibox` after any change to `frontend/public/digibox-boot.html`.** A hardware
   model does not fail with a stack trace; it fails by running for ever doing something plausible.
 - **Edit spike pages in place.** A write-then-rename strands the demo host's file bind mount.
-- Verify against `https://retrotv.demosrv.uk/digibox-boot.html`.
+- Verify against `https://<configured-predecessor-host>/digibox-boot.html`.
 - There is **no MPEG-2 video decoder** and none is planned. The target is the menus and the guide.
 
 ## Useful external references
@@ -543,8 +543,8 @@ close reason. `sky-02me.18` is answered in `digibox-emulation.md` and retitled.
 
 <!-- anchor: none - the PREDECESSOR's handoff, kept as history; its subject is the old repository -->
 
-*16 September 2026.* The emulator is now its own project in Go, at
-`github.com/ddunford/GoRetroTv` (`/opt/workspaces/development/goretrotv.demosrv.uk`). The browser
+*16 September 2026.* The emulator is now its own project in Go at
+`github.com/ddunford/GoRetroTv`. The browser
 emulator this file describes is kept as `reference/digibox-boot.html` and is now the port's
 **correctness oracle**, not a dead end.
 
@@ -553,5 +553,4 @@ phase plan references it rather than re-deriving it. What changed is only where 
 what language it is in.
 
 The predecessor, whole — 610 commits, the FastAPI backend, the listings pipeline, ErsatzTV playout,
-464 tests and the conformance harness — is at
-`/opt/workspaces/development/archive/skytv.demosrv.uk-2026-09-16`.
+464 tests and the conformance harness — is archived separately by the maintainer.

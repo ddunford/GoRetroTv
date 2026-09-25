@@ -248,7 +248,7 @@ are not served. Tracked with I-1 as `gort-a8a`; do it in the same pass as F-1, w
   `/.env`, `/.git/config`, and for the new data paths `/listings`, `/listings/default.json` and
   `/dictionaries/skyuk.dict`.
 - **A02 cryptography.** Unchanged. Live headers at `47e1f01` still carry HSTS
-  (`max-age=31536000`), a CSP naming `wss://goretrotv.demosrv.uk` with `object-src 'none'` and
+  (`max-age=31536000`), a CSP naming `wss://<configured-public-host>` with `object-src 'none'` and
   `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and
   `Referrer-Policy: no-referrer`. The SHA-256 in `listings.go:221` is a reload content stamp, not an
   integrity control, and is not presented as one.
@@ -324,7 +324,7 @@ are not served. Tracked with I-1 as `gort-a8a`; do it in the same pass as F-1, w
   (`internal/multiplex` 936s, `internal/broadcast` 202s)
 - `./ctl.sh conformance` → 7/7 rules, 26/26 probes; `./ctl.sh lint` → 0 issues, hooks armed;
   `./ctl.sh vuln` → 0; both `npm audit` forms → 0
-- `curl https://goretrotv.demosrv.uk/health` → `version=47e1f01`; `curl -I` for the header set;
+- `curl https://<configured-public-host>/health` → `version=47e1f01`; `curl -I` for the header set;
   404 probes for the developer and data paths
 - Live browser: pressing `services` on the real handset and sampling `#key-feedback` (F-3)
 - `go test -overlay` harness for the validator/builder disagreement cases (F-2), tree untouched

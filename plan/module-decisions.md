@@ -275,7 +275,7 @@ uses Debian slim plus its ffmpeg package instead of distroless. Operator media i
 time and excluded from the image context. Last web-verified: 2026-09.
 
 ### Deployment and access
-- **Public**, at `goretrotv.demosrv.uk`, TLS via the existing Traefik, as the predecessor did.
+- **Public**, at `<configured-public-host>`, TLS via the existing Traefik, as the predecessor did.
 - **Developer surfaces are not exposed.** The gdb stub and the instrument endpoints bind to
   localhost only. This is the one real security control in the project and it gets a conformance
   rule.

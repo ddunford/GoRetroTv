@@ -52,6 +52,8 @@ explicit.
    in the emulator core. `[TC-8.4]`
 5. Composite the decoded video plane below the guest OSD and transport timestamped audio to the
    browser with reconnect, mute and autoplay-unlock behavior. `[TC-8.5]`
+- [x] TASK-8.5a — Keep firmware responsive during live playout by servicing media only at the
+  bounded instruction-clock cadence, with non-blocking presentation queues. `[TC-8.5a]`
 6. Prove the real user journey in a browser in light and dark modes: tune configured and
    unconfigured channels, observe media only on the matching current programme, hear the cadence,
    retain responsive layout, and preserve boot/oracle/replay gates.

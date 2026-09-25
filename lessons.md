@@ -8,7 +8,7 @@ firmware, `ctl.sh` and plan, so they stay here.
 
 ### Deploy every verified change to the demo host — do not ask each time
 
-`goretrotv.demosrv.uk` is a **dev/demo host on a dev machine**, not production. There is no
+`<configured-public-host>` is a **dev/demo host on a dev machine**, not production. There is no
 customer, no SLA and no release ceremony, and the whole point of it is to see the box working.
 So a change that has passed its checks gets deployed in the same turn that finishes it:
 

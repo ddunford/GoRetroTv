@@ -48,11 +48,12 @@ export function decodeServerMessage(json: string): ServerMessage {
   if (value.version !== WIRE_VERSION) throw new Error('unsupported wire version');
   switch (value.type) {
     case 'media': {
+      const requested = integer(value.requested, 'media requested', 1);
       const active = integer(value.active, 'media active', 1);
       if (typeof value.service !== 'string') throw new Error('invalid media service');
       if (typeof value.programme !== 'string') throw new Error('invalid media programme');
       if (typeof value.source !== 'string') throw new Error('invalid media source');
-      return { type: 'media', version: WIRE_VERSION, active, service: value.service,
+      return { type: 'media', version: WIRE_VERSION, requested, active, service: value.service,
         programme: value.programme, source: value.source };
     }
     case 'palette': {

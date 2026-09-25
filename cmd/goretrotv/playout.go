@@ -12,15 +12,17 @@ import (
 )
 
 const (
-	mediaPacketPeriod   = 1_000
-	playoutPumpInterval = 1_024
+	mediaPacketPeriod     = 1_000
+	playoutPumpInterval   = 1_024
+	decoderTransportBatch = 188 * 32
 )
 
 type playoutSession struct {
-	key     string
-	encoder *media.Encoder
-	decoder *media.Decoder
-	pending []byte
+	key           string
+	encoder       *media.Encoder
+	decoder       *media.Decoder
+	pending       []byte
+	decodePending []byte
 }
 
 func startPlayout(ctx context.Context, root string, selected multiplex.ProgrammePlayout) (*playoutSession, error) {
@@ -60,6 +62,12 @@ func (p *playoutSession) pump(device *demux.Demux, now uint64, output *web.Trans
 				if fault := p.encoder.Fault(); fault != nil {
 					return fault
 				}
+				if len(p.decodePending) != 0 {
+					if err := p.decoder.Enqueue(p.decodePending); err != nil {
+						return err
+					}
+					p.decodePending = nil
+				}
 				p.decoder.Finish()
 				return nil
 			}
@@ -74,8 +82,12 @@ func (p *playoutSession) pump(device *demux.Demux, now uint64, output *web.Trans
 		p.pending = nil
 	}
 	if admitted := device.TakeProgrammeTransport(); len(admitted) != 0 {
-		if err := p.decoder.Enqueue(admitted); err != nil {
-			return err
+		p.decodePending = append(p.decodePending, admitted...)
+		if len(p.decodePending) >= decoderTransportBatch {
+			if err := p.decoder.Enqueue(p.decodePending); err != nil {
+				return err
+			}
+			p.decodePending = nil
 		}
 	}
 	// Bound presentation work at this safe point. Draining until both channels happen to be empty

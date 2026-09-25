@@ -460,9 +460,10 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	nextProgress := align(start, progressInterval)
 	mediaService, mediaProgramme, mediaSource := "", "", ""
 	mediaRequested := false
+	mediaPublishedRequested := false
 	var playout *playoutSession
 	defer func() { playout.close(logger) }()
-	transport.PushMedia(false, "", "", "")
+	transport.PushMedia(false, false, "", "", "")
 	for {
 		count := box.Machine.Retired
 		inputDue := false
@@ -552,9 +553,11 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 			if !configured {
 				service, programme, source = "", "", ""
 			}
-			if service != mediaService || programme != mediaProgramme || source != mediaSource {
+			if requested != mediaPublishedRequested || service != mediaService ||
+				programme != mediaProgramme || source != mediaSource {
+				mediaPublishedRequested = requested
 				mediaService, mediaProgramme, mediaSource = service, programme, source
-				transport.PushMedia(configured, service, programme, source)
+				transport.PushMedia(requested, configured, service, programme, source)
 				if configured {
 					logger.Info("guest requested configured programme streams", "service", service,
 						"programme", programme, "source", source, "video_pid", videoPID, "audio_pid", audioPID)

@@ -27,13 +27,13 @@ test('rejects protocol version, impossible rectangle, and truncated bytes', () =
 });
 
 test('encodes key and validates raw/source bytes', () => {
-  assert.deepEqual(JSON.parse(encodeKeyMessage(0x11, 2)), { type: 'key', version: 3, raw: 0x11, source: 2 });
+  assert.deepEqual(JSON.parse(encodeKeyMessage(0x11, 2)), { type: 'key', version: 4, raw: 0x11, source: 2 });
   assert.throws(() => encodeKeyMessage(256, 1), /raw/);
   assert.throws(() => encodeKeyMessage(1, -1), /source/);
 });
 
 test('decodes the guest-selected media state', () => {
-  assert.deepEqual(decodeServerMessage('{"type":"media","version":3,"active":1,"service":"Sky One","programme":"Dream Team","source":"test-pattern"}'),
-    { type: 'media', version: 3, active: 1, service: 'Sky One', programme: 'Dream Team', source: 'test-pattern' });
-  assert.throws(() => decodeServerMessage('{"type":"media","version":3,"active":2,"service":"Test","programme":"Show","source":"test-pattern"}'), /active/);
+  assert.deepEqual(decodeServerMessage('{"type":"media","version":4,"requested":1,"active":1,"service":"Sky One","programme":"Dream Team","source":"test-pattern"}'),
+    { type: 'media', version: 4, requested: 1, active: 1, service: 'Sky One', programme: 'Dream Team', source: 'test-pattern' });
+  assert.throws(() => decodeServerMessage('{"type":"media","version":4,"requested":1,"active":2,"service":"Test","programme":"Show","source":"test-pattern"}'), /active/);
 });

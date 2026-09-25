@@ -26,16 +26,16 @@
   canvas; `internal/web/transport_test.go` asserts the measured CSI wire frame from a live socket.
 - [x] **TC-5.4: Press sky, get the menu** (covers: TASK-5.4, TASK-5.7) — end to end through the deployed path.
   **Result:** `tests/public/firmware.spec.ts` run by `npm run test:e2e:public` restarts the public container from the private snapshot,
-  opens `https://goretrotv.demosrv.uk/` in Chromium, captures the real `wss://` frame and checks
+  opens `https://<configured-public-host>/` in Chromium, captures the real `wss://` frame and checks
   its indexed hash `A6A21DC5` against the entire browser canvas. A click on Sky sends raw
   `0x7D` over that WebSocket and yields the exact composed Box Office menu hash `FE8D1CCC`.
   The spec passed twice, including after an explicit public restart; it saves light, dark and
   mobile screenshots under `.artifacts/playwright-public-results/`.
 - [x] **TC-5.5: The demo host serves the page over TLS** (covers: TASK-5.5, TASK-5.7) — **checked against
-  `goretrotv.demosrv.uk`, not localhost**, and every asset it fetches is verified to return its own
+  `<configured-public-host>`, not localhost**, and every asset it fetches is verified to return its own
   content rather than the SPA fallback.
   **Result:** `tests/public/firmware.spec.ts` and `./ctl.sh up-public` verified the image behind the real Traefik router;
-  `https://goretrotv.demosrv.uk/health` returned 200 over verified TLS. The public page, stylesheet,
+  `https://<configured-public-host>/health` returned 200 over verified TLS. The public page, stylesheet,
   favicon and four JavaScript modules matched their built files byte for byte; an unknown module
   returned 404. Browser verification at the real URL showed Ready, 24 enabled buttons and the real
   firmware's Box Office menu after Sky was pressed. Light, dark and 390 px mobile screenshots were
@@ -44,9 +44,9 @@
 - [x] **TC-5.6: Developer surfaces are unreachable publicly** (covers: TASK-5.6, TASK-5.7) — the gdb port and
   instrument endpoints refuse from outside. Asserted against the deployed host.
   **Result:** `tests/public/firmware.spec.ts` asserts the HTTPS developer-route boundary;
-  with `https://goretrotv.demosrv.uk/health` returning 200, TCP connections to
-  `goretrotv.demosrv.uk:23457` (GDB test port) and `:8099` timed out; direct connections to the
-  origin LAN address `192.168.1.12` on both ports were refused. Public requests for
+  with `https://<configured-public-host>/health` returning 200, TCP connections to
+  `<configured-public-host>:23457` (GDB test port) and `:8099` timed out; direct connections to the
+  origin's private LAN address on both ports were refused. Public requests for
   `/debug/pprof/`, `/debug/pprof/profile`, `/debug/pprof/cmdline`, `/instruments`, `/metrics`,
   and `/trace` all returned 404. The merged public compose config has no host ports and forces
   `GORETROTV_ENABLE_PPROF=false` even when the caller exports `true`. `internal/app` also refuses

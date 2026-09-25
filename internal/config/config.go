@@ -59,7 +59,7 @@ type Config struct {
 	ListingsPath string `env:"GORETROTV_LISTINGS_PATH"`
 
 	// DictionaryPath is the Sky/OpenTV Huffman dictionary the title sections
-	// are compressed with. It is third-party data and is not redistributable,
+	// are compressed with. The default UK table is GPL-2.0 third-party data,
 	// so it is mounted rather than built in; see dictionaries/MANIFEST.md.
 	//
 	// It is required in order to broadcast and absent by default, and the

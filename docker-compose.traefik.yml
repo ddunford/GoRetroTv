@@ -15,8 +15,8 @@ services:
     networks: [default, traefik]
     labels:
       traefik.enable: "true"
-      traefik.docker.network: "${TRAEFIK_NETWORK:-traefik_demosrv}"
-      traefik.http.routers.goretrotv-demo.rule: "Host(`${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}`)"
+      traefik.docker.network: "${TRAEFIK_NETWORK:-traefik-public}"
+      traefik.http.routers.goretrotv-demo.rule: "Host(`${GORETROTV_DOMAIN:?set it in .env}`)"
       traefik.http.routers.goretrotv-demo.entrypoints: "websecure"
       traefik.http.routers.goretrotv-demo.tls.certresolver: "le"
       traefik.http.routers.goretrotv-demo.service: "goretrotv-demo"
@@ -26,9 +26,9 @@ services:
       traefik.http.middlewares.goretrotv-demo-headers.headers.frameDeny: "true"
       traefik.http.middlewares.goretrotv-demo-headers.headers.referrerPolicy: "no-referrer"
       traefik.http.middlewares.goretrotv-demo-headers.headers.stsSeconds: "31536000"
-      traefik.http.middlewares.goretrotv-demo-headers.headers.contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' wss://${GORETROTV_DOMAIN:-goretrotv.demosrv.uk}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+      traefik.http.middlewares.goretrotv-demo-headers.headers.contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' wss://${GORETROTV_DOMAIN:?set it in .env}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
 
 networks:
   traefik:
-    name: "${TRAEFIK_NETWORK:-traefik_demosrv}"
+    name: "${TRAEFIK_NETWORK:-traefik-public}"
     external: true

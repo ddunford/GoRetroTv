@@ -40,12 +40,14 @@ The words this codebase uses to mean something specific. Everything else is ordi
 9. **For a tuned programme, media packets cross the guest-programmed decoder PIDs.** A supervised
    ffmpeg process decodes only those admitted packets; its picture sits below the transparent OSD
    and its PCM audio is played by the browser. Audio chunks retain the guest instruction count as
-   their timestamp; reconnecting or muting resets only the browser's presentation queue.
+   their timestamp; reconnecting or muting resets only the browser's presentation queue. Admitted
+   188-byte packets are batched only at the host decoder boundary, after the guest demux has
+   accepted them at their instruction-counted cadence.
    → `internal/media/`, `cmd/goretrotv/playout.go`
 
 <!-- anchor: internal/machine/handoff.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:90bde6be9db7f388314a05fd42d567e7c7518abc4234aa8112954317d3fbb95e @ 2026-09-25 -->
+<!-- fingerprint: sha256:4930b196e25961a1ced96af62ea4fdf8bba871992502e71399d7ec03d0d478f0 @ 2026-09-25 -->
 
 ## A way to think about it
 

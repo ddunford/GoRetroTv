@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "raster": {
     "width": 720,
     "height": 576
@@ -41,6 +41,7 @@
     "media": {
       "direction": "server",
       "fields": {
+        "requested": "uint8",
         "active": "uint8",
         "service": "string",
         "programme": "string",

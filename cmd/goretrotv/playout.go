@@ -78,26 +78,32 @@ func (p *playoutSession) pump(device *demux.Demux, now uint64, output *web.Trans
 			return err
 		}
 	}
-	for {
-		select {
-		case frame, ok := <-p.decoder.Video():
-			if ok {
-				output.PushVideo(frame.Sequence, frame.RGBA)
-			}
-		case audio, ok := <-p.decoder.Audio():
-			if ok {
-				output.PushAudio(audio.Sequence, audio.PCM)
-			}
-		default:
-			if fault := p.encoder.Fault(); fault != nil {
-				return fault
-			}
-			if fault := p.decoder.Fault(); fault != nil {
-				return fault
-			}
-			return nil
+	// Bound presentation work at this safe point. Draining until both channels happen to be empty
+	// can turn into a permanent real-time loop: 25 video frames and roughly 42 audio chunks per
+	// second alternate often enough that the select never reaches its default arm. One of each per
+	// 1,024 guest instructions is ample even at the acceptance floor of 1M instructions/second, and
+	// guarantees control returns to the firmware clock.
+	select {
+	case frame, ok := <-p.decoder.Video():
+		if ok {
+			output.PushVideo(frame.Sequence, frame.RGBA)
 		}
+	default:
 	}
+	select {
+	case audio, ok := <-p.decoder.Audio():
+		if ok {
+			output.PushAudio(audio.Sequence, audio.PCM)
+		}
+	default:
+	}
+	if fault := p.encoder.Fault(); fault != nil {
+		return fault
+	}
+	if fault := p.decoder.Fault(); fault != nil {
+		return fault
+	}
+	return nil
 }
 
 func (p *playoutSession) close(logger *slog.Logger) {

@@ -229,3 +229,7 @@ Channel playout acceptance must measure the user-visible latency from SELECT to 
 ### A lossy browser queue must be non-blocking across the whole replacement sequence
 
 Checking that a one-slot channel is full and then receiving its old value is racy because the WebSocket writer can drain it between those operations, leaving the emulator blocked on the receive. Latest-frame, audio, media-state, and machine-state publication must use non-blocking receive and send steps, with a concurrent publisher/consumer regression; a single-threaded “slow client” test cannot expose this stall.
+
+### A non-blocking select can still monopolise the instruction loop
+
+“Drain until default” is not bounded work when independent audio and video producers alternate often enough that one channel is always ready. At each instruction-clock safe point, service a fixed maximum from every host-media queue and return to the guest; non-blocking individual operations do not by themselves guarantee firmware progress.

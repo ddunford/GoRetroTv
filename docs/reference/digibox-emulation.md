@@ -9711,7 +9711,7 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/audiodriver_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
-<!-- fingerprint: sha256:93500c0d3fa8e3054d836a0cebbc353820cc48bfd7a6319a2ae7b54036152b44 @ 2026-09-24 -->
+<!-- fingerprint: sha256:160350a837631e78c4d0f1c2efb51dcf87134f4b3414d982aaba33913e126a58 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10129,6 +10129,27 @@ wrappers. This moves the missing boundary upstream again: the current transport 
 reassembles only PSI/SI section channels and never delivers transport packets on the guest-selected
 video/audio PIDs (`0x0101/0x0102`) to a programme-stream path. A general demux interrupt cannot
 stand in for that absent delivery.
+
+The audio task's own decision is now pinned too. Its entry at `0x8003950C` receives operations
+`10, 9, 7, 1, 5, 5`; operation 1 calls the public stop API, and the two operation-5 messages carry
+`(selector,status)=(1,1)` and `(2,1)`. Both dispatch through `0x80038EF0`, called from
+`0x80039676`. After its record lookup, that routine reads the decoder-state byte at `0x80105D28`.
+With the measured one, selector 1 calls `0x800889BC` (stop) from `0x800394A0`, while selector 2
+returns without calling `0x80088970` (start).
+
+That byte is not an arbitrary application flag. Its sole direct setter is `0x80038B34`, exported
+through `0x800E8E80`; the caller at `0x800E3CF8` derives zero or one from a media-state object and
+invokes the setter after the registered handler `0x800E383C` receives decoder event `0x10010`.
+In the tuned free-to-air run the two operation-5 decisions execute, but the decoder event handler,
+the setter and the start API are all cold and `0x80105D28` is one at both decisions. The branch
+polarity matters: the comparison at `0x8003945E` takes the alternate path when the byte differs
+from one, so the event-derived zero is the start-side state. The repeatable firmware probe asserts
+that contrast. The missing input is therefore a
+decoder/media-ready event produced
+after elementary-stream delivery, not another PSI table, a front-end lock bit, or the already
+disproved generic demux bit-14 interrupt. A hardware model must make the decoder earn that event
+from packets on the guest-programmed `0x0101/0x0102` inputs; writing the byte or posting `0x10010`
+from the host would only replace the missing hardware with another intervention.
 
 A second observation-only contrast supplied standards-shaped CA descriptors using News Datacom
 system id `0x0960` (the official DVB allocation table assigns `0x0900..0x09FF` to News Datacom:

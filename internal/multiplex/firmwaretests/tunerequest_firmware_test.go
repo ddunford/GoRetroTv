@@ -141,6 +141,9 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	var allRegisteredDeviceCalls []call
 	var allDemodulatorEntryCalls []call
 	var allAudioAPICalls []call
+	var audioStateCalls []call
+	var audioReadyDecisions []call
+	var decoderStateEvents []call
 	var mediaCalls []mediaCall
 	var generalEventEnableWrites []call
 	nativeCalls := map[native]int{}
@@ -151,6 +154,20 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		AfterPump: func() error {
 			state := box.Machine.Core.State()
 			pc := state.PC &^ 1
+			if pc == 0x80038EF0 {
+				audioStateCalls = append(audioStateCalls, call{pc: pc, ra: state.GPR[31] &^ 1,
+					a0: state.GPR[4], a1: state.GPR[5], a2: state.GPR[6], a3: state.GPR[7]})
+			}
+			if pc == 0x800E383C {
+				decoderStateEvents = append(decoderStateEvents, call{pc: pc, ra: state.GPR[31] &^ 1,
+					a0: state.GPR[4], a1: state.GPR[5], a2: state.GPR[6], a3: state.GPR[7]})
+			}
+			if pc == 0x8003945C {
+				sp := state.GPR[29] & 0x1fffffff
+				audioReadyDecisions = append(audioReadyDecisions, call{pc: pc,
+					a0: box.RAM.Read(sp+36, bus.Word),
+					a1: box.RAM.Read(0x00105D28, bus.Byte)})
+			}
 			if pc == 0x800A127C {
 				componentRebuilt = true
 			}
@@ -474,6 +491,8 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	t.Logf("all registered-device sends through selection=%#v", allRegisteredDeviceCalls)
 	t.Logf("all demodulator entry calls through selection=%#v", allDemodulatorEntryCalls)
 	t.Logf("all audio API calls through acquisition and selection=%#v", allAudioAPICalls)
+	t.Logf("audio state dispatches=%#v ready decisions=%#v decoder state events=%#v",
+		audioStateCalls, audioReadyDecisions, decoderStateEvents)
 	for _, c := range mediaCalls {
 		t.Logf("media boundary pc=%08X ra=%08X a0=%08X a1=%08X a2=%08X a3=%08X ocode=%08X object=%08X manager+120=%08X", c.pc, c.ra, c.a0, c.a1, c.a2, c.a3, c.ocode, c.object, c.manager)
 	}
@@ -505,6 +524,17 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 	}
 	if stopCalls == 0 {
 		t.Fatalf("PMT component publication did not reach the measured audio stop decision: %#v", allAudioAPICalls)
+	}
+	if len(audioStateCalls) != 2 || audioStateCalls[0].ra != 0x80039676 ||
+		audioStateCalls[0].a0 != 1 || audioStateCalls[0].a1 != 1 ||
+		audioStateCalls[1].ra != 0x80039676 || audioStateCalls[1].a0 != 2 || audioStateCalls[1].a1 != 1 {
+		t.Fatalf("audio state dispatch did not reach the measured selector-1/selector-2 decisions: %#v",
+			audioStateCalls)
+	}
+	if len(audioReadyDecisions) != 2 || audioReadyDecisions[0].a0 != 1 || audioReadyDecisions[0].a1 != 1 ||
+		audioReadyDecisions[1].a0 != 2 || audioReadyDecisions[1].a1 != 1 || len(decoderStateEvents) != 0 {
+		t.Fatalf("decoder-ready event unexpectedly ran before the measured stop/idle decisions: decisions=%#v events=%#v",
+			audioReadyDecisions, decoderStateEvents)
 	}
 	for _, pc := range []uint32{0x800DA436, 0x800DA452, 0x800DC648, 0x800DC67C,
 		0x800E8B18, 0x800EEE68, 0x800D5C8C, 0x800D5D2C,

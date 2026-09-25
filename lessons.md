@@ -221,3 +221,7 @@ A browser-generated test card and tone triggered at the MPEG selection callback 
 ### A test source is programme configuration, not a channel identity
 
 The presentation substitute must never become a global “Test channel” selected by any decoder PID request. Resolve the firmware-programmed EIT service id through the current guide programme, and activate only that programme's override or its service's explicit default source; otherwise channel changes inherit plausible but false video.
+
+### “Playing” is not acceptable when tuning still feels like acquisition
+
+Channel playout acceptance must measure the user-visible latency from SELECT to both the guide overlay clearing and the first decoded frame. A screenshot eventually containing video does not prove a broadcast-like channel change; the public box must cut promptly to the already-running programme and must not spend tens of seconds draining transport or waiting for an over-conservative UI settle.

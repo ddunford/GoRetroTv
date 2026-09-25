@@ -2,16 +2,17 @@ import { expect, test, type WebSocketRoute } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 const capturedWire = readFileSync('tests/fixtures/wire.jsonl', 'utf8').trim().split('\n');
+const wireVersion = JSON.parse(capturedWire[0]).version as number;
 
 function sendFullScreen(ws: WebSocketRoute): void {
   const pixels = Buffer.alloc(720 * 576);
   ws.send(capturedWire[0]);
-  ws.send(JSON.stringify({ type: 'frame', version: 1, seq: 1, epoch: 1,
+  ws.send(JSON.stringify({ type: 'frame', version: wireVersion, seq: 1, epoch: 1,
     x: 0, y: 0, w: 720, h: 576, pixels: pixels.toString('base64') }));
 }
 
 function sendState(ws: WebSocketRoute, phase: string, reason: string): void {
-  ws.send(JSON.stringify({ type: 'state', version: 1, phase, reason }));
+  ws.send(JSON.stringify({ type: 'state', version: wireVersion, phase, reason }));
 }
 
 const resetButton = 'button#reset-box';
@@ -30,7 +31,7 @@ test('reset sends one request, refuses a second, and announces the outcome', asy
   await expect(reset).toBeEnabled();
 
   await reset.click();
-  expect(sent).toEqual([JSON.stringify({ type: 'reset', version: 1 })]);
+  expect(sent).toEqual([JSON.stringify({ type: 'reset', version: wireVersion })]);
   // No double-submit: the control is held for the host's own minimum gap, so a
   // second press cannot become a request the host silently folds away.
   await expect(reset).toBeDisabled();
@@ -62,7 +63,7 @@ test('reset stays available on a halted box, where the handset does not', async 
   await expect(page.getByRole('button', { name: 'Standby' })).toBeDisabled();
 
   await page.locator(resetButton).click();
-  expect(sent).toEqual([JSON.stringify({ type: 'reset', version: 1 })]);
+  expect(sent).toEqual([JSON.stringify({ type: 'reset', version: wireVersion })]);
 });
 
 test('reset is disabled while disconnected and sends nothing', async ({ page }) => {
@@ -103,7 +104,7 @@ test('reset is operable by keyboard and shows its states @motion', async ({ page
   await page.screenshot({ path: testInfo.outputPath('reset-focused.png'), fullPage: true, animations: 'disabled' });
 
   await page.keyboard.press('Enter');
-  expect(sent).toEqual([JSON.stringify({ type: 'reset', version: 1 })]);
+  expect(sent).toEqual([JSON.stringify({ type: 'reset', version: wireVersion })]);
   await expect(reset).toBeDisabled();
 
   // The transition is token-driven, so reduced motion shortens it rather than

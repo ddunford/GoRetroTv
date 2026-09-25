@@ -56,21 +56,41 @@
       <aside class="controls" aria-labelledby="handset-heading">
         <div class="controls-heading"><div><p class="eyebrow">CONTROL THE BOX</p><h2 id="handset-heading">The handset</h2></div><span class="controls-caption">Use a mouse, touch, or keyboard</span></div>
         <div class="remote" role="group" aria-label="Sky Digibox handset" id="handset">
-          <div class="remote-head"><span class="remote-logo">GoRetro<span class="remote-logo-accent">TV</span></span><button class="key power" type="button" data-raw="0xCC" aria-label="Standby" disabled><span aria-hidden="true">⏻</span></button></div>
+          <div class="remote-head">
+            <button class="key utility unavailable" type="button" aria-label="TV control — unavailable in the Digibox emulator" title="Controls the television, not the Digibox" disabled>tv</button>
+            <button class="key sky unavailable" type="button" aria-label="Sky — awaiting measured firmware code" title="Awaiting a measured Digibox code" disabled>sky</button>
+            <button class="key power" type="button" data-raw="0xCC" aria-label="Standby" disabled><span aria-hidden="true">⏻</span></button>
+          </div>
           <div class="remote-section remote-primary">
-            <button class="key" type="button" data-raw="0x80" disabled>tv guide</button>
             <button class="key" type="button" data-raw="0x7D" disabled>box office</button>
             <button class="key" type="button" data-raw="0x7E" disabled>services</button>
+            <button class="key" type="button" data-raw="0x80" disabled>tv guide</button>
             <button class="key" type="button" data-raw="0xF5" disabled>interactive</button>
           </div>
-          <div class="remote-nav" aria-label="Navigation">
-            <button class="key nav up" type="button" data-raw="0x58" aria-label="Up" disabled><span aria-hidden="true">▲</span></button>
-            <button class="key nav left" type="button" data-raw="0x5A" aria-label="Left" disabled><span aria-hidden="true">◀</span></button>
-            <button class="key select" type="button" data-raw="0x5C" disabled>select</button>
-            <button class="key nav right" type="button" data-raw="0x5B" aria-label="Right" disabled><span aria-hidden="true">▶</span></button>
-            <button class="key nav down" type="button" data-raw="0x59" aria-label="Down" disabled><span aria-hidden="true">▼</span></button>
+          <div class="remote-info-row">
+            <button class="key utility unavailable" type="button" aria-label="Mute — television control unavailable in the Digibox emulator" disabled>mute</button>
+            <button class="key utility unavailable info-key" type="button" aria-label="Information — awaiting measured firmware code" disabled>i</button>
           </div>
-          <div class="remote-secondary"><button class="key back" type="button" data-raw="0x3C" disabled>back up</button></div>
+          <div class="remote-middle">
+            <div class="rocker" aria-label="Volume controls unavailable">
+              <button class="key unavailable" type="button" aria-label="Volume up — television control unavailable" disabled>+</button><span aria-hidden="true">vol</span><button class="key unavailable" type="button" aria-label="Volume down — television control unavailable" disabled>−</button>
+            </div>
+            <div class="remote-nav" aria-label="Navigation">
+              <button class="key nav up" type="button" data-raw="0x58" aria-label="Up" disabled><span aria-hidden="true">▲</span></button>
+              <button class="key nav left" type="button" data-raw="0x5A" aria-label="Left" disabled><span aria-hidden="true">◀</span></button>
+              <button class="key select" type="button" data-raw="0x5C" disabled>select</button>
+              <button class="key nav right" type="button" data-raw="0x5B" aria-label="Right" disabled><span aria-hidden="true">▶</span></button>
+              <button class="key nav down" type="button" data-raw="0x59" aria-label="Down" disabled><span aria-hidden="true">▼</span></button>
+            </div>
+            <div class="rocker" aria-label="Channel controls unavailable">
+              <button class="key unavailable" type="button" aria-label="Channel up — awaiting measured firmware code" disabled>+</button><span aria-hidden="true">ch</span><button class="key unavailable" type="button" aria-label="Channel down — awaiting measured firmware code" disabled>−</button>
+            </div>
+          </div>
+          <div class="remote-secondary">
+            <button class="key unavailable" type="button" aria-label="Text — television control unavailable in the Digibox emulator" disabled>text</button>
+            <button class="key back" type="button" data-raw="0x3C" disabled>back up</button>
+            <button class="key unavailable" type="button" aria-label="Help — awaiting measured firmware code" disabled>help</button>
+          </div>
           <div class="colour-row" aria-label="Colour keys">
             <button class="key colour-key red" type="button" data-raw="0x6D" aria-label="Red key" disabled></button>
             <button class="key colour-key green" type="button" data-raw="0x6E" aria-label="Green key" disabled></button>
@@ -78,12 +98,11 @@
             <button class="key colour-key blue" type="button" data-raw="0x70" aria-label="Blue key" disabled></button>
           </div>
           <div class="number-pad" aria-label="Number keys">
-            <button class="key" type="button" data-raw="0x01" disabled>1</button><button class="key" type="button" data-raw="0x02" disabled>2</button><button class="key" type="button" data-raw="0x03" disabled>3</button>
-            <button class="key" type="button" data-raw="0x04" disabled>4</button><button class="key" type="button" data-raw="0x05" disabled>5</button><button class="key" type="button" data-raw="0x06" disabled>6</button>
-            <button class="key" type="button" data-raw="0x07" disabled>7</button><button class="key" type="button" data-raw="0x08" disabled>8</button><button class="key" type="button" data-raw="0x09" disabled>9</button>
-            <span class="number-spacer" aria-hidden="true"></span><button class="key" type="button" data-raw="0x00" disabled>0</button><span class="number-spacer" aria-hidden="true"></span>
+            <button class="key" type="button" data-raw="0x01" disabled><b>1</b></button><button class="key" type="button" data-raw="0x02" disabled><b>2</b><small>abc</small></button><button class="key" type="button" data-raw="0x03" disabled><b>3</b><small>def</small></button>
+            <button class="key" type="button" data-raw="0x04" disabled><b>4</b><small>ghi</small></button><button class="key" type="button" data-raw="0x05" disabled><b>5</b><small>jkl</small></button><button class="key" type="button" data-raw="0x06" disabled><b>6</b><small>mno</small></button>
+            <button class="key" type="button" data-raw="0x07" disabled><b>7</b><small>pqrs</small></button><button class="key" type="button" data-raw="0x08" disabled><b>8</b><small>tuv</small></button><button class="key" type="button" data-raw="0x09" disabled><b>9</b><small>wxyz</small></button>
+            <span class="number-spacer" aria-hidden="true"></span><button class="key zero" type="button" data-raw="0x00" disabled><b>0</b><small aria-hidden="true">◀)</small></button><span class="number-spacer" aria-hidden="true"></span>
           </div>
-          <div class="remote-bottom" aria-hidden="true"><span></span><span></span><span></span></div>
         </div>
         <p class="key-feedback" id="key-feedback" role="status" aria-live="polite">The handset will wake when the box connects.</p>
       </aside>

@@ -56,3 +56,12 @@
   anticipated. The grid does not iterate them in any case: zero reads of those records during the
   draw. Instrument: `internal/multiplex/firmwaretests/lineupcount_firmware_test.go`, which fails
   unless it finds every announced service.*
+- [ ] **TC-7.8: The browser handset matches the original remote without inventing controls**
+  (covers: TASK-7.8) — compare the rendered handset with the July 1999 manual fold-out and a
+  contemporary standard Sky Digital remote photograph. The dark-blue tapered body, control groups,
+  labels, blue navigation keys, coloured keys and telephone-letter number pad must be recognisable
+  at desktop and mobile widths in both colour schemes. Every enabled key must still travel through
+  the existing WebSocket-to-CSI path with a measured raw code; TV-only and unmeasured controls must
+  be visibly and accessibly unavailable. All enabled targets remain at least 44 by 44 CSS pixels.
+  References: `bskyb2400_userguide.pdf`, Version 2.0 July 1999; Chigwell Satellite's photographed
+  blue standard remote.

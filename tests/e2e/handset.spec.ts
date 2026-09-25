@@ -2,18 +2,19 @@ import { expect, test, type WebSocketRoute } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 const capturedWire = readFileSync('tests/fixtures/wire.jsonl', 'utf8').trim().split('\n');
+const wireVersion = JSON.parse(capturedWire[0]).version as number;
 
 function sendFullScreen(ws: WebSocketRoute, litPixel: number): void {
   const pixels = Buffer.alloc(720 * 576);
   pixels[litPixel] = 1;
   ws.send(capturedWire[0]);
-  ws.send(JSON.stringify({ type: 'frame', version: 1, seq: 1, epoch: 1,
+  ws.send(JSON.stringify({ type: 'frame', version: wireVersion, seq: 1, epoch: 1,
     x: 0, y: 0, w: 720, h: 576, pixels: pixels.toString('base64') }));
 }
 
 function sendReady(ws: WebSocketRoute): void {
   sendFullScreen(ws, 7 * 720 + 5);
-  ws.send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: 'The box is ready. Press tv guide.' }));
+  ws.send(JSON.stringify({ type: 'state', version: wireVersion, phase: 'ready', reason: 'The box is ready. Press tv guide.' }));
 }
 
 test('canvas paints pixels from a captured Go WebSocket frame', async ({ page }) => {
@@ -52,7 +53,7 @@ test('handset preserves the screen, refuses input during a socket loss, and resu
   await expect.poll(() => sockets.length).toBe(2);
   await expect(boxOffice).toBeDisabled();
   sendFullScreen(sockets[1], 7 * 720 + 6);
-  sockets[1].send(JSON.stringify({ type: 'state', version: 1, phase: 'ready', reason: '' }));
+  sockets[1].send(JSON.stringify({ type: 'state', version: wireVersion, phase: 'ready', reason: '' }));
   await expect(boxOffice).toBeEnabled();
   await expect.poll(pixel).toEqual([0, 0, 0, 255]);
   await expect.poll(() => page.locator('#screen').evaluate((element: HTMLCanvasElement) =>
@@ -77,7 +78,7 @@ test('a guest halt states its reason and refuses handset input', async ({ page }
   await page.goto('/');
   const boxOffice = page.getByRole('button', { name: 'box office', exact: true });
   await expect(boxOffice).toBeEnabled();
-  socket!.send(JSON.stringify({ type: 'state', version: 1, phase: 'halted', reason: 'invalid guest instruction at 0x80001234' }));
+  socket!.send(JSON.stringify({ type: 'state', version: wireVersion, phase: 'halted', reason: 'invalid guest instruction at 0x80001234' }));
   await expect(page.locator('#box-status')).toContainText('invalid guest instruction at 0x80001234');
   await expect(boxOffice).toBeDisabled();
   await expect(page.locator('#key-feedback')).toContainText('unavailable while the box is stopped');
@@ -98,10 +99,9 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
   await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide.');
   await page.screenshot({ path: testInfo.outputPath('handset-ready.png'), fullPage: true, animations: 'disabled' });
 
-  // The reset control sits before the handset, so Tab order enters the keys
-  // from there. Seeding focus keeps this about the KEY's focus ring rather
-  // than about how many controls happen to precede it.
-  await page.locator('#reset-box').focus();
+  // The sound control is the last enabled control before the handset. Seeding
+  // focus keeps this about the KEY's focus ring rather than the page furniture.
+  await page.locator('#sound-toggle').focus();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: 'Standby' })).toBeFocused();
   const focus = await page.getByRole('button', { name: 'Standby' }).evaluate(element => {
@@ -119,7 +119,7 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
   await page.keyboard.up('Space');
   await expect(boxOffice).not.toHaveAttribute('data-pressed', 'true');
   await expect.poll(() => sent.length).toBe(1);
-  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 1, raw: 125, source: 0 });
+  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: wireVersion, raw: 125, source: 0 });
   await expect(page.locator('#key-feedback')).toContainText('box office sent to the box');
 
   const box = await boxOffice.boundingBox();
@@ -165,6 +165,35 @@ test('every handset key has a visible Tab focus and a usable touch target', asyn
     expect(appearance.targetWidth).toBeGreaterThanOrEqual(44);
     expect(appearance.targetHeight).toBeGreaterThanOrEqual(44);
   }
+});
+
+test('period handset controls are present without inventing Digibox key codes', async ({ page }) => {
+  await page.routeWebSocket('**/ws', ws => sendReady(ws));
+  await page.goto('/');
+
+  const unavailable = [
+    'TV control — unavailable in the Digibox emulator',
+    'Sky — awaiting measured firmware code',
+    'Mute — television control unavailable in the Digibox emulator',
+    'Information — awaiting measured firmware code',
+    'Text — television control unavailable in the Digibox emulator',
+    'Help — awaiting measured firmware code',
+  ];
+  for (const name of unavailable) {
+    const control = page.getByRole('button', { name, exact: true });
+    await expect(control).toBeVisible();
+    await expect(control).toBeDisabled();
+    await expect(control).not.toHaveAttribute('data-raw');
+  }
+
+  await expect(page.locator('.remote-head button')).toHaveCount(3);
+  await expect(page.locator('.remote-primary button')).toHaveText([
+    'box office', 'services', 'tv guide', 'interactive',
+  ]);
+  await expect(page.locator('.remote-secondary button')).toHaveText(['text', 'back up', 'help']);
+  await expect(page.locator('.number-pad small')).toHaveText([
+    'abc', 'def', 'ghi', 'jkl', 'mno', 'pqrs', 'tuv', 'wxyz', '◀)',
+  ]);
 });
 
 test('mobile handset stays within the viewport', async ({ page }, testInfo) => {

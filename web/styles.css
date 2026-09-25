@@ -101,40 +101,45 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .controls-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
 .controls-heading h2 { margin: 0; font-size: 28px; line-height: 1; letter-spacing: -.05em; }
 .controls-caption { max-width: 115px; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: right; }
-.remote { position: relative; width: min(100%, 338px); margin: 0 auto; padding: 23px 25px 31px; background: linear-gradient(135deg, var(--remote-top), var(--remote-bottom) 63%); border: 1px solid #6b7882; border-radius: 33px 33px 72px 72px; box-shadow: 13px 24px 40px #07101d54, inset 3px 3px 4px #ffffff2d, inset -3px -5px 5px #02081087; }
-.remote::before { content: ""; position: absolute; inset: 7px; border: 1px solid #ffffff18; border-radius: inherit; pointer-events: none; }
-.remote-head { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 24px; }
-/* Our mark, not the broadcaster's. This was a 32px italic tight-tracked
-   lowercase wordmark in white, which is the Sky logo redrawn in CSS -- a
-   trademark lookalike in OUR chrome, which is a different thing from the
-   firmware drawing its own interface on the canvas. Upright, normal tracking,
-   our accent colour, and it says whose emulator this is. */
-.remote-logo { color: #e8eef3; font-size: 17px; font-weight: 800; letter-spacing: -.01em; line-height: 1; }
-.remote-logo-accent { color: var(--accent); }
-.key { position: relative; min-height: 44px; min-width: 44px; padding: 5px 7px; color: var(--key-ink); font-size: 11px; font-weight: 800; line-height: 1.1; text-align: center; text-transform: lowercase; background: linear-gradient(var(--key-top), var(--key-bottom)); border: 1px solid #f8faf4; border-bottom-color: #a1aaa9; border-radius: 12px; box-shadow: 0 3px 0 #121d27, 0 5px 8px #02070c7a; cursor: pointer; transition: var(--motion-state); touch-action: manipulation; }
-.key:disabled { opacity: .45; cursor: not-allowed; }
+.remote { position: relative; width: min(100%, 306px); margin: 0 auto; padding: 18px 25px 29px; overflow: hidden; background: linear-gradient(110deg, #17243d, #2b3b5d 48%, #152139); border: 1px solid #60708e; border-radius: 45% 45% 42% 42% / 8% 8% 13% 13%; box-shadow: 13px 24px 40px #07101d54, inset 4px 2px 5px #91a3c12b, inset -5px -5px 7px #02081099; }
+.remote::before { content: ""; position: absolute; inset: 7px; border: 1px solid #ffffff12; border-radius: inherit; pointer-events: none; }
+.remote::after { content: ""; position: absolute; top: 0; left: 50%; width: 77px; height: 17px; background: #101726; border-radius: 0 0 50% 50%; transform: translateX(-50%); box-shadow: inset 0 -2px 3px #0009; pointer-events: none; }
+.remote-head { display: grid; grid-template-columns: repeat(3, 1fr); align-items: center; gap: 13px; padding: 4px 7px 9px; }
+.key { position: relative; min-height: 44px; min-width: 44px; padding: 5px 6px; color: #f6f8fb; font-size: 10px; font-weight: 700; line-height: 1.05; text-align: center; text-transform: lowercase; background: linear-gradient(#2f3540, #141923); border: 1px solid #5e6673; border-bottom-color: #080b11; border-radius: 50%; box-shadow: 0 2px 0 #080b12, 0 4px 7px #02070c7a, inset 0 1px 1px #ffffff24; cursor: pointer; transition: var(--motion-state); touch-action: manipulation; }
+.key:disabled { opacity: .38; cursor: not-allowed; }
+.key.unavailable:disabled { opacity: .55; filter: saturate(.55); }
 .key:focus-visible { outline: 3px solid #ffcc52; outline-offset: 3px; z-index: 1; }
 .key:active:not(:disabled), .key[data-pressed="true"]:not(:disabled) { transform: translateY(2px) scale(.97); box-shadow: 0 1px 0 #101820, 0 2px 4px #02070c7a; }
 @media (hover: hover) { .key:hover:not(:disabled) { transform: translateY(-2px); } .key:active:not(:disabled), .key[data-pressed="true"]:not(:disabled) { transform: translateY(2px) scale(.97); } }
-.remote-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.remote-primary .primary { color: #fff; font-size: 15px; font-weight: 800; background: linear-gradient(#4b5d6b, #2b3947); border-color: #7d8f9d; }
-.remote-head .power { width: 45px; height: 45px; padding: 0; color: white; font-size: 24px; background: linear-gradient(#ed6b68, #af2b36); border-color: #ff928e; border-radius: 50%; }
-.remote-nav { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 47px); gap: 5px; margin: 23px 24px 12px; }
+.remote-head .sky { font-size: 18px; font-style: italic; font-weight: 800; letter-spacing: -.08em; background: linear-gradient(#c7d7eb, #7692b6); border-color: #e5effc; }
+.remote-head .power { padding: 0; font-size: 21px; }
+.remote-primary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 24px; padding: 0 12px; }
+.remote-primary .key { min-width: 0; border-radius: 50% / 64%; background: linear-gradient(#8eb6dc, #527ca8); border-color: #bcd8ef; }
+.remote-info-row { display: flex; justify-content: center; gap: 52px; margin: 5px 0 2px; }
+.info-key { font-family: Georgia, serif; font-size: 18px; font-style: italic; }
+.remote-middle { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 4px; }
+.remote-nav { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 44px); justify-content: center; gap: 3px; margin: 0; }
 .remote-nav .up { grid-column: 2; grid-row: 1; }
 .remote-nav .left { grid-column: 1; grid-row: 2; }
-.remote-nav .select { grid-column: 2; grid-row: 2; color: #fff; background: linear-gradient(#6990a6, #345a72); border-color: #9dbac9; border-radius: 50%; }
+.remote-nav .select { grid-column: 2; grid-row: 2; }
 .remote-nav .right { grid-column: 3; grid-row: 2; }
 .remote-nav .down { grid-column: 2; grid-row: 3; }
-.remote-nav .nav { font-size: 15px; border-radius: 50%; }
-.remote-secondary { display: flex; justify-content: center; margin-bottom: 19px; }
-.remote-secondary .back { width: 115px; }
-.colour-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 23px; }
-.colour-row .key { min-width: 0; border-radius: 19px; }
+.remote-nav .nav, .remote-nav .select { color: #fff; font-size: 13px; background: linear-gradient(#8cb5dc, #5079a5); border-color: #c0daf0; }
+.remote-nav .up, .remote-nav .down { border-radius: 65% / 45%; }
+.remote-nav .left, .remote-nav .right { border-radius: 45% / 65%; }
+.rocker { position: relative; display: grid; grid-template-rows: 44px 22px 44px; align-items: center; justify-items: center; color: #f3f6fb; font-size: 9px; font-weight: 800; text-transform: lowercase; }
+.rocker::before { content: ""; position: absolute; inset: 0; z-index: 0; background: #111722; border: 1px solid #576174; border-radius: 50% / 18%; box-shadow: inset 0 1px 2px #ffffff19; }
+.rocker .key, .rocker span { z-index: 1; }
+.rocker .key { min-width: 42px; border: 0; background: transparent; box-shadow: none; font-size: 18px; }
+.remote-secondary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 7px 10px 9px; }
+.remote-secondary .key { min-width: 0; border-radius: 50% / 62%; }
+.colour-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin: 0 7px 10px; }
+.colour-row .key { min-width: 0; border-radius: 50%; }
 .red { background: #bd203b; border-color: #fa6a7a; }.green { background: #268647; border-color: #64c782; }.yellow { background: #dfbc29; border-color: #ffe870; }.blue { background: #2755b9; border-color: #72a2ef; }
-.number-pad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0 17px; }
-.number-pad .key { min-height: 46px; font-size: 16px; border-radius: 16px; }
-.remote-bottom { display: flex; justify-content: center; gap: 7px; margin-top: 24px; }
-.remote-bottom span { width: 15px; height: 2px; border-radius: 2px; background: #80909d; }
+.number-pad { display: grid; grid-template-columns: repeat(3, 48px); justify-content: center; gap: 5px 17px; }
+.number-pad .key { display: flex; min-height: 44px; flex-direction: column; align-items: center; justify-content: center; padding: 2px; }
+.number-pad b { font-size: 15px; line-height: 1; }
+.number-pad small { margin-top: 2px; font-size: 7px; font-weight: 800; line-height: 1; }
 .key-feedback { min-height: 38px; margin: 17px 8px 0; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
 
 /* On a desktop window nothing scrolls: the screen and the WHOLE handset are
@@ -204,6 +209,16 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
   .remote-bottom { margin-top: clamp(6px, 1.2vh, 11px); }
   .key-feedback { min-height: 18px; margin-top: clamp(6px, 1.1vh, 10px); }
   .controls-heading { margin-bottom: clamp(8px, 1.2vh, 12px); }
+}
+
+@media (min-width: 761px) and (max-height: 800px) {
+  .remote { padding-block: 7px; }
+  .remote-head { padding-bottom: 4px; }
+  .remote-primary { gap-block: 2px; }
+  .remote-info-row { margin-block: 1px; }
+  .remote-secondary { margin-block: 3px 4px; }
+  .colour-row { margin-bottom: 4px; }
+  .number-pad { gap-block: 2px; }
 }
 
 /* Short desktop windows give their height to the picture and the keys, not
@@ -278,8 +293,9 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
    the status line, the reset and the number pad all on screen at once at the
    far end of the scroll. */
 @media (min-width: 761px) and (max-height: 759px) {
-  .viewer-stage { max-width: calc((100vh - 340px) * 1.25 + 56px); margin-inline: auto; }
+  .viewer-stage { max-width: calc((100vh - 390px) * 1.25 + 56px); flex: none; margin-inline: auto; }
   .screen-well canvas { width: 100%; height: auto; }
+  .reset-note { display: none; }
 }
 
 @media (max-width: 1000px) {

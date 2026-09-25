@@ -45,8 +45,10 @@
           </div>
           <div class="box-actions">
             <button class="reset-box" type="button" id="reset-box" aria-describedby="reset-note" disabled>Reset the box</button>
+            <button class="reset-box" type="button" id="sound-toggle" aria-describedby="sound-status">Enable sound</button>
             <p class="reset-note" id="reset-note">Restarts the box itself, for everyone watching — use it if the screen stops responding. The handset’s standby key talks to the firmware instead.</p>
           </div>
+          <p class="reset-feedback" id="sound-status" role="status" aria-live="polite">Sound is locked until you enable it or press a handset key.</p>
           <p class="reset-feedback" id="reset-feedback" role="status" aria-live="polite">The reset will be available once the box connects.</p>
         </div>
       </section>

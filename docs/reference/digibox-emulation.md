@@ -9721,7 +9721,7 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/web/transport.go -->
 <!-- anchor: web/app.ts -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:10767de26e82a15684ea4498d573f7c3eac474cb6aa4668040da23db2dd6f4b5 @ 2026-09-25 -->
+<!-- fingerprint: sha256:b8201491cd0288ae4fdcbf07e5d70bb2ca9d37019bfb635b9916126f573b8e51 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10239,7 +10239,10 @@ A supervised source ffmpeg seeks that timeline and emits real MPEG-2 video and M
 MPEG transport stream. Those packets enter the instruction-counted demux scheduler and only the
 guest-programmed `0x0101/0x0102` PIDs reach the decoder process. Decoded 352x288 RGBA and 48 kHz
 stereo PCM cross a versioned binary WebSocket envelope. The browser scales the video below the
-firmware OSD and schedules PCM through Web Audio after a handset gesture unlocks it. The former
-browser-generated colour bars and oscillator are gone: changing channel changes the firmware's
+firmware OSD and schedules PCM through Web Audio after a handset gesture or the explicit sound
+control unlocks it. Each audio envelope is timestamped with the guest instruction count at which
+the instruction loop released it; decoder sequence and wall time do not become clocks. Muting or
+losing the socket stops queued sources, and a reconnect resets timestamp acceptance before live
+chunks resume. The former browser-generated colour bars and oscillator are gone: changing channel changes the firmware's
 service selection, which changes the schedule-owned source and restarts at that programme's live
 offset.

@@ -77,15 +77,17 @@ func (t *Transport) PushVideo(sequence uint64, rgba []byte) {
 	t.pushBinary(1, sequence, rgba, true)
 }
 
-// PushAudio publishes one 48 kHz stereo signed-16 PCM chunk.
-func (t *Transport) PushAudio(sequence uint64, pcm []byte) {
-	t.pushBinary(2, sequence, pcm, false)
+// PushAudio publishes one 48 kHz stereo signed-16 PCM chunk at the guest instruction which
+// released it for presentation. The timestamp is the emulator's clock; decoder sequence numbers
+// depend on host scheduling and therefore cannot be the browser's ordering authority.
+func (t *Transport) PushAudio(instruction uint64, pcm []byte) {
+	t.pushBinary(2, instruction, pcm, false)
 }
 
 func (t *Transport) pushBinary(kind byte, sequence uint64, payload []byte, latest bool) {
 	message := make([]byte, mediaWireHeader+len(payload))
 	copy(message, "GRTV")
-	message[4], message[5] = 1, kind
+	message[4], message[5] = 2, kind
 	binary.BigEndian.PutUint64(message[8:16], sequence)
 	copy(message[mediaWireHeader:], payload)
 	t.mu.Lock()

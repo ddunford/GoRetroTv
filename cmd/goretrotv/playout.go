@@ -93,7 +93,7 @@ func (p *playoutSession) pump(device *demux.Demux, now uint64, output *web.Trans
 	select {
 	case audio, ok := <-p.decoder.Audio():
 		if ok {
-			output.PushAudio(audio.Sequence, audio.PCM)
+			output.PushAudio(now, audio.PCM)
 		}
 	default:
 	}

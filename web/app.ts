@@ -7,8 +7,10 @@ const statusNode = document.querySelector<HTMLElement>('#box-status');
 const feedbackNode = document.querySelector<HTMLElement>('#key-feedback');
 const resetNode = document.querySelector<HTMLButtonElement>('#reset-box');
 const resetFeedbackNode = document.querySelector<HTMLElement>('#reset-feedback');
+const soundToggleNode = document.querySelector<HTMLButtonElement>('#sound-toggle');
+const soundStatusNode = document.querySelector<HTMLElement>('#sound-status');
 const keys = Array.from(document.querySelectorAll<HTMLButtonElement>('#handset button[data-raw]'));
-if (!canvasNode || !programmeNode || !statusNode || !feedbackNode || !resetNode || !resetFeedbackNode) {
+if (!canvasNode || !programmeNode || !statusNode || !feedbackNode || !resetNode || !resetFeedbackNode || !soundToggleNode || !soundStatusNode) {
   throw new Error('Digibox page is missing its screen, status, handset feedback, or reset control');
 }
 const canvas: HTMLCanvasElement = canvasNode;
@@ -17,6 +19,8 @@ const statusLine: HTMLElement = statusNode;
 const keyFeedback: HTMLElement = feedbackNode;
 const resetButton: HTMLButtonElement = resetNode;
 const resetFeedback: HTMLElement = resetFeedbackNode;
+const soundToggle: HTMLButtonElement = soundToggleNode;
+const soundStatus: HTMLElement = soundStatusNode;
 
 // Mirrors the server's own minimum gap between restores, so the page never
 // sends a reset the host would silently fold into the previous one.
@@ -52,18 +56,46 @@ let mediaService = '';
 let mediaProgramme = '';
 let audioContext: AudioContext | null = null;
 let nextAudioTime = 0;
+let lastAudioInstruction = -1;
+let muted = true;
+const scheduledAudio = new Set<AudioBufferSourceNode>();
 
-function ensureAudio(): void {
+function showAudioState(state: 'locked' | 'unlocked' | 'muted', message: string): void {
+  document.body.dataset.audio = state;
+  soundToggle.textContent = state === 'muted' ? 'Unmute sound' : state === 'unlocked' ? 'Mute sound' : 'Enable sound';
+  soundToggle.setAttribute('aria-pressed', state === 'unlocked' ? 'true' : 'false');
+  soundStatus.textContent = message;
+}
+
+function stopAudio(): void {
+  for (const source of scheduledAudio) {
+    try { source.stop(); } catch { /* A source which already ended needs no further action. */ }
+  }
+  scheduledAudio.clear();
+  nextAudioTime = 0;
+  lastAudioInstruction = -1;
+}
+
+async function unlockAudio(): Promise<boolean> {
   if (!audioContext) {
     audioContext = new AudioContext();
     audioContext.addEventListener('statechange', () => {
-      document.body.dataset.audio = audioContext?.state || 'closed';
+      if (audioContext?.state !== 'running' && !muted) showAudioState('locked', 'Your browser blocked sound. Press Enable sound to try again.');
     });
   }
-  document.body.dataset.audio = audioContext.state;
-  if (audioContext.state === 'suspended') void audioContext.resume().then(() => {
-    document.body.dataset.audio = audioContext?.state || 'closed';
-  });
+  try {
+    await audioContext.resume();
+  } catch {
+    showAudioState('locked', 'Your browser blocked sound. Press Enable sound to try again.');
+    return false;
+  }
+  if (audioContext.state !== 'running') {
+    showAudioState('locked', 'Your browser blocked sound. Press Enable sound to try again.');
+    return false;
+  }
+  muted = false;
+  showAudioState('unlocked', 'Sound is on.');
+  return true;
 }
 
 const videoBuffer = document.createElement('canvas');
@@ -75,7 +107,7 @@ const videoContext: CanvasRenderingContext2D = videoDrawingContext;
 
 function handleBinary(data: ArrayBuffer): void {
   const bytes = new Uint8Array(data);
-  if (bytes.length < 16 || new TextDecoder().decode(bytes.subarray(0, 4)) !== 'GRTV' || bytes[4] !== 1) {
+  if (bytes.length < 16 || new TextDecoder().decode(bytes.subarray(0, 4)) !== 'GRTV' || bytes[4] !== 2) {
     throw new Error('The box sent an unsupported programme stream');
   }
   const payload = bytes.subarray(16);
@@ -85,7 +117,10 @@ function handleBinary(data: ArrayBuffer): void {
     programmeContext.drawImage(videoBuffer, 0, 0, programme.width, programme.height);
     return;
   }
-  if (bytes[5] !== 2 || payload.length % 4 !== 0 || !audioContext || audioContext.state !== 'running') return;
+  if (bytes[5] !== 2 || payload.length % 4 !== 0 || muted || !audioContext || audioContext.state !== 'running') return;
+  const instruction = Number(new DataView(bytes.buffer, bytes.byteOffset, 16).getBigUint64(8));
+  if (!Number.isSafeInteger(instruction) || instruction <= lastAudioInstruction) return;
+  lastAudioInstruction = instruction;
   const samples = payload.length / 4;
   const buffer = audioContext.createBuffer(2, samples, 48_000);
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
@@ -96,6 +131,8 @@ function handleBinary(data: ArrayBuffer): void {
   const source = audioContext.createBufferSource();
   source.buffer = buffer;
   source.connect(audioContext.destination);
+  scheduledAudio.add(source);
+  source.addEventListener('ended', () => scheduledAudio.delete(source));
   nextAudioTime = Math.max(nextAudioTime, audioContext.currentTime + 0.04);
   source.start(nextAudioTime);
   nextAudioTime += buffer.duration;
@@ -241,6 +278,7 @@ function connect(): void {
   let openedAt = 0;
   socket = next;
   connected = false;
+  stopAudio();
   machineReady = false;
   awaitingFullFrame = true;
   paletteEpoch = -1;
@@ -274,6 +312,7 @@ function connect(): void {
     if (socket !== next) return;
     socket = null;
     connected = false;
+    stopAudio();
     machineReady = false;
     updateKeys();
     updateReset();
@@ -310,10 +349,22 @@ for (const key of keys) {
     }
     const raw = Number(key.dataset.raw);
     socket.send(encodeKeyMessage(raw, 0));
-    ensureAudio();
+    if (muted) void unlockAudio();
     keyFeedback.textContent = `${key.getAttribute('aria-label') || key.textContent?.trim() || 'Key'} sent to the box.`;
   });
 }
+
+soundToggle.addEventListener('click', () => {
+  if (!muted) {
+    muted = true;
+    stopAudio();
+    showAudioState('muted', 'Sound is muted.');
+    return;
+  }
+  void unlockAudio();
+});
+
+showAudioState('locked', 'Sound is locked until you enable it or press a handset key.');
 
 resetButton.addEventListener('pointerdown', () => {
   if (!resetButton.disabled) resetButton.dataset.pressed = 'true';

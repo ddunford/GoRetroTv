@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"image"
 	"image/color"
@@ -15,6 +16,41 @@ import (
 	"github.com/ddunford/goretrotv/internal/device/csi"
 	"github.com/ddunford/goretrotv/internal/wire"
 )
+
+func readBinary(t *testing.T, conn *websocket.Conn) []byte {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	typ, data, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if typ != websocket.MessageBinary {
+		t.Fatalf("message type = %v", typ)
+	}
+	return data
+}
+
+func TestAudioWireCarriesGuestInstructionTimestamp(t *testing.T) {
+	transport := NewTransport()
+	server := httptest.NewServer(transport)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	conn, response, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Body != nil {
+		defer response.Body.Close()
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	transport.PushAudio(0x0102030405060708, []byte{1, 2, 3, 4})
+	message := readBinary(t, conn)
+	if string(message[:4]) != "GRTV" || message[4] != 2 || message[5] != 2 || binary.BigEndian.Uint64(message[8:16]) != 0x0102030405060708 {
+		t.Fatalf("audio header = %x", message[:16])
+	}
+}
 
 func testFrame() *image.Paletted {
 	return image.NewPaletted(image.Rect(0, 0, FrameWidth, FrameHeight),

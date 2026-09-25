@@ -51,3 +51,29 @@ func TestEveryHandsetKeyOnThePageIsAcceptedByTheServer(t *testing.T) {
 		}
 	}
 }
+
+func TestPageExposesExplicitAudioStatesAndReconnectReset(t *testing.T) {
+	app, err := os.ReadFile(filepath.Join("..", "..", "web", "app.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := os.ReadFile(filepath.Join("..", "..", "web", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []struct {
+		name    string
+		body    []byte
+		pattern string
+	}{
+		{"sound control", page, `id="sound-toggle"`},
+		{"locked state", app, `showAudioState('locked'`},
+		{"unlocked state", app, `showAudioState('unlocked'`},
+		{"muted state", app, `showAudioState('muted'`},
+		{"reconnect audio reset", app, `stopAudio();`},
+	} {
+		if !regexp.MustCompile(regexp.QuoteMeta(subject.pattern)).Match(subject.body) {
+			t.Errorf("%s is not explicit in the browser contract", subject.name)
+		}
+	}
+}

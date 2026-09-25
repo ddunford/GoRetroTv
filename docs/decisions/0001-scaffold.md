@@ -77,7 +77,7 @@ The local Go 1.22 executable downloads that toolchain through the Go module prox
 
 <!-- anchor: internal/wire/wire.go -->
 <!-- anchor: internal/web/transport.go -->
-<!-- fingerprint: sha256:8fee8c7b8572625e9074ddf6c7a253a4937c1cf02b39fab7bee4a73c1cf8bec9 @ 2026-09-25 -->
+<!-- fingerprint: sha256:35e0f225f8376113c62426208d33850f6077dd4571da814cb6ab545a95cec3ea @ 2026-09-25 -->
 
 The browser needs a bidirectional WebSocket connection for framebuffer output and handset input.
 Go's standard library provides the HTTP server but no WebSocket protocol implementation. Adopt
@@ -86,6 +86,10 @@ has no `require` directives; the package's [repository](https://github.com/coder
 documents an actively maintained WebSocket implementation. This is the dependency anticipated in
 the original consequences above. The module is confined to the outward transport layer; no
 WebSocket code enters the emulator core.
+
+Programme audio uses the same outward connection, but its binary header carries the guest
+instruction count rather than a host or decoder clock. Browser reconnect, autoplay unlock and mute
+are presentation states only; none feeds time or channel selection back into the emulator.
 
 `ARCH-MODULE-1` accepts exactly this module at this version and rejects any other `require` or
 `replace` directive. A version change or new dependency needs another recorded decision and an

@@ -14,7 +14,7 @@ const (
 	MMIOBase = 0xB000A000
 	// MMIOSize is the demux register window attached to the physical bus.
 	MMIOSize              = 0x1000
-	demuxSnapshotVersion  = 7
+	demuxSnapshotVersion  = 8
 	maxProgrammeTransport = 2 * 1024 * 1024
 )
 
@@ -40,6 +40,11 @@ type Demux struct {
 	transportPart      [FilterCount][]byte
 	transportPacket    []byte
 	programmeTransport []byte
+	scheduledTransport []byte
+	scheduledCursor    uint32
+	nextProgrammeAt    uint64
+	programmePeriod    uint64
+	programmeScheduled bool
 	ram                *memory.RAM
 	interrupt          *irq.Controller
 }
@@ -343,6 +348,10 @@ func (d *Demux) Reset() {
 	d.transportPart = [FilterCount][]byte{}
 	d.transportPacket = nil
 	d.programmeTransport = nil
+	d.scheduledTransport = nil
+	d.scheduledCursor = 0
+	d.nextProgrammeAt, d.programmePeriod = 0, 0
+	d.programmeScheduled = false
 	d.updateLine()
 }
 
@@ -369,6 +378,11 @@ func (d *Demux) Snapshot() ([]byte, error) {
 	}
 	w.Bytes(d.transportPacket)
 	w.Bytes(d.programmeTransport)
+	w.Bytes(d.scheduledTransport)
+	w.Uint32(d.scheduledCursor)
+	w.Uint64(d.nextProgrammeAt)
+	w.Uint64(d.programmePeriod)
+	w.Bool(d.programmeScheduled)
 	return w.Blob()
 }
 
@@ -425,6 +439,17 @@ func (d *Demux) Restore(blob []byte) error {
 			programmeTransport = nil
 		}
 	}
+	var scheduledTransport []byte
+	var scheduledCursor uint32
+	var nextProgrammeAt, programmePeriod uint64
+	var programmeScheduled bool
+	if r.Version() >= 8 {
+		scheduledTransport = r.Bytes()
+		scheduledCursor = r.Uint32()
+		nextProgrammeAt = r.Uint64()
+		programmePeriod = r.Uint64()
+		programmeScheduled = r.Bool()
+	}
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
@@ -449,6 +474,18 @@ func (d *Demux) Restore(blob []byte) error {
 			return fmt.Errorf("demux: restore: invalid programme transport sync")
 		}
 	}
+	if len(scheduledTransport) > maxProgrammeTransport || len(scheduledTransport)%transportPacketSize != 0 ||
+		uint64(scheduledCursor) > uint64(len(scheduledTransport)) || scheduledCursor%transportPacketSize != 0 {
+		return fmt.Errorf("demux: restore: invalid scheduled transport")
+	}
+	for at := 0; at < len(scheduledTransport); at += transportPacketSize {
+		if scheduledTransport[at] != 0x47 {
+			return fmt.Errorf("demux: restore: invalid scheduled transport sync")
+		}
+	}
+	if programmeScheduled && (programmePeriod == 0 || len(scheduledTransport) == 0 || int(scheduledCursor) >= len(scheduledTransport)) {
+		return fmt.Errorf("demux: restore: invalid programme schedule")
+	}
 	for _, pointer := range pointers {
 		if pointer > 0x1fffff {
 			return fmt.Errorf("demux: restore: invalid write pointer")
@@ -469,6 +506,10 @@ func (d *Demux) Restore(blob []byte) error {
 	d.transportPart = parts
 	d.transportPacket = packet
 	d.programmeTransport = programmeTransport
+	d.scheduledTransport = scheduledTransport
+	d.scheduledCursor = scheduledCursor
+	d.nextProgrammeAt, d.programmePeriod = nextProgrammeAt, programmePeriod
+	d.programmeScheduled = programmeScheduled
 	d.updateLine()
 	return nil
 }

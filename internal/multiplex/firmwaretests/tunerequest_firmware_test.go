@@ -396,6 +396,30 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		t.Fatalf("PMT component selection did not program the measured decoder inputs: video=%04X audio=%04X ready=%t",
 			videoPID, audioPID, programmeReady)
 	}
+	videoPES := []multiplex.EncodedPayload{{PTS90k: 90_000, Data: []byte{0x00, 0x00, 0x01, 0xb3}}}
+	audioPES := []multiplex.EncodedPayload{{PTS90k: 90_000, Data: []byte{0xff, 0xfd, 0x84, 0x00}}}
+	if err := transmitter.ScheduleMedia(videoPES, audioPES, 1_000); err != nil {
+		t.Fatalf("schedule firmware-selected media: %v", err)
+	}
+	mediaDeadline := box.Machine.Retired + 20_000
+	for box.Machine.Retired < mediaDeadline {
+		if err := box.Step(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	programmeTransport := box.Demux.TakeProgrammeTransport()
+	if len(programmeTransport) != 2*188 {
+		t.Fatalf("scheduled media transport length = %d, want %d", len(programmeTransport), 2*188)
+	}
+	packetPID := func(packet []byte) uint16 {
+		return uint16(packet[1]&0x1f)<<8 | uint16(packet[2])
+	}
+	if got := packetPID(programmeTransport[:188]); got != videoPID {
+		t.Fatalf("first admitted media PID = %04X, want video PID %04X", got, videoPID)
+	}
+	if got := packetPID(programmeTransport[188:]); got != audioPID {
+		t.Fatalf("second admitted media PID = %04X, want audio PID %04X", got, audioPID)
+	}
 	serviceName, programmeName, source, configured := transmitter.MediaSelection()
 	if !configured || serviceName != "Sky One" || programmeName != "Dream Team" ||
 		source != multiplex.MediaKindTestPattern {

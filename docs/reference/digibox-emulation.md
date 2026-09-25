@@ -10,7 +10,7 @@ is because the method is the evidence.
 <!-- anchor: internal/board/runtime.go -->
 <!-- anchor: internal/memory/ram.go -->
 <!-- anchor: internal/memory/flash.go -->
-<!-- fingerprint: sha256:e101699d7bce3379d62ae38f9cc6b799d242b5db9d5980e005f1230b2a40b1d1 @ 2026-09-24 -->
+<!-- fingerprint: sha256:2559d86e7433d8cf9384a869783e1bd6e5e657906cb7d93f9c248c1879709843 @ 2026-09-25 -->
 
 **NEC VR4111, big-endian MIPS, mixed MIPS32 + MIPS16 reached via `JALX`.** RTOS is **Nucleus
 PLUS** — the image says `Copyright (c) 1993-1998 ATI - Nucleus PLUS - NEC4111`. MIPS16 is the
@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:72c8e15f9a0fd5f8aec04e31ee10d86a5fd1392bde8cbbcebf8e464a8b48afe5 @ 2026-09-25 -->
+<!-- fingerprint: sha256:d8a3215c2b52d0efdc758383d202f470d50bdc5de316c1808cf66297cf6d4bd2 @ 2026-09-25 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:72c8e15f9a0fd5f8aec04e31ee10d86a5fd1392bde8cbbcebf8e464a8b48afe5 @ 2026-09-25 -->
+<!-- fingerprint: sha256:d8a3215c2b52d0efdc758383d202f470d50bdc5de316c1808cf66297cf6d4bd2 @ 2026-09-25 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -4703,7 +4703,7 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:ec0520b00e7f50bf0c122915865d6063e0ca5f2c596011c189ed7ee7be6b589d @ 2026-09-25 -->
+<!-- fingerprint: sha256:d3c00ffaf7992e4df782ebbe5c23e07116e34d834d678fc3e4daed7139f5be5d @ 2026-09-25 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -4787,7 +4787,7 @@ fall out of that, and neither needs to be guessed.
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:7d6a58c172da50fd2eba8f90e6dee52d8a8c72c4f1ade08df5ea6723dae8566d @ 2026-09-25 -->
+<!-- fingerprint: sha256:179e81cb3c67afa8095051c0fc2c1e623cc9d2f724213cb2ed5e629ca84f5992 @ 2026-09-25 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
@@ -9713,8 +9713,9 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/multiplex/firmwaretests/audiodriver_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
 <!-- anchor: internal/multiplex/media.go -->
+<!-- anchor: internal/board/runtime.go -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:3775edb8fb87a5e9b8f18787eb5cb9b82a3cf2a27af16ad2eb663ea9ae9bb085 @ 2026-09-25 -->
+<!-- fingerprint: sha256:ac48394d69c7cac9cc1718668d7b9578de6cf8d33eabde7ee6fabedb52c91676 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10193,3 +10194,18 @@ an encrypted service without ECM/EMM and smart-card responses makes the signal l
 more authentic. This narrows the two valid continuations to a measured free-to-air decoder-ready
 event producer or a complete NDS entitlement path; neither may be replaced by a fabricated
 `0x210` object.
+
+The admitted programme transport is now clocked rather than injected as one host-side burst. Once
+the firmware has selected a service, accepted its PMT and programmed both dedicated decoder PID
+inputs, the multiplex may schedule the complete PAT/PMT/PES transport on the machine clock. The
+board pump presents due 188-byte packets to the same demux input used by the section carousel; PAT
+and PMT are ignored by the programme queue, while only the guest-selected video and audio PIDs are
+retained, in transport order. The pending bytes, cursor, next deadline and period are all part of
+demux snapshot version 8, so restoring midway through a burst reproduces the same remaining packet
+order and instruction deadlines. The real-firmware selection trace proves the join end to end with
+service `0x64`: guide selection produces decoder inputs `0x0101/0x0102`, then scheduled packets on
+exactly those PIDs reach the programme boundary. Scheduling refuses to run before the firmware has
+made that selection or when the guide has no explicit media source; it is transport timing, not a
+second host-side channel selector. This still does not claim a decoded picture or sound—the next
+boundary remains the supervised MPEG decoder which consumes this guest-authorised queue and earns
+the free-to-air decoder-ready event.

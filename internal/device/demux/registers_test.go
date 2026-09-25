@@ -61,6 +61,11 @@ func TestDemuxHoldsTheDeviceContract(t *testing.T) {
 			d.transportPacket = []byte{0x47, 0x40}
 			d.programmeTransport = make([]byte, transportPacketSize)
 			d.programmeTransport[0] = 0x47
+			d.scheduledTransport = make([]byte, 2*transportPacketSize)
+			d.scheduledTransport[0], d.scheduledTransport[transportPacketSize] = 0x47, 0x47
+			d.scheduledCursor = transportPacketSize
+			d.nextProgrammeAt, d.programmePeriod = 1234, 56
+			d.programmeScheduled = true
 		},
 		Disturb: func(device bus.Device) {
 			device.Reset()

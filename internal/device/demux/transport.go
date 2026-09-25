@@ -12,6 +12,45 @@ const (
 	maxTransportSection = 4096
 )
 
+// ScheduleTransport replaces the pending transport with complete packets which enter the demux at
+// an instruction-counted cadence. The input is copied so its caller cannot mutate future state.
+func (d *Demux) ScheduleTransport(data []byte, first, period uint64) error {
+	if period == 0 {
+		return fmt.Errorf("demux: programme transport period is zero")
+	}
+	if len(data) == 0 || len(data)%transportPacketSize != 0 || len(data) > maxProgrammeTransport {
+		return fmt.Errorf("demux: programme transport has invalid length %d", len(data))
+	}
+	for at := 0; at < len(data); at += transportPacketSize {
+		if data[at] != 0x47 {
+			return fmt.Errorf("demux: programme transport packet %d has sync byte %#02x",
+				at/transportPacketSize, data[at])
+		}
+	}
+	d.scheduledTransport = append(d.scheduledTransport[:0], data...)
+	d.scheduledCursor = 0
+	d.nextProgrammeAt, d.programmePeriod = first, period
+	d.programmeScheduled = true
+	return nil
+}
+
+// Pump admits every packet whose instruction-count deadline has passed. The board invokes this
+// from the same deterministic clock pump as the hardware timer and serial links.
+func (d *Demux) Pump(now uint64) error {
+	for d.programmeScheduled && now >= d.nextProgrammeAt {
+		at := int(d.scheduledCursor)
+		if err := d.PushTransport(d.scheduledTransport[at : at+transportPacketSize]); err != nil {
+			return err
+		}
+		d.scheduledCursor += transportPacketSize
+		d.nextProgrammeAt += d.programmePeriod
+		if int(d.scheduledCursor) == len(d.scheduledTransport) {
+			d.programmeScheduled = false
+		}
+	}
+	return nil
+}
+
 // PushTransport consumes complete DVB transport packets entering the demux. The ROM's self-test
 // feeds this input through DMA channel 5 before the application section rings exist; the tuned
 // application instead programs the demux's dedicated video/audio PID inputs and does not arm a

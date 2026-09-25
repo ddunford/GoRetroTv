@@ -155,6 +155,9 @@ func New(images *firmware.Set, skyGates bool) (*Runtime, error) {
 	var pump clock.Handler
 	pump = func(now uint64) error {
 		r.Timer.Pump(now + 15)
+		if err := r.Demux.Pump(now); err != nil {
+			return err
+		}
 		r.CSI.Pump(r.Machine.Retired, r.Timer.Ticks())
 		modemPort.Pump(r.Timer.Ticks())
 		cardPort.Pump(16)

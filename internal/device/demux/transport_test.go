@@ -95,6 +95,71 @@ func TestTransportRoutesOnlyGuestProgrammedDecoderPIDsAndSnapshotsQueue(t *testi
 	}
 }
 
+func TestScheduledTransportRestoresTheSamePacketOrderAndDeadlines(t *testing.T) {
+	t.Parallel()
+	ram, err := memory.NewRAM("dram", memory.DRAMSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := New()
+	if err := d.BindRAM(ram); err != nil {
+		t.Fatal(err)
+	}
+	d.Write(0x140, bus.Word, 1)
+	d.Write(0x94, bus.Word, 0x4000|0x101)
+	d.Write(0x98, bus.Word, 0x4000|0x102)
+	videoPES, err := broadcast.PES(0xe0, 0, []byte{1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audioPES, err := broadcast.PES(0xc0, 90_000, []byte{2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	video := dvb.PacketizePES(0x101, videoPES, 0)
+	unselected := dvb.PacketizePES(0x103, videoPES, 0)
+	audio := dvb.PacketizePES(0x102, audioPES, 0)
+	scheduled := append(append(append([]byte(nil), video...), unselected...), audio...)
+	if err := d.ScheduleTransport(scheduled, 100, 50); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Pump(99); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.TakeProgrammeTransport(); len(got) != 0 {
+		t.Fatalf("packet arrived before its deadline: %d bytes", len(got))
+	}
+	if err := d.Pump(100); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := d.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := New()
+	if err := restored.Restore(blob); err != nil {
+		t.Fatal(err)
+	}
+	if err := restored.BindRAM(ram); err != nil {
+		t.Fatal(err)
+	}
+	for _, device := range []*Demux{d, restored} {
+		if err := device.Pump(149); err != nil {
+			t.Fatal(err)
+		}
+		if err := device.Pump(200); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := append(append([]byte(nil), video...), audio...)
+	if got := d.TakeProgrammeTransport(); !bytes.Equal(got, want) {
+		t.Fatalf("original scheduled output length = %d, want %d", len(got), len(want))
+	}
+	if got := restored.TakeProgrammeTransport(); !bytes.Equal(got, want) {
+		t.Fatalf("restored scheduled output length = %d, want %d", len(got), len(want))
+	}
+}
+
 func TestTransportPIDOnlyChannelIgnoresAnUnrelatedRouteBit(t *testing.T) {
 	t.Parallel()
 	ram, err := memory.NewRAM("dram", memory.DRAMSize)

@@ -15,6 +15,30 @@ type EncodedPayload struct {
 	Data   []byte
 }
 
+// ScheduleMedia builds and schedules the currently tuned programme on the demux input. It refuses
+// to become a second channel selector: the firmware must have armed EIT for a service, accepted its
+// PMT, programmed both decoder PIDs, and selected a guide programme with an explicit media source.
+func (m *Multiplex) ScheduleMedia(video, audio []EncodedPayload, packetPeriod uint64) error {
+	if m == nil || m.box == nil {
+		return fmt.Errorf("multiplex: no box to schedule media on")
+	}
+	sub, asking := m.subscription()
+	if !asking || !sub.EITArmed || sub.TunedServiceID == 0 {
+		return fmt.Errorf("multiplex: firmware has not selected a service for media")
+	}
+	if _, _, _, configured := m.MediaSelection(); !configured {
+		return fmt.Errorf("multiplex: selected programme has no configured media")
+	}
+	if _, _, ready := m.box.Demux.ProgrammePIDs(); !ready {
+		return fmt.Errorf("multiplex: firmware has not programmed both decoder PIDs")
+	}
+	transport, err := MediaTransport(sub.NetworkID, sub.TunedServiceID, m.version, video, audio)
+	if err != nil {
+		return err
+	}
+	return m.box.Demux.ScheduleTransport(transport, m.box.Machine.Clock.Now(), packetPeriod)
+}
+
 // MediaTransport builds a complete single-programme MPEG transport stream using the component
 // allocations announced by programmeWave. It is deliberately independent of guest delivery: the
 // demux/device path decides which of these packets the firmware-requested PIDs admit.

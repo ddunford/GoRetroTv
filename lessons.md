@@ -233,3 +233,7 @@ Checking that a one-slot channel is full and then receiving its old value is rac
 ### A non-blocking select can still monopolise the instruction loop
 
 “Drain until default” is not bounded work when independent audio and video producers alternate often enough that one channel is always ready. At each instruction-clock safe point, service a fixed maximum from every host-media queue and return to the guest; non-blocking individual operations do not by themselves guarantee firmware progress.
+
+### Guest decoder state is observed at a device safe point, not every instruction
+
+Resolving `MediaPlayout` looks like a read, but it walks the current schedule; doing it on every instruction reduced firmware progress before FFmpeg even started. Poll decoder PID state and resolve the selected programme only at the established 1,024-instruction input/device boundary, just like transport and handset work.

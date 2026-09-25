@@ -465,7 +465,9 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	transport.PushMedia(false, "", "", "")
 	for {
 		count := box.Machine.Retired
+		inputDue := false
 		if count >= nextInput {
+			inputDue = true
 			nextInput = count + inputInterval
 			// The cancellation is returned with the cause rather than dropped.
 			// stopContext is the process shutting down and its caller has
@@ -511,54 +513,55 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		if err := box.Step(); err != nil {
 			return stopHalt, err
 		}
-		// The two decoder PID registers are the measured hardware boundary beyond service
-		// selection. The guest writes them only after the PAT and PMT have arrived and its MPEG
-		// manager has selected video and audio components. Starting the presentation at the older
-		// 0x800A03D0 service callback put bars behind the still-pending no-signal screen; that
-		// callback proves only that a row was selected, not that a programme signal exists.
-		videoPID, audioPID, requested := box.Demux.ProgrammePIDs()
-		service, programme, source, configured := "", "", "", false
-		var selected multiplex.ProgrammePlayout
-		if requested && transmitter != nil {
-			selected, configured = transmitter.MediaPlayout()
-			if configured {
-				service, programme, source = selected.Service, selected.Programme, selected.Media.Kind
+		if inputDue {
+			// The two decoder PID registers are the measured hardware boundary beyond service
+			// selection. Observe them at the input/device safe point: resolving the full programme
+			// schedule on every guest instruction made the decoder request itself consume almost the
+			// entire instruction loop, before FFmpeg had even started.
+			videoPID, audioPID, requested := box.Demux.ProgrammePIDs()
+			service, programme, source, configured := "", "", "", false
+			var selected multiplex.ProgrammePlayout
+			if requested && transmitter != nil {
+				selected, configured = transmitter.MediaPlayout()
+				if configured {
+					service, programme, source = selected.Service, selected.Programme, selected.Media.Kind
+				}
 			}
-		}
-		if configured && selected.Media.Kind != multiplex.MediaKindTestPattern &&
-			(playout == nil || playout.key != playoutKey(selected)) {
-			playout.close(logger)
-			var startErr error
-			playout, startErr = startPlayout(ctx, mediaRoot, selected)
-			if startErr != nil {
-				return stopHalt, fmt.Errorf("start scheduled programme media: %w", startErr)
+			if configured && selected.Media.Kind != multiplex.MediaKindTestPattern &&
+				(playout == nil || playout.key != playoutKey(selected)) {
+				playout.close(logger)
+				var startErr error
+				playout, startErr = startPlayout(ctx, mediaRoot, selected)
+				if startErr != nil {
+					return stopHalt, fmt.Errorf("start scheduled programme media: %w", startErr)
+				}
+				logger.Info("scheduled programme playout started", "service", service, "programme", programme,
+					"path", selected.Media.Path, "offset", selected.Elapsed)
+			} else if (!configured || selected.Media.Kind == multiplex.MediaKindTestPattern) && playout != nil {
+				playout.close(logger)
+				playout = nil
 			}
-			logger.Info("scheduled programme playout started", "service", service, "programme", programme,
-				"path", selected.Media.Path, "offset", selected.Elapsed)
-		} else if (!configured || selected.Media.Kind == multiplex.MediaKindTestPattern) && playout != nil {
-			playout.close(logger)
-			playout = nil
-		}
-		if requested != mediaRequested {
-			mediaRequested = requested
-			subscription, subscriptionErr := multiplex.Read(box.Demux)
-			logger.Info("guest decoder request changed", "requested", requested, "video_pid", videoPID,
-				"audio_pid", audioPID, "tuned_service_id", subscription.TunedServiceID,
-				"eit_armed", subscription.EITArmed, "subscription_error", subscriptionErr,
-				"configured", configured, "service", service, "programme", programme, "source", source)
-		}
-		if !configured {
-			service, programme, source = "", "", ""
-		}
-		if service != mediaService || programme != mediaProgramme || source != mediaSource {
-			mediaService, mediaProgramme, mediaSource = service, programme, source
-			transport.PushMedia(configured, service, programme, source)
-			if configured {
-				logger.Info("guest requested configured programme streams", "service", service,
-					"programme", programme, "source", source, "video_pid", videoPID, "audio_pid", audioPID)
-			} else if requested {
-				logger.Info("guest selected a programme without configured media", "video_pid", videoPID,
-					"audio_pid", audioPID)
+			if requested != mediaRequested {
+				mediaRequested = requested
+				subscription, subscriptionErr := multiplex.Read(box.Demux)
+				logger.Info("guest decoder request changed", "requested", requested, "video_pid", videoPID,
+					"audio_pid", audioPID, "tuned_service_id", subscription.TunedServiceID,
+					"eit_armed", subscription.EITArmed, "subscription_error", subscriptionErr,
+					"configured", configured, "service", service, "programme", programme, "source", source)
+			}
+			if !configured {
+				service, programme, source = "", "", ""
+			}
+			if service != mediaService || programme != mediaProgramme || source != mediaSource {
+				mediaService, mediaProgramme, mediaSource = service, programme, source
+				transport.PushMedia(configured, service, programme, source)
+				if configured {
+					logger.Info("guest requested configured programme streams", "service", service,
+						"programme", programme, "source", source, "video_pid", videoPID, "audio_pid", audioPID)
+				} else if requested {
+					logger.Info("guest selected a programme without configured media", "video_pid", videoPID,
+						"audio_pid", audioPID)
+				}
 			}
 		}
 		count = box.Machine.Retired

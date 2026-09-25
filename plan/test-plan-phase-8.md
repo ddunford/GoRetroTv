@@ -20,6 +20,11 @@
 - **TC-8.5: Video composition and audio wire** (covers: Phase 8 task 5) — moving decoded frames are
   below transparent OSD pixels, OSD remains above video, timestamped audio survives reconnect, and
   autoplay refusal presents an operable unmute control rather than silently dropping sound.
+- **TC-8.5a: Responsive live playout** (covers: Phase 8 task 5a) — after Sky One requests its
+  configured programme, the first decoded frame arrives promptly, active playout sustains at least
+  one million guest instructions per wall-clock second, and the firmware-controlled guide overlay
+  clears within its bounded wall-clock interval. The test fails if host media queues are serviced
+  once per guest instruction rather than at the input/device safe point.
 - **TC-8.6: Tune and watch in the browser** (covers: Phase 8 task 6) — Playwright tunes a configured
   service and an unconfigured service through the real firmware, proves two separated video frames
   differ only for the configured current programme, verifies non-silent audio samples through the

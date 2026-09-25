@@ -11,7 +11,10 @@ import (
 	"github.com/ddunford/goretrotv/internal/web"
 )
 
-const mediaPacketPeriod = 1_000
+const (
+	mediaPacketPeriod   = 1_000
+	playoutPumpInterval = 1_024
+)
 
 type playoutSession struct {
 	key     string

@@ -9721,7 +9721,7 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/web/transport.go -->
 <!-- anchor: web/app.ts -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:9ea023dd8a5bd0479dda1fb848a0d5d2ed33abbbb085876edc565a6ae11728f0 @ 2026-09-25 -->
+<!-- fingerprint: sha256:08514f87bdff8b9c048c860ca7a0a6387c9318a90c6b616d49ea60f3b853b915 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode

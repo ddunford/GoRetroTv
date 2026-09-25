@@ -434,7 +434,7 @@ func resetState(ready bool) (string, string) {
 // for, or the guest halts. It is the board's only owner for that lifetime.
 func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 	transport *web.Transport, logger *slog.Logger, transmitter *multiplex.Multiplex, mediaRoot string) (stopCause, error) {
-	const inputInterval = 1024
+	const inputInterval = playoutPumpInterval
 	const frameInterval = 500_000
 	const stateInterval = 4_000_000
 	const progressInterval = 5_000_000
@@ -497,6 +497,16 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 			if err := box.Demux.Pump(count); err != nil {
 				return stopHalt, fmt.Errorf("pump programme transport: %w", err)
 			}
+			// Media subprocesses and browser queues live at the edge, but checking all of them is
+			// not a guest instruction. Polling them on every Step made active television consume
+			// nearly the entire instruction loop: production fell from roughly 5M instructions/s
+			// to 5M per 30-45s, stretching the firmware's ordinary overlay timeout accordingly.
+			// Service them at the same measured safe point as transport admission and handset input.
+			if playout != nil {
+				if err := playout.pump(box.Demux, count, transport); err != nil {
+					return stopHalt, fmt.Errorf("programme playout: %w", err)
+				}
+			}
 		}
 		if err := box.Step(); err != nil {
 			return stopHalt, err
@@ -528,11 +538,6 @@ func runInstructions(ctx context.Context, box *board.Runtime, ready bool,
 		} else if (!configured || selected.Media.Kind == multiplex.MediaKindTestPattern) && playout != nil {
 			playout.close(logger)
 			playout = nil
-		}
-		if playout != nil {
-			if err := playout.pump(box.Demux, box.Machine.Retired, transport); err != nil {
-				return stopHalt, fmt.Errorf("programme playout: %w", err)
-			}
 		}
 		if requested != mediaRequested {
 			mediaRequested = requested

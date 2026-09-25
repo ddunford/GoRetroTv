@@ -189,6 +189,7 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 					a2: state.GPR[6], a3: state.GPR[7], ocode: latestOCode})
 			}
 			if pc == 0x8009D370 || pc == 0x8001C908 || pc == 0x8001CF8C ||
+				pc == 0x800D768E || pc == 0x800D82FC || pc == 0x800D8344 ||
 				pc == 0x800ABB2C || pc == 0x800AFD74 || pc == 0x800AFF1C ||
 				pc == 0x8009E140 || pc == 0x8009E250 || pc == 0x8009E290 ||
 				pc == 0x8009E47C || pc == 0x800A127C || pc == 0x800A1A48 || pc == 0x8009E764 ||
@@ -536,7 +537,8 @@ func TestTraceServiceSelectionToTuneRequest(t *testing.T) {
 		t.Fatalf("decoder-ready event unexpectedly ran before the measured stop/idle decisions: decisions=%#v events=%#v",
 			audioReadyDecisions, decoderStateEvents)
 	}
-	for _, pc := range []uint32{0x800DA436, 0x800DA452, 0x800DC648, 0x800DC67C,
+	for _, pc := range []uint32{0x800D768E, 0x800D82FC, 0x800D8344,
+		0x800DA436, 0x800DA452, 0x800DC648, 0x800DC67C,
 		0x800E8B18, 0x800EEE68, 0x800D5C8C, 0x800D5D2C,
 		0x800DB9CA, 0x800DBF34, 0x800E8DE8, 0x800DC014} {
 		if mediaHits[pc] != 0 {

@@ -148,3 +148,37 @@ func TestTheMediaModuleRegistration(t *testing.T) {
 	}
 	t.Fatal("running firmware registry contains no module 0x210 entry")
 }
+
+// TestThe0200To0210ChainBelongsToConditionalAccess pins the owner of the event path which was
+// previously described only as a media-object path. The sole 0x10000 producer upstream of module
+// 0x200 is registered against the firmware's ECM interface; the adjacent registrations are EMM
+// and UTIL. A free-to-air decoder must not manufacture this entitlement path to start playback.
+func TestThe0200To0210ChainBelongsToConditionalAccess(t *testing.T) {
+	box := restoredBox(t)
+	for address, want := range map[uint32]uint32{
+		0x000E26B0: 0x800E4201, // ECM callback which emits event 0x10000
+		0x000E26B4: 0x9FCC3448, // "ECM"
+		0x000E26BC: 0x800E788D, // interface registration routine
+		0x000E26C0: 0x800E426D, // adjacent EMM callback
+		0x000E26C4: 0x9FCC344C, // "EMM"
+		0x000E26CC: 0x800DE3C9, // adjacent UTIL callback
+		0x000E26D0: 0x9FCC3450, // "UTIL"
+	} {
+		if got := box.RAM.Read(address, bus.Word); got != want {
+			t.Fatalf("conditional-access registration word %08X = %08X, want %08X", address, got, want)
+		}
+	}
+	for address, want := range map[uint32]string{
+		0x9FCC3448: "ECM",
+		0x9FCC344C: "EMM",
+		0x9FCC3450: "UTIL",
+	} {
+		got := make([]byte, len(want))
+		for i := range got {
+			got[i] = byte(box.Machine.Bus.Read(address+uint32(i), bus.Byte)) // #nosec G115 -- three fixed firmware strings
+		}
+		if string(got) != want {
+			t.Fatalf("firmware interface at %08X = %q, want %q", address, got, want)
+		}
+	}
+}

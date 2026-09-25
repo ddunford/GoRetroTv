@@ -9711,7 +9711,9 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/audiodriver_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
-<!-- fingerprint: sha256:160350a837631e78c4d0f1c2efb51dcf87134f4b3414d982aaba33913e126a58 @ 2026-09-25 -->
+<!-- anchor: internal/multiplex/media.go -->
+<!-- anchor: internal/broadcast/pes.go -->
+<!-- fingerprint: sha256:c4ed79a32a7c9927c3cb92246cc1af3cc3c49cffd51ce4f800d7865397a664fd @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10072,6 +10074,15 @@ the video and audio decoder PID inputs. A real-firmware acceptance test now requ
 after the PMT component rebuild and reads their low thirteen bits as `0x0101/0x0102`; neither is
 reported by the section-filter census.
 
+The transmitter now has the matching elementary-stream half without claiming that delivery is
+already modelled. It wraps timestamped encoded access units in H.222.0 PES packets, packetises them
+on the PMT-declared PIDs with independent continuity counters and adaptation-field stuffing, and
+can assemble a complete single-service transport beside the existing PAT and PMT. An acceptance
+test generates 352x288 MPEG-2 Main Profile video and 48 kHz MP2 audio, then independently asks
+`ffprobe` to identify PID `0x0101` as `mpeg2video` and PID `0x0102` as `mp2`. This proves the bytes
+which the next device task will deliver; it does not bypass the still-missing guest-requested
+decoder/DMA path.
+
 This is also the correct presentation boundary. The earlier browser prototype started at MPEG
 service callback `0x800A03D0`, before PAT or PMT, so it could put colour bars behind a firmware
 screen which was still reporting no signal. The presentation now starts only when the guest has
@@ -10117,6 +10128,17 @@ subtracts base `0x00010010` and handles the measured ids `0x10010`, `0x10020`, `
 registered events; a generic demux decoder interrupt does not substitute for it. In particular,
 wrappers `0x800DA436` and `0x800DA452` call the class-1 dispatcher with `0x100B0` and `0x10140`;
 both remain cold in the tuned run and are the next caller boundary.
+
+The upstream `0x200 -> 0x210` chain is conditional access, not the free-to-air decoder-ready path.
+Module `0x200` registers event callback `0x800D75D5` and object callback `0x800D7691`; its object
+state machine emits `0x10010` from `0x800D7756`. The event which starts that state machine comes
+from `0x800E4200`, and its registration is unambiguous: initializer `0x800E2524` binds callback
+`0x800E4201` to firmware interface string `"ECM"` at `0x9FCC3448`. The adjacent bindings are
+`"EMM" -> 0x800E426D` and `"UTIL" -> 0x800DE3C9`. A tuned free-to-air run reaches none of the
+`0x200` object callback, its two low-level predicates at `0x800D82FC/0x800D8344`, or the central
+event send. The firmware test pins both the literal registrations and that cold contrast. Creating
+a `0x210` record or posting its events for a free-to-air service would therefore impersonate ECM
+and entitlement processing; it is not the missing decoder input.
 
 Those wrappers now have a measured owner; they are not low-level demux interrupt handlers. Module
 initialisation at `0x800DAA04` registers four callbacks in the fourteen-entry table at `0x8012E548`

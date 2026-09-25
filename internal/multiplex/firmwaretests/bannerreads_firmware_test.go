@@ -17,7 +17,7 @@ import (
 // alone cannot say whether those records are the WRONG place to look or simply a place the grid
 // forgot.
 //
-// **THE BANNER IS THE CONTROL THIS QUESTION HAS BEEN MISSING.** Press `tv guide` and the box draws
+// **THE BANNER IS THE CONTROL THIS QUESTION HAS BEEN MISSING.** Press `sky` and the box draws
 // a now-and-next bar carrying a real programme off our broadcast -- so that screen demonstrably
 // resolves a channel to its listings, which is exactly what the grid fails to do. If the banner
 // reads the line-up records, they are the channel source and the grid's silence about them is the
@@ -101,12 +101,12 @@ func TestWhetherTheNowAndNextBannerReadsTheLineUp(t *testing.T) {
 
 	before := screenNow(t, box)
 	watching = true
-	// 0x80 is the tv guide key: the now-and-next banner.
+	// 0x80 is Sky: from viewing it draws the now-and-next search-and-scan banner.
 	banner := pressAndLetItFinishHooked(t, box,
 		func() error { return transmitter.Pump(box.Machine.Retired) }, hooks, 0x80, 80_000_000)
 	watching = false
 	if banner == 0 || banner == before {
-		t.Fatalf("harness: the tv guide key drew nothing new (%08X), so this measured no banner",
+		t.Fatalf("harness: the Sky key drew nothing new (%08X), so this measured no banner",
 			before)
 	}
 	if err := dumpScreen(t, box, "banner-now-and-next.png"); err != nil {

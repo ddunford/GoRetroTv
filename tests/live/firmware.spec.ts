@@ -8,7 +8,7 @@ function indexedHash(pixels: Buffer): number {
   return hash;
 }
 
-test('real firmware sends its screen, accepts Sky, and draws the Box Office menu', async ({ page }, testInfo) => {
+test('real firmware sends its screen, accepts Box Office, and draws that exact menu', async ({ page }, testInfo) => {
   test.setTimeout(180_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -39,8 +39,8 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
   }));
   await page.goto('/');
   await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide on the handset.');
-  const sky = page.getByRole('button', { name: 'box office', exact: true });
-  await expect(sky).toBeEnabled();
+  const boxOffice = page.getByRole('button', { name: 'box office', exact: true });
+  await expect(boxOffice).toBeEnabled();
   const screen = page.locator('#screen');
   await expect.poll(() => initialFrame !== null && palette !== null && paletteAlpha !== null).toBe(true);
   const frameBytes = initialFrame!;
@@ -76,17 +76,17 @@ test('real firmware sends its screen, accepts Sky, and draws the Box Office menu
   const before = await countColours();
   expect(before).toBe(1);
 
-  await sky.click();
+  await boxOffice.click();
   await expect(page.locator('#key-feedback')).toContainText('box office sent to the box');
   try {
     await expect.poll(countColours,
     { timeout: 45_000, intervals: [500, 1000] }).toBeGreaterThan(10);
   } catch (error) {
-    throw new Error(`Sky menu did not reach the canvas: WebSocket frames=${frameMessages}, ` +
+    throw new Error(`Box Office menu did not reach the canvas: WebSocket frames=${frameMessages}, ` +
       `latest indexed hash=${indexedHash(livePixels).toString(16)}, page errors=${errors.join('; ')}`, { cause: error });
   }
   await expect.poll(() => indexedHash(livePixels),
-  { timeout: 45_000, intervals: [500, 1000] }).toBe(0xFE8D1CCC); // Pinned by board's post-Sky Compose test.
+  { timeout: 45_000, intervals: [500, 1000] }).toBe(0xFE8D1CCC); // Pinned by the firmware test.
   await expect(page.locator('#box-status')).toContainText('ready');
   // The four sections must be named, not just the six rows: the tab bar is on
   // screen and a description that omits it hides three quarters of the menu.

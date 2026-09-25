@@ -808,7 +808,7 @@ broadcast, which is a real thing to wait for rather than a bug to be acked away.
 
 With the link fixed every key dispatches, and the o-code interpreter (TASK30) is genuinely
 running application code for them — measured as instructions executed in `0x80083000-0x80090000`
-per press: standby `0xCC` **53,483**, Sky `0x21` **33,130**, `0x108` **40,238**, `0x100`
+per press: the then-unidentified raw codes `0xCC` **53,483**, `0x21` **33,130**, `0x108` **40,238**, `0x100`
 **17,273**, `0x900` **6,743**, while `0x7F`, `0xF5` and `0x7D` run **zero**. So the application
 is discriminating between keys rather than ignoring them.
 
@@ -5320,7 +5320,7 @@ searches for listings for ever and says so, which is correct behaviour that read
 broken emulator. It was built, measured, and **reverted to opt-in (`?si=1`) because it costs the
 whole interface.** A/B in one run, same walk on both, pressed from a settled box:
 
-                             press sky (0x7D)                then tv guide (0x80)
+                      press box office (0x7D)            then the then-mislabeled 0x80
       no broadcast    9825b318/12 colours -> f3634409/37    -> 27538f44/34, stable to 30s
       broadcast on    9825b318/12 colours -> 9825b318/12    -> 9825b318/12, stable to 30s
 
@@ -7888,29 +7888,30 @@ re-taken with a census that assumes neither. **It survived unchanged**, and is n
 
 ---
 
-## The handset map, swept exhaustively
+## The handset map, corrected by a tuned-state measurement
 
 <!-- anchor: internal/device/csi/link.go -->
 <!-- fingerprint: sha256:43db4f837a55b7ce39bf344f0f2c01abcef8caa62ff8e0b2fd07118a9ccd221b @ 2026-09-24 -->
 
-*Measured 2026-09-20. Every raw code 0x00-0xFF pressed on its own restored box, nine million
-instructions to settle, framebuffer hashed. This replaces every partial key-map note above: it is
-the complete set of codes this firmware reacts to from the idle picture.*
+*Measured 2026-09-20 and corrected 2026-09-25. The first sweep pressed every raw code 0x00-0xFF on
+its own restored box and inferred names from framebuffer hashes. That method found reacting codes,
+but it did not identify their physical labels: the user's report from a playing channel exposed
+that `0x80`, previously called TV Guide, actually performed Sky's return-to-viewing action. A
+tuned-state firmware run then pressed Sky and TV Guide separately and pinned the exact screens.*
 
 | code | screen |
 |---|---|
-| `0x0C`, `0x80` | **tv guide** — the now/next banner over the picture |
+| `0x0C` | standby |
+| `0x80` | **Sky** — return to viewing; from a tuned channel the search-and-scan banner is shown |
 | `0x7D` | **box office** — the Sky menu, opened on the BOX OFFICE tab |
 | `0x7E` | **services** — the Sky menu, opened on the SERVICES tab |
-| `0xCC` | standby |
+| `0xCC` | **tv guide** — the full ten-entry TV GUIDE menu (`0x43779DC8`) |
 | `0xF5` | **interactive** |
 
-**Every other code does nothing at all.** There is no code that opens the menu on TV GUIDE, and no
-separate "sky" or "home" key that opens the menu: `0x7D` is what opens it. The TV GUIDE tab is
-reached from inside the menu, one LEFT of BOX OFFICE, and the tab is REMEMBERED — press box office,
-arrow to TV GUIDE, leave, and the next box office press reopens on TV GUIDE. That is why `0x7D` can
-look like a home key on one box and a box-office key on another: it depends on where the last
-session left it.
+The earlier claim that every other code was inert and no separate Sky key existed is withdrawn.
+That was a semantic conclusion from an idle-picture sweep, not a physical-key identification.
+`TestSkyAndTVGuideAreDistinctFromAViewingChannel` now establishes the distinction from the state
+where a viewer encounters it: after tuning, `0x80` does not open TV Guide and `0xCC` does.
 
 ### The firmware names its own keys
 
@@ -7924,11 +7925,9 @@ key:
     To set up Parental Control press 'services' and choose '3'
     Press 'Sky' any time to return immediately to TV viewing
 
-So the box's own name for `0x7D` is **box office**, not sky. The 'Sky' key it describes is one that
-RETURNS TO TV VIEWING rather than opening anything: swept from inside the menu, `0x65` and `0x83`
-both exit to the picture and both do nothing from idle, which is exactly that behaviour. Neither is
-named further here, because "returns to TV" does not distinguish them and guessing which is Sky is
-the kind of plausible answer this file exists to stop.
+So the box's own name for `0x7D` is **box office**, not Sky. The distinct Sky key is `0x80`; it
+returns to TV viewing, exactly as the firmware help text says. `0x83` is Back Up. The earlier
+candidate-code inference from menu exits is superseded by the tuned-state measurement.
 
 ### Keys that act only inside the menu
 

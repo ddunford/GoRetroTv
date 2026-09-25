@@ -58,18 +58,18 @@
         <div class="remote" role="group" aria-label="Sky Digibox handset" id="handset">
           <div class="remote-head">
             <button class="key utility unavailable" type="button" aria-label="TV control — unavailable in the Digibox emulator" title="Controls the television, not the Digibox" disabled>tv</button>
-            <button class="key sky unavailable" type="button" aria-label="Sky — awaiting measured firmware code" title="Awaiting a measured Digibox code" disabled>sky</button>
-            <button class="key power" type="button" data-raw="0xCC" aria-label="Standby" disabled><span aria-hidden="true">⏻</span></button>
+            <button class="key sky" type="button" data-raw="0x80" disabled>sky</button>
+            <button class="key power" type="button" data-raw="0x0C" aria-label="Standby" disabled><span aria-hidden="true">⏻</span></button>
           </div>
           <div class="remote-section remote-primary">
             <button class="key" type="button" data-raw="0x7D" disabled>box office</button>
             <button class="key" type="button" data-raw="0x7E" disabled>services</button>
-            <button class="key" type="button" data-raw="0x80" disabled>tv guide</button>
+            <button class="key" type="button" data-raw="0xCC" disabled>tv guide</button>
             <button class="key" type="button" data-raw="0xF5" disabled>interactive</button>
           </div>
           <div class="remote-info-row">
             <button class="key utility unavailable" type="button" aria-label="Mute — television control unavailable in the Digibox emulator" disabled>mute</button>
-            <button class="key utility unavailable info-key" type="button" aria-label="Information — awaiting measured firmware code" disabled>i</button>
+            <button class="key utility info-key" type="button" data-raw="0xCB" aria-label="Information" disabled>i</button>
           </div>
           <div class="remote-middle">
             <div class="rocker" aria-label="Volume controls unavailable">
@@ -82,14 +82,14 @@
               <button class="key nav right" type="button" data-raw="0x5B" aria-label="Right" disabled><span aria-hidden="true">▶</span></button>
               <button class="key nav down" type="button" data-raw="0x59" aria-label="Down" disabled><span aria-hidden="true">▼</span></button>
             </div>
-            <div class="rocker" aria-label="Channel controls unavailable">
-              <button class="key unavailable" type="button" aria-label="Channel up — awaiting measured firmware code" disabled>+</button><span aria-hidden="true">ch</span><button class="key unavailable" type="button" aria-label="Channel down — awaiting measured firmware code" disabled>−</button>
+            <div class="rocker" aria-label="Channel controls">
+              <button class="key" type="button" data-raw="0x20" aria-label="Channel up" disabled>+</button><span aria-hidden="true">ch</span><button class="key" type="button" data-raw="0x21" aria-label="Channel down" disabled>−</button>
             </div>
           </div>
           <div class="remote-secondary">
-            <button class="key unavailable" type="button" aria-label="Text — television control unavailable in the Digibox emulator" disabled>text</button>
-            <button class="key back" type="button" data-raw="0x3C" disabled>back up</button>
-            <button class="key unavailable" type="button" aria-label="Help — awaiting measured firmware code" disabled>help</button>
+            <button class="key" type="button" data-raw="0x3C" disabled>text</button>
+            <button class="key back" type="button" data-raw="0x83" disabled>back up</button>
+            <button class="key" type="button" data-raw="0x81" disabled>help</button>
           </div>
           <div class="colour-row" aria-label="Colour keys">
             <button class="key colour-key red" type="button" data-raw="0x6D" aria-label="Red key" disabled></button>

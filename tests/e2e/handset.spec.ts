@@ -103,8 +103,8 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
   // focus keeps this about the KEY's focus ring rather than the page furniture.
   await page.locator('#sound-toggle').focus();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Standby' })).toBeFocused();
-  const focus = await page.getByRole('button', { name: 'Standby' }).evaluate(element => {
+  await expect(page.getByRole('button', { name: 'sky', exact: true })).toBeFocused();
+  const focus = await page.getByRole('button', { name: 'sky', exact: true }).evaluate(element => {
     const style = getComputedStyle(element);
     return { color: style.outlineColor, width: style.outlineWidth, style: style.outlineStyle };
   });
@@ -112,6 +112,8 @@ test('handset has visible keyboard, pointer, acknowledgement and reduced-motion 
   expect(focus.width).toBe('3px');
   expect(focus.color).toBe('rgb(255, 204, 82)');
 
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Standby' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(boxOffice).toBeFocused();
   await page.keyboard.down('Space');
@@ -173,11 +175,9 @@ test('period handset controls are present without inventing Digibox key codes', 
 
   const unavailable = [
     'TV control — unavailable in the Digibox emulator',
-    'Sky — awaiting measured firmware code',
     'Mute — television control unavailable in the Digibox emulator',
-    'Information — awaiting measured firmware code',
-    'Text — television control unavailable in the Digibox emulator',
-    'Help — awaiting measured firmware code',
+    'Volume up — television control unavailable',
+    'Volume down — television control unavailable',
   ];
   for (const name of unavailable) {
     const control = page.getByRole('button', { name, exact: true });
@@ -187,6 +187,9 @@ test('period handset controls are present without inventing Digibox key codes', 
   }
 
   await expect(page.locator('.remote-head button')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'sky', exact: true })).toHaveAttribute('data-raw', '0x80');
+  await expect(page.getByRole('button', { name: 'tv guide', exact: true })).toHaveAttribute('data-raw', '0xCC');
+  await expect(page.getByRole('button', { name: 'Standby' })).toHaveAttribute('data-raw', '0x0C');
   await expect(page.locator('.remote-primary button')).toHaveText([
     'box office', 'services', 'tv guide', 'interactive',
   ]);

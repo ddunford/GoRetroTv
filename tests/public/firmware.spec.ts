@@ -36,7 +36,7 @@ test('deployed HTTPS serves its own assets and no developer routes', async ({ re
   }
 });
 
-test('deployed WSS draws the real frame and Sky opens the exact firmware menu', async ({ page }, testInfo) => {
+test('deployed WSS draws the real frame and TV Guide opens the exact firmware menu', async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   const pixels = Buffer.alloc(720 * 576);
@@ -72,8 +72,10 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
   expect(response?.status()).toBe(200);
   const expectedWebSocketURL = new URL('/ws', response!.url()).toString().replace(/^http/, 'ws');
   await expect.poll(() => websocketURL).toBe(expectedWebSocketURL);
-  const sky = page.getByRole('button', { name: 'box office', exact: true });
+  const sky = page.getByRole('button', { name: 'sky', exact: true });
+  const tvGuide = page.getByRole('button', { name: 'tv guide', exact: true });
   await expect(sky).toBeEnabled();
+  await expect(tvGuide).toBeEnabled();
   await expect(page.locator('#box-status')).toHaveText('The box is ready. Press tv guide on the handset.');
   await expect.poll(() => initial !== null && palette !== null && paletteAlpha !== null).toBe(true);
   expect(indexedHash(initial!)).toBe(0xA6A21DC5);
@@ -94,11 +96,11 @@ test('deployed WSS draws the real frame and Sky opens the exact firmware menu', 
     return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('');
   })).toBe(expectedDigest);
 
-  await sky.click();
+  await tvGuide.click();
   await expect.poll(() => sent.length).toBe(1);
-  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 4, raw: 125, source: 0 });
+  expect(JSON.parse(sent[0])).toMatchObject({ type: 'key', version: 4, raw: 204, source: 0 });
   await expect.poll(() => indexedHash(pixels), { timeout: 45_000, intervals: [500, 1000] })
-    .toBe(0xFE8D1CCC);
+    .toBe(0x43779DC8);
   await expect(page.locator('#box-status')).toContainText('ready');
   expect(errors).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('public-menu-light.png'), fullPage: true });

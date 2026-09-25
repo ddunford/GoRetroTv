@@ -26,25 +26,27 @@ change is genuinely risky — a schema or protocol break, something that could w
 other viewers, or anything the user has flagged as sensitive. Otherwise ship it and say what
 `/health` reports, because the version string is the proof it actually landed.
 
-### The handset's key codes are MEASURED, and most of the project's labels were never proved
+### Handset codes need both a screen measurement and the right starting state
 
-Only four codes were ever verified against a screen, and one long-standing label was simply wrong:
+The idle-screen sweep found reacting codes but assigned two physical labels incorrectly. The
+corrected map combines those measurements with the 2026-09-25 tuned-state reproduction:
 
-| raw | what it actually does, measured 2026-09-20 from the post-acquisition snapshot |
+| raw | measured behavior |
 |---|---|
-| `0x7D` | Sky menu on the **BOX OFFICE** tab (frame `FE8D1CCC`) — the page calls this "sky" |
+| `0x0C` | Standby |
+| `0x7D` | Sky menu on the **BOX OFFICE** tab (frame `FE8D1CCC`) |
 | `0x7E` | Sky menu on the **SERVICES** tab (`64AF0A8D`) — the record called this "the Box Office menu again" |
-| `0x80` | **TV GUIDE** (`B424095B`) |
+| `0x80` | **Sky** — returns to viewing/search-and-scan from a tuned channel |
+| `0xCC` | **TV GUIDE** — full ten-entry menu (`43779DC8`) |
 | `0xF5` | **INTERACTIVE** (`20DB8CF2`) |
 
 `0x7E` was mis-attributed because the original walk pressed it while the box was *already* showing
 Box Office, so the screen never changed and the sentence attached to the measurement described a
 screen nobody had checked — this file's oldest failure mode, and the record names it as such.
 
-**The real remote is the Sky Rev 9**, and it has `sky` and `box office` as SEPARATE buttons, so a
-distinct sky code exists and has not been found. Establish a code by pressing it from a screen that
-is *not* already its destination and comparing frame hashes; never from a public key table and never
-from the label someone gave it.
+**The real remote has `sky` and `box office` as separate buttons.** Establish each code by pressing
+it from a screen that is not already its destination and pinning the result; never infer a physical
+label from a changed hash alone.
 
 ### A coverage check greps for a TOKEN, and the token is narrower than the claim
 
@@ -140,13 +142,13 @@ had been writing all along.**
 where I was" is not an identification, and an instrument that cannot say which screen it is on
 produces findings that are worse than no findings, because they read as measurements.
 
-### A manual cannot prove a control the product does not expose
+### Measure handset semantics in the state where the viewer uses them
 
-The period manual says Sky returns to television and TV Guide opens the guide, but the browser
-handset has no Sky button: `0x7D` is the separately measured Box Office key, while the actual Sky
-raw code remains unknown. Never report the manual's behavior as implemented until the rendered
-control, raw code, and firmware result have all been observed in the same state; `0x80` also behaves
-differently after tuning, where the user sees the picture and lower search-and-scan banner.
+An idle-screen sweep mislabeled `0x80` as TV Guide and `0xCC` as Standby because it inferred names
+from changed framebuffer hashes. The user's tuned-channel reproduction exposed the error: a
+tuned-state firmware test now pins `0x80` as Sky (return to viewing/search-and-scan), `0xCC` as TV
+Guide (the full ten-entry menu), and `0x0C` as Standby. A raw code, rendered label, and firmware
+result must be observed in the same relevant state before the control is called implemented.
 
 ### A uniform answer across independent things is a bug in the instrument
 

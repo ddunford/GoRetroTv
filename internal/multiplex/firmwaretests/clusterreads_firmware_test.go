@@ -53,9 +53,9 @@ import (
 func TestWhetherEitherScreenReadsTheSortedChannelIndex(t *testing.T) {
 	t.Run("the now-and-next banner", func(t *testing.T) {
 		measureChannelArrayReads(t, "banner", func(p *screenProbe) uint32 {
-			drew := p.press(keyTVGuide, "tv guide (now-and-next banner)", 60_000_000)
+			drew := p.press(keySky, "sky (now-and-next banner)", 60_000_000)
 			if drew == 0 {
-				t.Fatal("harness: the tv guide key drew nothing new, so no banner was measured and " +
+				t.Fatal("harness: the Sky key drew nothing new, so no banner was measured and " +
 					"the control this whole probe depends on does not exist")
 			}
 			return drew
@@ -296,6 +296,6 @@ func findChannelArrays(t *testing.T, box *board.Runtime, listings *multiplex.Lis
 	return out
 }
 
-// keyTVGuide draws the now-and-next banner over the picture. It is not the route to the grid, which
-// goes through the box office menu's tv guide tab.
-const keyTVGuide = 0x80
+// keySky draws the now-and-next search-and-scan banner over the picture. TV Guide is 0xCC and
+// opens the full TV GUIDE menu directly.
+const keySky = 0x80

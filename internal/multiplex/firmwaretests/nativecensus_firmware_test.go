@@ -148,7 +148,7 @@ func nativeCensusFor(t *testing.T, wantBanner bool) map[uint32]int {
 
 	press := func(raw uint8, label string, budget int) uint32 {
 		t.Helper()
-		if raw == keySelect || raw == keyTVGuide {
+		if raw == keySelect || raw == keySky {
 			calls, watching = map[uint32]int{}, true
 		}
 		drew := pressAndLetItFinishHooked(t, box,
@@ -159,7 +159,7 @@ func nativeCensusFor(t *testing.T, wantBanner bool) map[uint32]int {
 	}
 
 	if wantBanner {
-		if drew := press(keyTVGuide, "tv guide (banner)", 60_000_000); drew == 0 {
+		if drew := press(keySky, "sky (banner)", 60_000_000); drew == 0 {
 			t.Fatal("harness: the banner drew nothing, so its native census is of nothing")
 		}
 	} else {

@@ -50,7 +50,7 @@ func TestWhetherTheBrokenScreensReadTheListingsStore(t *testing.T) {
 	}{
 		{name: "the now-and-next banner (control: it works)", works: true,
 			open: func(t *testing.T, press pressFunc) uint32 {
-				return press(keyTVGuide, "tv guide (banner)", 60_000_000)
+				return press(keySky, "sky (banner)", 60_000_000)
 			}},
 		{name: "the ALL CHANNELS grid",
 			open: func(t *testing.T, press pressFunc) uint32 {
@@ -160,7 +160,7 @@ func readListingsStore(t *testing.T, open func(*testing.T, pressFunc) uint32, ex
 
 	press := func(raw uint8, name string, budget int) uint32 {
 		t.Helper()
-		if raw == keySelect || raw == keyTVGuide {
+		if raw == keySelect || raw == keySky {
 			reads, watching = map[uint32]int{}, true
 		}
 		drew := pressAndLetItFinishHooked(t, box,

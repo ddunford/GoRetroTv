@@ -35,7 +35,7 @@ function isUniform(pixels: Buffer): boolean {
   return band.every(pixel => pixel === band[0]);
 }
 
-test('pressing tv guide in the browser draws now and next, and it follows the schedule', async ({ page }, testInfo) => {
+test('pressing Sky in the browser draws search-and-scan, and it follows the schedule', async ({ page }, testInfo) => {
   test.setTimeout(240_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -65,7 +65,7 @@ test('pressing tv guide in the browser draws now and next, and it follows the sc
   // blank picture the banner returns to when it times out.
   const pressAndRead = async (label: string): Promise<string> => {
     const before = bannerDigest(live.pixels);
-    await page.getByRole('button', { name: 'tv guide', exact: true }).click();
+    await page.getByRole('button', { name: 'sky', exact: true }).click();
     let candidate = '';
     let steady = 0;
     await expect.poll(async () => {

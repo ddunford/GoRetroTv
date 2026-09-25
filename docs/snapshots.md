@@ -44,7 +44,7 @@ PID `0x52` armed, and NIT/BAT/SDT/TOT match units. The same acquisition sequence
 agrees with the unchanged browser oracle; see `plan/test-plan-phase-3a.md`.
 
 `./ctl.sh snapshot inspect post-acquisition` reports state hash `8B2A7E0B` and a
-blue baseline surface hash `9825B318`. A raw Sky key (`0x7D`) after restore reaches
+blue baseline surface hash `9825B318`. A raw Box Office key (`0x7D`) after restore reaches
 the guest input routine twice and draws the Box Office menu by instruction
 1,120,000,000: surface hash `F3634409`, 37 distinct bytes, and state hash
 `847B9151`. Reproduce the press with:
@@ -88,7 +88,7 @@ recordings in `.artifacts/` when they contain private broadcast data.
   -replay-in .artifacts/sky-key.inputs.json -surface-hash
 ```
 
-The recording above restores at 1,100,000,000 instructions, presses Sky and ends
+The recording above restores at 1,100,000,000 instructions, presses Box Office and ends
 at 1,120,000,000. Its framebuffer SHA-256 is
 `1bffc82b335571138a8c80c8589a0da52a4dcb317b634183311e2c4a7a3f0b74`.
 The same interface records timed `-section` deliveries; repeat that flag for a

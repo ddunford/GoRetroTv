@@ -129,7 +129,7 @@ func TestTheMapFromTheSignalToTheGrid(t *testing.T) {
 		}}
 		press := func(raw uint8, label string, budget int) uint32 {
 			t.Helper()
-			if raw == keySelect || raw == keyTVGuide {
+			if raw == keySelect || raw == keySky {
 				reads, watching = map[uint32]int{}, true
 			}
 			drew := pressAndLetItFinishHooked(t, box,
@@ -149,7 +149,7 @@ func TestTheMapFromTheSignalToTheGrid(t *testing.T) {
 
 	// The banner first: it works, and it is reached from a clean screen.
 	banner := readsBy("the now-and-next banner", func(press pressFunc) uint32 {
-		return press(keyTVGuide, "tv guide (banner)", 60_000_000)
+		return press(keySky, "sky (banner)", 60_000_000)
 	})
 	// Clear it before walking to the grid, or every screen on the way has a different hash.
 	for attempt := 1; attempt <= 4 && screenNow(t, box) != 0; attempt++ {

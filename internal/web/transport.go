@@ -456,10 +456,11 @@ func handsetRaw(raw uint8) bool {
 	}
 	switch raw {
 	// 0x7e is the Sky menu's SERVICES tab, measured against frame 64AF0A8D from
-	// the post-acquisition snapshot. It was on the handset and absent here from
-	// the day the key was added, so pressing services closed the viewer's socket
-	// with "invalid key" -- confirmed on the live demo before it was fixed.
-	case 0x3c, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x7d, 0x7e, 0x80, 0xcc, 0xf5:
+	// the post-acquisition snapshot and tuned-state handset measurements. Keep
+	// this aligned with the controls rendered by web/index.html: an omitted real
+	// key closes the viewer's socket with "invalid key" instead of reaching CSI.
+	case 0x0c, 0x20, 0x21, 0x3c, 0x58, 0x59, 0x5a, 0x5b, 0x5c,
+		0x7d, 0x7e, 0x80, 0x81, 0x83, 0xcb, 0xcc, 0xf5:
 		return true
 	}
 	return false

@@ -64,7 +64,7 @@ func TestHowManyChannelsEachScreenThinksThereAre(t *testing.T) {
 	t.Run("the now-and-next banner", func(t *testing.T) {
 		bannerCounts, bannerBounds = countChannelEntryPoints(t, "banner", func(press pressFunc, watch func(bool)) uint32 {
 			watch(true)
-			drew := press(keyTVGuide, "tv guide (now-and-next banner)", 60_000_000)
+			drew := press(keySky, "sky (now-and-next banner)", 60_000_000)
 			if drew == 0 {
 				t.Fatal("harness: the tv guide key drew nothing new, so the control does not exist")
 			}

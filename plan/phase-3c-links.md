@@ -8,7 +8,7 @@ CSI (the handset), I²C and the EEPROM (NVRAM), the smartcard link, and the sate
 
 ## Tasks (mirror — bd epic `gort-f3f` is the source of truth; never hand-ticked)
 
-- [x] `TASK-3c.1` The CSI link and handset frames; `__key(raw, source)`'s equivalent. The 33 documented raw codes, with **sky = 0x7D, tv guide = 0x80, up = 0x58, down = 0x59, left = 0x5A, right = 0x5B, select = 0x5C** → `/go-engineer` [TC-3c.1]
+- [x] `TASK-3c.1` The CSI link and handset frames; `__key(raw, source)`'s equivalent. The documented raw codes, with **sky = 0x80, tv guide = 0xCC, box office = 0x7D, up = 0x58, down = 0x59, left = 0x5A, right = 0x5B, select = 0x5C** → `/go-engineer` [TC-3c.1]
 - [x] `TASK-3c.2` I²C plus the EEPROM, persisted to a file. **This is the NVRAM** and its contents are what make a boot warm → `/go-engineer` [TC-3c.2]
 - [x] `TASK-3c.3` The peripheral micro's command acknowledgements — default replies match the measured set; answering every command changes guest behaviour, so policy is explicit → `/go-engineer` [TC-3c.3]
 - [x] `TASK-3c.4` The smartcard link, enough for the CA init to proceed → `/go-engineer` [TC-3c.4]
@@ -39,7 +39,7 @@ past CA init without them and will not remember anything without the EEPROM.
 | demodulator | indirect register file at I²C `0x18` | reg 75 bits `0x17`, reg 78 = `0x02` |
 
 **Interfaces:**
-- `CSI.Key(raw uint8, source uint8)` — sky `0x7D`, tv guide `0x80`, up `0x58`, down `0x59`,
+- `CSI.Key(raw uint8, source uint8)` — sky `0x80`, tv guide `0xCC`, box office `0x7D`, up `0x58`, down `0x59`,
   left `0x5A`, right `0x5B`, select `0x5C`
 - `EEPROM.Persist(path string) error` / `Load` · `Demod.Locked() bool` — always true
 

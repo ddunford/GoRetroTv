@@ -68,11 +68,11 @@ the specification and none of it should be re-derived.
   listings id must be the number a viewer expects to see.
 - **The box applies its time offset to programme times as well as the clock**, so the wire carries
   UTC and the editable schedule is in local time.
-- **The handset answers five codes and no others**, swept 0x00–0xFF: `0x0C`/`0x80` tv guide,
-  `0x7D` box office, `0x7E` services, `0xCC` standby, `0xF5` interactive. There is no key that
-  opens the menu on TV GUIDE, and no separate sky/home key — `0x7D` opens the menu and the tab is
-  remembered, which is why it can look like either. The firmware names its own keys on the
-  SERVICES → *Using Your Sky Digibox* help page.
+- **The handset codes must be named from stateful firmware behavior, not an idle hash sweep.** A
+  tuned-state measurement corrected the earlier labels: `0x0C` standby, `0x80` Sky, `0xCC` TV
+  Guide, `0x7D` box office, `0x7E` services and `0xF5` interactive. Sky returns to viewing and can
+  show search-and-scan; TV Guide opens the full ten-entry TV GUIDE menu directly. The firmware
+  names those behaviors on SERVICES → *Using Your Sky Digibox*.
 - **Clock first, and the clock table is the TOT.** The listings request is day-addressed and the box
   programs it **once**. Measured 2026-09-20: the box's match units carry `0x73` and nothing matches
   `0x70`, so a TDT is never delivered — a carousel that sends only a TDT leaves the box on the day it

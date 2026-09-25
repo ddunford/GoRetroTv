@@ -14,7 +14,7 @@ import (
 // searches the SI for a 0x4A descriptor, and then requires both that the
 // search succeeded and that the linkage_type is 0x91.
 const (
-	pcGuideKey        = 0x80 // tv guide
+	pcGuideKey        = 0xCC // tv guide
 	pcLinkageAnswered = 0x800a4040
 	pcLinkageNotFound = 0x800ac774
 )

@@ -60,7 +60,7 @@ func bannerAtKind(t *testing.T, kind byte, artefact string) uint32 {
 	t.Logf("kind %d: %d of %d programmes registered", kind, registered, want)
 
 	pump := func() error { return transmitter.Pump(box.Machine.Retired) }
-	drew := pressAndLetItFinish(t, box, pump, keyTVGuide, 80_000_000)
+	drew := pressAndLetItFinish(t, box, pump, keySky, 80_000_000)
 	if drew == 0 {
 		t.Fatalf("harness: the banner never settled at kind %d, so there is nothing to compare", kind)
 	}

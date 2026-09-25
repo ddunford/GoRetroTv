@@ -9,30 +9,25 @@ import (
 // The handset map, pinned.
 //
 // Swept exhaustively on 2026-09-20 -- every code 0x00..0xFF pressed on its own
-// restored box -- and these five are the ONLY codes this firmware reacts to
-// from the idle picture. The sweep itself is a one-off measurement and lives in
-// the record; what is worth keeping is the result, and the two claims that the
-// page's labelling rests on:
+// restored box. The original reading mislabeled 0x80 as TV Guide and omitted
+// 0xCC because it inferred names from idle-screen changes. A tuned-state probe
+// now pins the physical handset distinction: 0x80 is Sky and 0xCC is TV Guide.
 //
 //   - each key draws a DIFFERENT screen, so the labels are not four names for
 //     one thing;
 //   - the codes around them are inert, so the map is complete rather than the
 //     part of it somebody happened to look at.
 //
-// The firmware names these keys itself, on the SERVICES help page: "press 'tv
-// guide'", "the 'box office' key", "press 'services'". There is no key that
-// opens the menu on TV GUIDE -- 0x7D opens it on BOX OFFICE, and TV GUIDE is
-// one LEFT of that -- which is why the handset carries these four and not a
-// fifth called sky or home.
-// The four codes the handset sends, named once so tests say what they mean.
+// The five menu-area codes the handset sends, named once so tests say what they mean.
 const (
-	tvGuideKey     = 0x80
+	skyKey         = 0x80
+	tvGuideKey     = 0xCC
 	boxOfficeKey   = 0x7d
 	servicesKey    = 0x7e
 	interactiveKey = 0xf5
 )
 
-func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
+func TestTheHandsetKeysAreTheFiveTheFirmwareAnswers(t *testing.T) {
 	const settle = 5_000_000
 
 	screen := func(code int) uint32 {
@@ -60,6 +55,7 @@ func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
 		name string
 		code int
 	}{
+		{"sky", skyKey},
 		{"tv guide", tvGuideKey},
 		{"box office", boxOfficeKey},
 		{"services", servicesKey},
@@ -77,7 +73,7 @@ func TestTheHandsetKeysAreTheFourTheFirmwareAnswers(t *testing.T) {
 	// The neighbours. If one of these started drawing something, the map is no
 	// longer complete and the sweep needs re-running -- which is a finding, not
 	// a failure, and the message says so.
-	for _, code := range []int{0x7f, 0x81, 0xf6} {
+	for _, code := range []int{0x7f, 0x82, 0xf6} {
 		if screen(code) != idle {
 			t.Errorf("%#02x now draws something; the handset map is no longer the five codes the "+
 				"sweep found, so sweep 0x00..0xFF again and update the record", code)

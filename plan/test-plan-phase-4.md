@@ -33,7 +33,7 @@
   `post-acquisition` image (SHA-256 `4d12dab14717b558e3fc0827dbac5ba3fd0528f5491811920cb444b8cae12e0a`).
   Restoring the named image with the built binary took **0.74 seconds**, including firmware
   loading and state-hash calculation; it restored at instruction 1.1B with hash `8B2A7E0B`.
-  Sky `0x7D` at that instruction reached guest PC `0x8006EA04` twice and drew the measured
+  Box Office `0x7D` at that instruction reached guest PC `0x8006EA04` twice and drew the measured
   Box Office surface by 1.12B (raw hash `F3634409`, 37 distinct bytes, final state hash
   `847B9151`). The seed command refuses an existing name, and both library directory and image
   are private (`0700`/`0600`). Evidence: `.artifacts/si-warm-ready-v2.log`,

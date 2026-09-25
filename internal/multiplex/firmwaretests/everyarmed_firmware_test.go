@@ -92,8 +92,8 @@ func TestEveryPIDTheBoxEverArms(t *testing.T) {
 		return settled
 	}
 
-	phase = "tv guide banner"
-	press(0x80, "tv guide")
+	phase = "search-and-scan banner"
+	press(skyKey, "sky")
 	watch(10_000_000)
 
 	phase = "box office"

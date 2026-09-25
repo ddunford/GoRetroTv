@@ -130,7 +130,7 @@ body[data-state="halted"] .status-icon { background: #db4f46; box-shadow: 0 0 0 
 .rocker { position: relative; display: grid; grid-template-rows: 44px 22px 44px; align-items: center; justify-items: center; color: #f3f6fb; font-size: 9px; font-weight: 800; text-transform: lowercase; }
 .rocker::before { content: ""; position: absolute; inset: 0; z-index: 0; background: #111722; border: 1px solid #576174; border-radius: 50% / 18%; box-shadow: inset 0 1px 2px #ffffff19; }
 .rocker .key, .rocker span { z-index: 1; }
-.rocker .key { min-width: 42px; border: 0; background: transparent; box-shadow: none; font-size: 18px; }
+.rocker .key { min-width: 44px; border: 0; background: transparent; box-shadow: none; font-size: 18px; }
 .remote-secondary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 7px 10px 9px; }
 .remote-secondary .key { min-width: 0; border-radius: 50% / 62%; }
 .colour-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; margin: 0 7px 10px; }

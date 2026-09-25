@@ -233,7 +233,7 @@ func listingsPathOf(t *testing.T, wantBanner bool) (map[painterSite]int, map[uin
 
 	press := func(raw uint8, label string, budget int) uint32 {
 		t.Helper()
-		if raw == keySelect || raw == keyTVGuide {
+		if raw == keySelect || raw == keySky {
 			readers, executed, watching = map[painterSite]int{}, map[uint32]bool{}, true
 		}
 		drew := pressAndLetItFinishHooked(t, box,
@@ -244,7 +244,7 @@ func listingsPathOf(t *testing.T, wantBanner bool) (map[painterSite]int, map[uin
 	}
 
 	if wantBanner {
-		if drew := press(keyTVGuide, "tv guide (banner)", 60_000_000); drew == 0 {
+		if drew := press(keySky, "sky (banner)", 60_000_000); drew == 0 {
 			t.Fatal("harness: the banner drew nothing, so the listings path was not walked")
 		}
 		total := 0

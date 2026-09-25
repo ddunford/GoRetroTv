@@ -140,6 +140,14 @@ had been writing all along.**
 where I was" is not an identification, and an instrument that cannot say which screen it is on
 produces findings that are worse than no findings, because they read as measurements.
 
+### A manual cannot prove a control the product does not expose
+
+The period manual says Sky returns to television and TV Guide opens the guide, but the browser
+handset has no Sky button: `0x7D` is the separately measured Box Office key, while the actual Sky
+raw code remains unknown. Never report the manual's behavior as implemented until the rendered
+control, raw code, and firmware result have all been observed in the same state; `0x80` also behaves
+differently after tuning, where the user sees the picture and lower search-and-scan banner.
+
 ### A uniform answer across independent things is a bug in the instrument
 
 Dumping what the box filters for, six armed channels each came back "NO RULES AT ALL — takes any

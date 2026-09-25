@@ -225,3 +225,7 @@ The presentation substitute must never become a global “Test channel” select
 ### “Playing” is not acceptable when tuning still feels like acquisition
 
 Channel playout acceptance must measure the user-visible latency from SELECT to both the guide overlay clearing and the first decoded frame. A screenshot eventually containing video does not prove a broadcast-like channel change; the public box must cut promptly to the already-running programme and must not spend tens of seconds draining transport or waiting for an over-conservative UI settle.
+
+### A lossy browser queue must be non-blocking across the whole replacement sequence
+
+Checking that a one-slot channel is full and then receiving its old value is racy because the WebSocket writer can drain it between those operations, leaving the emulator blocked on the receive. Latest-frame, audio, media-state, and machine-state publication must use non-blocking receive and send steps, with a concurrent publisher/consumer regression; a single-threaded “slow client” test cannot expose this stall.

@@ -178,6 +178,34 @@ func TestSlowClientCannotBlockPublisher(t *testing.T) {
 	}
 }
 
+func TestLatestValueQueueNeverBlocksConcurrentPublisherAndConsumer(t *testing.T) {
+	queue := make(chan int, 1)
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-queue:
+			case <-stop:
+				return
+			}
+		}
+	}()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for value := 0; value < 1_000_000; value++ {
+			offerLatest(queue, value)
+		}
+	}()
+	select {
+	case <-done:
+		close(stop)
+	case <-time.After(3 * time.Second):
+		close(stop)
+		t.Fatal("a concurrent drain blocked latest-value publication")
+	}
+}
+
 func TestBrowserKeyReachesCSILinkInInstructionLoop(t *testing.T) {
 	transport := NewTransport()
 	if err := transport.PushState("ready", "The guest acquired its services"); err != nil {

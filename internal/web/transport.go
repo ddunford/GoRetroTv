@@ -49,6 +49,26 @@ type client struct {
 	audio  chan []byte
 }
 
+// offerLatest never waits for a concurrent consumer. A plain "default, receive old, send new"
+// sequence has two races: the consumer can empty the channel before the receive, or accept a value
+// before the replacement send. Either turns a lossy presentation queue into a blocking operation
+// on the emulator's instruction-loop goroutine.
+func offerLatest[T any](queue chan T, value T) {
+	select {
+	case queue <- value:
+		return
+	default:
+	}
+	select {
+	case <-queue:
+	default:
+	}
+	select {
+	case queue <- value:
+	default:
+	}
+}
+
 const mediaWireHeader = 16
 
 // PushVideo publishes the latest decoded 352x288 RGBA frame. Slow viewers skip frames rather than
@@ -75,12 +95,7 @@ func (t *Transport) pushBinary(kind byte, sequence uint64, payload []byte, lates
 		if latest {
 			queue = c.video
 		}
-		select {
-		case queue <- message:
-		default:
-			<-queue
-			queue <- message
-		}
+		offerLatest(queue, message)
 	}
 }
 
@@ -115,12 +130,7 @@ func (t *Transport) PushMedia(active bool, service, programme, source string) {
 	}
 	t.media = &next
 	for c := range t.clients {
-		select {
-		case c.media <- next:
-		default:
-			<-c.media
-			c.media <- next
-		}
+		offerLatest(c.media, next)
 	}
 }
 
@@ -140,12 +150,7 @@ func (t *Transport) PushState(phase, reason string) error {
 	}
 	t.state = &next
 	for c := range t.clients {
-		select {
-		case c.state <- next:
-		default:
-			<-c.state
-			c.state <- next
-		}
+		offerLatest(c.state, next)
 	}
 	return nil
 }

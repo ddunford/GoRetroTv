@@ -9714,8 +9714,9 @@ transport input path that feeds the already-executed SI callback after tuning.
 <!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
 <!-- anchor: internal/multiplex/media.go -->
 <!-- anchor: internal/board/runtime.go -->
+<!-- anchor: internal/media/decoder.go -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:ac48394d69c7cac9cc1718668d7b9578de6cf8d33eabde7ee6fabedb52c91676 @ 2026-09-25 -->
+<!-- fingerprint: sha256:2b91ec56b6756699be7928b96db26331441e502054a550305b4b79118ba07768 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10209,3 +10210,15 @@ made that selection or when the guide has no explicit media source; it is transp
 second host-side channel selector. This still does not claim a decoded picture or sound—the next
 boundary remains the supervised MPEG decoder which consumes this guest-authorised queue and earns
 the free-to-air decoder-ready event.
+
+The host decoder boundary is now concrete and deliberately outside the emulated machine. One
+supervised ffmpeg subprocess receives only transport drained from the guest-authorised programme
+queue. It emits fixed 352x288 RGBA frames and 48 kHz stereo signed PCM on separate inherited pipes;
+the emulator core remains free of CGo and never waits on either pipe. Input, video and audio cross
+bounded non-blocking queues. An overflow terminates the decoder and becomes a queryable error
+instead of silently dropping frames or throttling the instruction loop, while malformed or
+oversized transport is refused before it reaches the child. Process exit and stderr are likewise
+reported. An acceptance test generates a standards-shaped service independently, decodes real
+non-zero video and audio through this boundary, and proves an undrained one-slot output queue fails
+visibly. The decoded planes are not yet published by the browser; compositing and timestamped audio
+transport remain the next presentation task.

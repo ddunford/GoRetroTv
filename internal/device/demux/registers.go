@@ -13,33 +13,35 @@ const (
 	// MMIOBase is the EMMA demux register window on the board's uncached bus.
 	MMIOBase = 0xB000A000
 	// MMIOSize is the demux register window attached to the physical bus.
-	MMIOSize             = 0x1000
-	demuxSnapshotVersion = 6
+	MMIOSize              = 0x1000
+	demuxSnapshotVersion  = 7
+	maxProgrammeTransport = 2 * 1024 * 1024
 )
 
 // Demux owns the status and enable state of four EMMA interrupt groups.
 // Other registers answer zero until a measured read contract gives them meaning.
 type Demux struct {
-	name             string
-	status           [4]uint32
-	enable           [4]uint32
-	selectedFilter   uint32
-	selectedIndirect uint8
-	writePointer     [FilterCount]uint32
-	pidChannels      [FilterCount]uint32
-	pidWritten       [FilterCount]bool
-	programmePIDs    [2]uint32
-	matchValue       uint32
-	matchUnit        uint8
-	matchIndex       uint8
-	matchWords       [16][16]uint32
-	control140       uint32
-	indirectData     uint32
-	indirect         [FilterCount]uint32
-	transportPart    [FilterCount][]byte
-	transportPacket  []byte
-	ram              *memory.RAM
-	interrupt        *irq.Controller
+	name               string
+	status             [4]uint32
+	enable             [4]uint32
+	selectedFilter     uint32
+	selectedIndirect   uint8
+	writePointer       [FilterCount]uint32
+	pidChannels        [FilterCount]uint32
+	pidWritten         [FilterCount]bool
+	programmePIDs      [2]uint32
+	matchValue         uint32
+	matchUnit          uint8
+	matchIndex         uint8
+	matchWords         [16][16]uint32
+	control140         uint32
+	indirectData       uint32
+	indirect           [FilterCount]uint32
+	transportPart      [FilterCount][]byte
+	transportPacket    []byte
+	programmeTransport []byte
+	ram                *memory.RAM
+	interrupt          *irq.Controller
 }
 
 // MatchByte is one byte of a section match unit's value and mask.
@@ -340,6 +342,7 @@ func (d *Demux) Reset() {
 	d.indirect = [FilterCount]uint32{}
 	d.transportPart = [FilterCount][]byte{}
 	d.transportPacket = nil
+	d.programmeTransport = nil
 	d.updateLine()
 }
 
@@ -365,6 +368,7 @@ func (d *Demux) Snapshot() ([]byte, error) {
 		w.Bytes(part)
 	}
 	w.Bytes(d.transportPacket)
+	w.Bytes(d.programmeTransport)
 	return w.Blob()
 }
 
@@ -414,6 +418,13 @@ func (d *Demux) Restore(blob []byte) error {
 	if len(packet) == 0 {
 		packet = nil
 	}
+	var programmeTransport []byte
+	if r.Version() >= 7 {
+		programmeTransport = r.Bytes()
+		if len(programmeTransport) == 0 {
+			programmeTransport = nil
+		}
+	}
 	if err := r.Done(); err != nil {
 		return fmt.Errorf("demux: restore: %w", err)
 	}
@@ -429,6 +440,14 @@ func (d *Demux) Restore(blob []byte) error {
 	}
 	if len(packet) >= transportPacketSize || len(packet) > 0 && packet[0] != 0x47 {
 		return fmt.Errorf("demux: restore: invalid transport packet")
+	}
+	if len(programmeTransport) > maxProgrammeTransport || len(programmeTransport)%transportPacketSize != 0 {
+		return fmt.Errorf("demux: restore: invalid programme transport")
+	}
+	for at := 0; at < len(programmeTransport); at += transportPacketSize {
+		if programmeTransport[at] != 0x47 {
+			return fmt.Errorf("demux: restore: invalid programme transport sync")
+		}
 	}
 	for _, pointer := range pointers {
 		if pointer > 0x1fffff {
@@ -449,6 +468,7 @@ func (d *Demux) Restore(blob []byte) error {
 	copy(d.indirect[:], indirect)
 	d.transportPart = parts
 	d.transportPacket = packet
+	d.programmeTransport = programmeTransport
 	d.updateLine()
 	return nil
 }

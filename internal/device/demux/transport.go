@@ -12,8 +12,10 @@ const (
 	maxTransportSection = 4096
 )
 
-// PushTransport consumes complete DVB transport packets moved by the media DMA.
-// The ROM's self-test uses this path before the application section rings exist.
+// PushTransport consumes complete DVB transport packets entering the demux. The ROM's self-test
+// feeds this input through DMA channel 5 before the application section rings exist; the tuned
+// application instead programs the demux's dedicated video/audio PID inputs and does not arm a
+// new general DMA channel for them.
 func (d *Demux) PushTransport(data []byte) error {
 	if d.ram == nil {
 		return fmt.Errorf("demux: transport RAM is not bound")
@@ -56,6 +58,14 @@ func (d *Demux) pushTransportPacket(packet []byte) error {
 			return fmt.Errorf("demux: invalid adaptation length")
 		}
 	}
+	videoPID, audioPID, programmeReady := d.ProgrammePIDs()
+	if programmeReady && (pid == videoPID || pid == audioPID) {
+		if len(d.programmeTransport)+len(packet) > maxProgrammeTransport {
+			return fmt.Errorf("demux: programme transport queue exceeds %d bytes", maxProgrammeTransport)
+		}
+		d.programmeTransport = append(d.programmeTransport, packet...)
+		return nil
+	}
 	for channel := uint8(0); channel < FilterCount; channel++ {
 		if !d.pidWritten[channel] || d.pidChannels[channel]&0x1fff != uint32(pid) {
 			continue
@@ -89,6 +99,15 @@ func (d *Demux) pushTransportPacket(packet []byte) error {
 		}
 	}
 	return nil
+}
+
+// TakeProgrammeTransport drains transport packets admitted by the two decoder PIDs the guest
+// programmed at +0x94/+0x98. No general DMA channel is implied: the measured tuned firmware arms
+// none for media, so this is the dedicated decoder input boundary and nothing more.
+func (d *Demux) TakeProgrammeTransport() []byte {
+	packets := append([]byte(nil), d.programmeTransport...)
+	d.programmeTransport = nil
+	return packets
 }
 
 func (d *Demux) startTransport(channel uint8, payload []byte) error {

@@ -59,6 +59,8 @@ func TestDemuxHoldsTheDeviceContract(t *testing.T) {
 			d.Write(0x144, bus.Word, 0xc021)
 			d.transportPart[0] = []byte{0, 0xb0, 0x20}
 			d.transportPacket = []byte{0x47, 0x40}
+			d.programmeTransport = make([]byte, transportPacketSize)
+			d.programmeTransport[0] = 0x47
 		},
 		Disturb: func(device bus.Device) {
 			device.Reset()

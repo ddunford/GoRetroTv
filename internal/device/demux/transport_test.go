@@ -1,6 +1,7 @@
 package demux
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/ddunford/goretrotv/internal/broadcast"
@@ -47,6 +48,50 @@ func TestTransportRetainsPacketAcrossDMATransfers(t *testing.T) {
 	}
 	if len(restored.transportPacket) != 0 {
 		t.Fatal("completed packet left a partial fragment")
+	}
+}
+
+func TestTransportRoutesOnlyGuestProgrammedDecoderPIDsAndSnapshotsQueue(t *testing.T) {
+	t.Parallel()
+	ram, err := memory.NewRAM("dram", memory.DRAMSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := New()
+	if err := d.BindRAM(ram); err != nil {
+		t.Fatal(err)
+	}
+	d.Write(0x140, bus.Word, 1)
+	d.Write(0x94, bus.Word, 0x4000|0x101)
+	d.Write(0x98, bus.Word, 0x4000|0x102)
+	videoPES, err := broadcast.PES(0xe0, 90_000, []byte{1, 2, 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audioPES, err := broadcast.PES(0xc0, 90_000, []byte{4, 5, 6})
+	if err != nil {
+		t.Fatal(err)
+	}
+	videoPackets := dvb.PacketizePES(0x101, videoPES, 0)
+	audioPackets := dvb.PacketizePES(0x102, audioPES, 0)
+	unselected := dvb.PacketizePES(0x103, videoPES, 0)
+	if err := d.PushTransport(append(append(videoPackets, unselected...), audioPackets...)); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := d.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := New()
+	if err := restored.Restore(blob); err != nil {
+		t.Fatal(err)
+	}
+	want := append(append([]byte(nil), videoPackets...), audioPackets...)
+	if got := restored.TakeProgrammeTransport(); !bytes.Equal(got, want) {
+		t.Fatalf("restored programme transport length = %d, want %d", len(got), len(want))
+	}
+	if got := restored.TakeProgrammeTransport(); len(got) != 0 {
+		t.Fatalf("drained programme transport retained %d bytes", len(got))
 	}
 }
 

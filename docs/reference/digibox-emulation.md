@@ -1761,7 +1761,7 @@ than the thing that discriminates.**
 ## What registers an SI client — traced to the instruction, and it is not a missing chip
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:c2b96205338701d51c3d8908d5b6535bc69204b1b99496c6eab224a6e97f9562 @ 2026-09-24 -->
+<!-- fingerprint: sha256:72c8e15f9a0fd5f8aec04e31ee10d86a5fd1392bde8cbbcebf8e464a8b48afe5 @ 2026-09-25 -->
 
 **Every link in the chain works, and that is the finding.** Nothing here is unimplemented, no
 instruction is missing, no register is unmapped. The box runs correctly and declines.
@@ -2356,7 +2356,7 @@ will want to know which part is measured.
 ## The box states what it wants, in its own section filters
 
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:c2b96205338701d51c3d8908d5b6535bc69204b1b99496c6eab224a6e97f9562 @ 2026-09-24 -->
+<!-- fingerprint: sha256:72c8e15f9a0fd5f8aec04e31ee10d86a5fd1392bde8cbbcebf8e464a8b48afe5 @ 2026-09-25 -->
 
 **The demux's section-filter programming is the box telling us what to broadcast, and it was
 being recorded and never decoded.** A value goes to `+0x148` and then a command to `+0x144` of
@@ -4703,7 +4703,7 @@ and the same one that produced two wrong findings earlier today when it was skip
 <!-- anchor: internal/device/demux/push.go -->
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
-<!-- fingerprint: sha256:3f207595b687cc1500f9b9e77fd29a4ddb1edc1b7d71ac6a0e487a520b18c891 @ 2026-09-24 -->
+<!-- fingerprint: sha256:ec0520b00e7f50bf0c122915865d6063e0ca5f2c596011c189ed7ee7be6b589d @ 2026-09-25 -->
 
 *2026-09-15. `sky-02me.5` and `sky-02me.12`. The route there mattered as much as the answer.*
 
@@ -4787,7 +4787,7 @@ fall out of that, and neither needs to be guessed.
 <!-- anchor: internal/device/demux/section.go -->
 <!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/broadcast/sections.go -->
-<!-- fingerprint: sha256:c05fcc6cf77f51975ce22649f598b8c556642a473ebf747b89995b1e239619bf @ 2026-09-24 -->
+<!-- fingerprint: sha256:7d6a58c172da50fd2eba8f90e6dee52d8a8c72c4f1ade08df5ea6723dae8566d @ 2026-09-25 -->
 
 *2026-09-15. `sky-02me.5`. The guide did NOT fill. What that cost to establish honestly is the
 useful part.*
@@ -9707,13 +9707,14 @@ transport input path that feeds the already-executed SI callback after tuning.
 ## The transport enable is guest state, and the ROM PSI window does not reach the application
 
 <!-- anchor: internal/device/demux/transport.go -->
+<!-- anchor: internal/device/demux/registers.go -->
 <!-- anchor: internal/multiplex/firmwaretests/bootpsi_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/playbackgate_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/audiodriver_firmware_test.go -->
 <!-- anchor: internal/multiplex/firmwaretests/tunerequest_firmware_test.go -->
 <!-- anchor: internal/multiplex/media.go -->
 <!-- anchor: internal/broadcast/pes.go -->
-<!-- fingerprint: sha256:c4ed79a32a7c9927c3cb92246cc1af3cc3c49cffd51ce4f800d7865397a664fd @ 2026-09-25 -->
+<!-- fingerprint: sha256:3775edb8fb87a5e9b8f18787eb5cb9b82a3cf2a27af16ad2eb663ea9ae9bb085 @ 2026-09-25 -->
 
 **Measured 2026-09-24 on real firmware.** Demux `+0x140` is readable state. ROM writes `1` at
 instruction 3,209,293; application routine `0x80003714` later reads it, changes one high-half mode
@@ -10082,6 +10083,14 @@ test generates 352x288 MPEG-2 Main Profile video and 48 kHz MP2 audio, then inde
 `ffprobe` to identify PID `0x0101` as `mpeg2video` and PID `0x0102` as `mp2`. This proves the bytes
 which the next device task will deliver; it does not bypass the still-missing guest-requested
 decoder/DMA path.
+
+The decoder input model now admits those packets only when their PID equals one of the two enabled
+words the guest wrote at demux `+0x94/+0x98`. It retains complete 188-byte packets, keeps the queue
+bounded with a visible overflow error, drains it explicitly at the future decoder boundary, and
+serialises the entire queue in the demux snapshot. It does **not** allocate a general DMA channel:
+the full viewing probe found no newly armed channel and channel 12 remained the established OSD
+command path. Calling this a "media DMA" before that measurement conflated the ROM's channel-5
+transport self-test with the application's dedicated decoder inputs; that wording is withdrawn.
 
 This is also the correct presentation boundary. The earlier browser prototype started at MPEG
 service callback `0x800A03D0`, before PAT or PMT, so it could put colour bars behind a firmware
